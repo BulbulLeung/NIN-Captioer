@@ -7,20 +7,14 @@
 ### Full window
 
 <p align="center">
-  <!-- TODO: add screenshot docs/screenshots/01-main-window.png -->
   <img src="docs/screenshots/01-main-window.png" alt="NIN Capto full window" width="900" />
 </p>
-
-> **Add screenshot**: maximized main window (toolbar + image list + preview + dual caption panes). File: `docs/screenshots/01-main-window.png`
 
 ### Caption Analysis Page
 
 <p align="center">
-  <!-- TODO: add screenshot docs/screenshots/02-caption-analysis.png -->
   <img src="docs/screenshots/02-caption-analysis.png" alt="Caption Analysis" width="900" />
 </p>
-
-> **Add screenshot**: full Analyze dialog (Health Score, breakdown, category pie charts). File: `docs/screenshots/02-caption-analysis.png`
 
 ---
 
@@ -176,19 +170,6 @@ Use this to check dataset diversity and whether captions are skewed.
 | `npm run dist` | Package Windows portable |
 
 Stack: Electron + React + TypeScript (electron-vite).
-
----
-
-## Screenshots to add (2 only)
-
-Place these files under `docs/screenshots/`:
-
-| File | Content |
-|------|---------|
-| `01-main-window.png` | Full main window |
-| `02-caption-analysis.png` | Caption Analysis page |
-
-Tips: maximize the window, keep the UI sharp, avoid personal paths in the shot.
 
 ---
 

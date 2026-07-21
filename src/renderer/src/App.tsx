@@ -373,7 +373,6 @@ export default function App() {
 
       if (isCaptionFocused()) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (batchCaptioning || singleCaptioning) return
       if (deleteOpen || unsavedOpen || settingsOpen) return
 
       // Space/Enter would activate a previously focused control (e.g. list button).
@@ -412,8 +411,6 @@ export default function App() {
     images,
     selectedPath,
     selectImage,
-    batchCaptioning,
-    singleCaptioning,
     deleteOpen,
     unsavedOpen,
     settingsOpen
