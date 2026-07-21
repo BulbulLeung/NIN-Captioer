@@ -3,7 +3,6 @@ const electron = require("electron");
 const path = require("path");
 const fs = require("fs");
 const promises = require("fs/promises");
-const url = require("url");
 const IMAGE_EXTS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"]);
 const DEFAULT_WINDOW = {
   width: 1280,
@@ -180,8 +179,8 @@ async function createWindow() {
     title: "NIN Capto Ver0.1",
     show: false,
     autoHideMenuBar: true,
-    // Dev: project-root ico. Packaged Windows builds use the exe icon from electron-builder.
-    ...!electron.app.isPackaged ? { icon: path.join(__dirname, "../../NIN_Capto_icon_256.ico") } : {},
+    // Dev: build/icon.ico. Packaged Windows builds use the exe icon from electron-builder.
+    ...!electron.app.isPackaged ? { icon: path.join(__dirname, "../../build/icon.ico") } : {},
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -271,12 +270,17 @@ electron.protocol.registerSchemesAsPrivileged([
   }
 ]);
 electron.app.whenReady().then(async () => {
-  electron.protocol.handle("local-file", (request) => {
-    let filePath = decodeURIComponent(new URL(request.url).pathname);
-    if (process.platform === "win32" && /^\/[A-Za-z]:/.test(filePath)) {
-      filePath = filePath.slice(1);
+  electron.protocol.handle("local-file", async (request) => {
+    const parsed = new URL(request.url);
+    let filePath = decodeURIComponent(parsed.pathname);
+    if (filePath.startsWith("/")) filePath = filePath.slice(1);
+    try {
+      const buf = await promises.readFile(filePath);
+      const mime = mimeForExt(path.extname(filePath));
+      return new Response(buf, { headers: { "Content-Type": mime } });
+    } catch {
+      return new Response("Not Found", { status: 404 });
     }
-    return electron.net.fetch(url.pathToFileURL(filePath).href);
   });
   electron.ipcMain.handle("dialog:openFolder", async () => {
     const result = await electron.dialog.showOpenDialog(mainWindow, {

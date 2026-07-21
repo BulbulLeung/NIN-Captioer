@@ -1,8 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net, screen, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, protocol, screen, Menu, shell } from 'electron'
 import { join, dirname, basename, extname } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { readFile, writeFile, readdir, access, constants } from 'fs/promises'
-import { pathToFileURL } from 'url'
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
 
@@ -348,12 +347,17 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.whenReady().then(async () => {
-  protocol.handle('local-file', (request) => {
-    let filePath = decodeURIComponent(new URL(request.url).pathname)
-    if (process.platform === 'win32' && /^\/[A-Za-z]:/.test(filePath)) {
-      filePath = filePath.slice(1)
+  protocol.handle('local-file', async (request) => {
+    const parsed = new URL(request.url)
+    let filePath = decodeURIComponent(parsed.pathname)
+    if (filePath.startsWith('/')) filePath = filePath.slice(1)
+    try {
+      const buf = await readFile(filePath)
+      const mime = mimeForExt(extname(filePath))
+      return new Response(buf, { headers: { 'Content-Type': mime } })
+    } catch {
+      return new Response('Not Found', { status: 404 })
     }
-    return net.fetch(pathToFileURL(filePath).href)
   })
 
   ipcMain.handle('dialog:openFolder', async () => {

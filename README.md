@@ -1,197 +1,197 @@
 # NIN Capto
 
-**LoRA 訓練用圖片 Caption 編輯器** — 瀏覽資料集、編輯英文 caption、以本地 LLM（LM Studio / Ollama）雙向翻譯，並可批次 Auto Caption、分析資料集健康度。
+**LoRA training image caption editor** — browse datasets, edit English captions, bidirectional translate with a local LLM (LM Studio / Ollama), batch Auto Caption, and analyze dataset health.
 
-## 畫面預覽
+## Screenshots
 
-### 全畫面
+### Full window
 
 <p align="center">
-  <!-- TODO: 追加截圖 docs/screenshots/01-main-window.png -->
-  <img src="docs/screenshots/01-main-window.png" alt="NIN Capto 全畫面" width="900" />
+  <!-- TODO: add screenshot docs/screenshots/01-main-window.png -->
+  <img src="docs/screenshots/01-main-window.png" alt="NIN Capto full window" width="900" />
 </p>
 
-> **請追加截圖**：主視窗最大化全景（工具列 + 左側清單 + 中央預覽 + 右側雙欄 caption）。檔名：`docs/screenshots/01-main-window.png`
+> **Add screenshot**: maximized main window (toolbar + image list + preview + dual caption panes). File: `docs/screenshots/01-main-window.png`
 
 ### Caption Analysis Page
 
 <p align="center">
-  <!-- TODO: 追加截圖 docs/screenshots/02-caption-analysis.png -->
+  <!-- TODO: add screenshot docs/screenshots/02-caption-analysis.png -->
   <img src="docs/screenshots/02-caption-analysis.png" alt="Caption Analysis" width="900" />
 </p>
 
-> **請追加截圖**：Analyze 對話框完整畫面（Health Score、breakdown、類別圓餅圖）。檔名：`docs/screenshots/02-caption-analysis.png`
+> **Add screenshot**: full Analyze dialog (Health Score, breakdown, category pie charts). File: `docs/screenshots/02-caption-analysis.png`
 
 ---
 
-## 功能亮點
+## Features
 
-- **資料夾瀏覽**：開啟含訓練圖的資料夾，左側清單、中央預覽、右側編輯
-- **英文 Caption 編輯**：儲存為與圖片同名的 `.txt`（標準 LoRA / caption 工作流）
-- **雙向翻譯**：上欄英文 ↔ 下欄目標語言（預設繁中），編輯任一邊會自動同步
-- **Auto Caption / reCaption**：用本地 vision／LLM 依自訂 prompt 批次或單張產生 caption（會讀取 PNG Info）
-- **Caption Analysis**：統計已標註比例、LoRA Health Score、各類別細節分布（圓餅圖）
-- **可調版面**：拖曳分隔線調整清單與編輯區寬度，視窗位置會記住
-
----
-
-## 需求
-
-| 項目 | 說明 |
-|------|------|
-| 系統 | Windows x64（目前以 `electron-builder --win` 打包） |
-| 開發 | Node.js 18+ |
-| AI 後端（選用） | [LM Studio](https://lmstudio.ai/) 或 [Ollama](https://ollama.com/)，需本機可連線 |
-
-沒有 AI 後端仍可手動編輯與儲存 caption；翻譯、Auto Caption、Analyze 需要已啟動的模型服務。
+- **Folder browser**: open a training-image folder — list on the left, preview in the center, editor on the right
+- **English caption editing**: save as a sidecar `.txt` with the same name as the image (standard LoRA / caption workflow)
+- **Bidirectional translation**: English (top) ↔ target language (bottom, Traditional Chinese by default); edits on either side stay in sync
+- **Auto Caption / reCaption**: generate captions with a local vision/LLM and custom prompts (PNG Info is appended at runtime)
+- **Caption Analysis**: caption coverage, LoRA Health Score, and per-category detail distributions (pie charts)
+- **Resizable layout**: drag splitters to resize panes; window position is remembered
 
 ---
 
-## 快速開始
+## Requirements
 
-### 從原始碼執行
+| Item | Notes |
+|------|--------|
+| OS | Windows x64 (packaged with `electron-builder --win`) |
+| Development | Node.js 18+ |
+| AI backend (optional) | [LM Studio](https://lmstudio.ai/) or [Ollama](https://ollama.com/), reachable on localhost |
+
+You can still edit and save captions without an AI backend. Translation, Auto Caption, and Analyze require a running model service.
+
+---
+
+## Quick start
+
+### Run from source
 
 ```bash
 npm install
 npm run dev
 ```
 
-### 打包 Windows Portable
+### Build Windows portable
 
 ```bash
 npm run dist
 ```
 
-產物：`release/NIN Capto-0.1.0-portable.exe`
+Output: `release/NIN Capto-0.1.0-portable.exe`
 
 ---
 
-## 資料夾結構約定
+## Dataset layout
 
-每個訓練圖對應一個同名 caption 檔：
+Each image pairs with a same-named caption file:
 
 ```text
 my-dataset/
   img_001.png
-  img_001.txt          ← 英文 caption（由本軟體讀寫）
+  img_001.txt          ← English caption (read/written by this app)
   img_002.jpg
   img_002.txt
   …
 ```
 
-支援常見圖片副檔名：`.jpg` / `.jpeg` / `.png` / `.webp` / `.bmp` / `.gif`。
+Supported image extensions: `.jpg` / `.jpeg` / `.png` / `.webp` / `.bmp` / `.gif`.
 
 ---
 
-## 使用教學
+## How to use
 
-### 1. 開啟資料集
+### 1. Open a dataset
 
-1. 點工具列 **Open folder**
-2. 選擇含圖片的資料夾
-3. 左側出現圖片清單（有／無 `.txt` 會標示）
+1. Click **Open folder** in the toolbar
+2. Select a folder that contains images
+3. The left list shows images (with / without `.txt` is indicated)
 
-### 2. 編輯與儲存 Caption
+### 2. Edit and save captions
 
-1. 在清單點選一張圖，中央顯示預覽
-2. 右側 **English Caption** 編輯英文文字
-3. 點 **Save**，或按 `Ctrl+S`，寫入同名 `.txt`
-4. 未儲存時工具列會顯示 **Unsaved**；切換圖片前可選擇儲存／放棄
+1. Select an image in the list; the center pane shows the preview
+2. Edit text in **English Caption** on the right
+3. Click **Save**, or press `Ctrl+S`, to write the sidecar `.txt`
+4. Unsaved work shows **Unsaved** in the toolbar; you can save or discard when switching images
 
-### 3. 雙向翻譯
+### 3. Bidirectional translation
 
-1. 先到 **Settings** 選 LM Studio 或 Ollama、Base URL、Model，並 **Test connection**
-2. 右側下欄選擇目標語言（繁中／簡中／日／韓／歐語等）
-3. 有英文 caption 時會自動翻成目標語言
-4. 直接改下欄翻譯文，會回譯並更新上欄英文（方便用母語潤稿再寫回訓練用英文）
+1. Open **Settings**, choose LM Studio or Ollama, Base URL, and Model, then **Test connection**
+2. Pick the target language in the lower pane (Traditional/Simplified Chinese, Japanese, Korean, European languages, etc.)
+3. Existing English captions are translated automatically
+4. Edit the translation pane to back-translate and update the English caption (useful for drafting in your native language)
 
-### 4. Settings（連線與 Caption Prompt）
+### 4. Settings (connection & caption prompt)
 
-在 **Settings** 可設定：
+In **Settings** you can configure:
 
-- **Translation provider**：LM Studio / Ollama
-- **Base URL**（預設 LM Studio `http://localhost:1234/v1`，Ollama `http://localhost:11434`）
-- **Model**：自動偵測清單，可 Refresh
-- **Auto Caption prompt**：多組 Preset（名稱 + Prompt）；執行時會在 prompt 後附加圖片 PNG Info
+- **Translation provider**: LM Studio / Ollama
+- **Base URL** (defaults: LM Studio `http://localhost:1234/v1`, Ollama `http://localhost:11434`)
+- **Model**: auto-detected list, with Refresh
+- **Auto Caption prompt**: multiple presets (name + prompt); PNG Info is appended at runtime
 
-同一個 Model 會用於翻譯、Auto Caption、reCaption、Analyze。
+The same model is used for translation, Auto Caption, reCaption, and Analyze.
 
 ### 5. Auto Caption / reCaption
 
 **Auto Caption**
 
-- 只處理「還沒有 `.txt`」的圖片
-- 按鈕會顯示待處理數量，例如 `Auto Caption (12)`
-- 進行中可 **Cancel Auto Caption**
+- Only processes images that do not yet have a `.txt`
+- The button shows the pending count, e.g. `Auto Caption (12)`
+- While running, use **Cancel Auto Caption**
 
 **reCaption**
 
-- 對目前選中的圖重新產生 caption（會覆寫並儲存）
+- Regenerates the caption for the currently selected image (overwrites and saves)
 
-執行前請確認 Settings 中的 model 與 prompt preset 正確，且後端已載入支援影像的模型（依你的 LM Studio／Ollama 設定）。
+Before running, confirm the model and prompt preset in Settings, and that your backend has loaded a vision-capable model (depending on your LM Studio / Ollama setup).
 
-### 6. Caption Analysis（資料集分析）
+### 6. Caption Analysis
 
-點 **Analyze** 後會：
+Click **Analyze** to:
 
-1. 讀取所有 caption
-2. 用 AI 分類各 caption 的細節標籤
-3. 顯示 **Total Images**、**LoRA Health Score（/100）**、分數拆解、優點／改進建議
-4. 各類別（Subject、Camera、Clothing…）細節分布圓餅圖
+1. Load all captions
+2. Classify detail tags in each caption with AI
+3. Show **Total Images**, **LoRA Health Score (/100)**, score breakdown, strengths / improvements
+4. Draw per-category detail distributions (Subject, Camera, Clothing, …)
 
-可用來檢查資料集多樣性與 caption 品質是否偏斜。
-
----
-
-## 快捷鍵
-
-| 快捷鍵 | 功能 |
-|--------|------|
-| `Ctrl+S` | 儲存目前英文 caption |
-| `↑` / `←` | 上一張圖（焦點不在輸入框時） |
-| `↓` / `→` | 下一張圖 |
-| `Delete` | 刪除目前圖片與其 caption（需確認） |
+Use this to check dataset diversity and whether captions are skewed.
 
 ---
 
-## 建議工作流
+## Keyboard shortcuts
 
-1. 整理訓練圖到一個資料夾  
-2. **Settings** → 連上 LM Studio／Ollama → 選好 model 與 caption preset  
-3. **Auto Caption** 補齊缺漏的 `.txt`  
-4. 用翻譯下欄檢查／潤稿，再存回英文  
-5. **Analyze** 看 Health Score 與類別分布，必要時 **reCaption** 或手修  
-6. 將資料夾接到你的 LoRA 訓練腳本／GUI  
-
----
-
-## 開發指令
-
-| 指令 | 說明 |
-|------|------|
-| `npm run dev` | 開發模式 |
-| `npm run build` | 編譯 |
-| `npm run preview` | 預覽編譯結果 |
-| `npm run typecheck` | TypeScript 檢查 |
-| `npm run dist` | 打包 Windows portable |
-
-技術棧：Electron + React + TypeScript（electron-vite）。
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` | Save the current English caption |
+| `↑` / `←` | Previous image (when focus is not in an input) |
+| `↓` / `→` | Next image |
+| `Delete` | Delete the current image and its caption (confirmation required) |
 
 ---
 
-## 要追加的範例圖（僅 2 張）
+## Suggested workflow
 
-請放入 `docs/screenshots/`：
+1. Put training images in one folder  
+2. **Settings** → connect LM Studio / Ollama → pick model and caption preset  
+3. **Auto Caption** to fill missing `.txt` files  
+4. Review / refine via the translation pane, then save English  
+5. **Analyze** for Health Score and category balance; **reCaption** or edit by hand as needed  
+6. Point your LoRA training script / GUI at the folder  
 
-| 檔名 | 內容 |
-|------|------|
-| `01-main-window.png` | 全畫面主介面 |
-| `02-caption-analysis.png` | Caption Analysis Page |
+---
 
-截圖建議：視窗最大化、UI 清晰、避免含個資路徑。
+## Development commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Development mode |
+| `npm run build` | Compile |
+| `npm run preview` | Preview the production build |
+| `npm run typecheck` | TypeScript check |
+| `npm run dist` | Package Windows portable |
+
+Stack: Electron + React + TypeScript (electron-vite).
+
+---
+
+## Screenshots to add (2 only)
+
+Place these files under `docs/screenshots/`:
+
+| File | Content |
+|------|---------|
+| `01-main-window.png` | Full main window |
+| `02-caption-analysis.png` | Caption Analysis page |
+
+Tips: maximize the window, keep the UI sharp, avoid personal paths in the shot.
 
 ---
 
 ## License
 
-未指定授權時，使用前請先確認 repository 的 License 檔案或以作者聲明為準。
+If no license file is present, check the repository license or the author’s statement before use.

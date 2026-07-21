@@ -12,13 +12,8 @@ const api = {
   setSettings: (settings) => electron.ipcRenderer.invoke("settings:set", settings),
   toLocalUrl: (filePath) => {
     const normalized = filePath.replace(/\\/g, "/");
-    const win = normalized.match(/^([A-Za-z]:)(\/.*)?$/);
-    if (win) {
-      const drive = win[1];
-      const rest = (win[2] || "").split("/").map((seg) => encodeURIComponent(seg)).join("/");
-      return `local-file:///${drive}${rest}`;
-    }
-    return `local-file:///${normalized.split("/").map(encodeURIComponent).join("/")}`;
+    const encoded = normalized.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+    return `local-file://local/${encoded}`;
   }
 };
 electron.contextBridge.exposeInMainWorld("api", api);
