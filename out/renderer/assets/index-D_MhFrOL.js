@@ -13765,44 +13765,10 @@ function ImageList({ images, selectedPath, dirtyPaths, onSelect }) {
   }) });
 }
 function ImagePreview({ imagePath, imageUrl }) {
-  const dbg = (message, data, hypothesisId) => {
-    fetch("http://127.0.0.1:7650/ingest/972901e0-30eb-4010-8d33-32496f961f4a", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6eddf5" },
-      body: JSON.stringify({
-        sessionId: "6eddf5",
-        runId: "post-fix-v2",
-        hypothesisId,
-        location: "ImagePreview.tsx",
-        message,
-        data,
-        timestamp: Date.now()
-      })
-    }).catch(() => {
-    });
-  };
-  dbg(
-    "preview-render",
-    {
-      hasPath: Boolean(imagePath),
-      hasUrl: Boolean(imageUrl),
-      imagePathTail: imagePath ? imagePath.slice(-80) : null,
-      imageUrl
-    },
-    "D"
-  );
   if (!imagePath || !imageUrl) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview empty", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Select an image from the list to preview" }) });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "img",
-    {
-      src: imageUrl,
-      alt: "",
-      onLoad: () => dbg("img-load-ok", { imageUrl }, "C"),
-      onError: () => dbg("img-load-error", { imageUrl, imagePathTail: imagePath.slice(-80) }, "C")
-    }
-  ) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageUrl, alt: "" }) });
 }
 const TRANSLATE_TIMEOUT_MS = 12e4;
 const CACHE_MAX = 80;
@@ -14918,7 +14884,6 @@ function App() {
       }
       if (isCaptionFocused()) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (batchCaptioning || singleCaptioning) return;
       if (deleteOpen || unsavedOpen || settingsOpen) return;
       if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
         e.preventDefault();
@@ -14951,8 +14916,6 @@ function App() {
     images,
     selectedPath,
     selectImage,
-    batchCaptioning,
-    singleCaptioning,
     deleteOpen,
     unsavedOpen,
     settingsOpen

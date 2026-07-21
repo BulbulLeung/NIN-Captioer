@@ -1,4 +1,4 @@
-# NIN Capto
+# Captioer
 
 **LoRA training image caption editor** — browse datasets, edit English captions, bidirectional translate with a local LLM (LM Studio / Ollama), batch Auto Caption, and analyze dataset health.
 
@@ -7,7 +7,7 @@
 ### Full window
 
 <p align="center">
-  <img src="docs/screenshots/01-main-window.png" alt="NIN Capto full window" width="900" />
+  <img src="docs/screenshots/01-main-window.png" alt="Captioer full window" width="900" />
 </p>
 
 ### Caption Analysis Page
@@ -56,7 +56,7 @@ npm run dev
 npm run dist
 ```
 
-Output: `release/NIN Capto-0.1.0-portable.exe`
+Output: `release/Captioer-0.1.0-portable.exe`
 
 ---
 

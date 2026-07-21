@@ -238,7 +238,7 @@ async function createWindow(): Promise<void> {
     height: Math.max(600, saved.height),
     minWidth: 900,
     minHeight: 600,
-    title: 'NIN Capto Ver0.1',
+    title: 'Captioer Ver0.1',
     show: false,
     autoHideMenuBar: true,
     // Dev: build/icon.ico. Packaged Windows builds use the exe icon from electron-builder.
