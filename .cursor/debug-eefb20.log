@@ -1,0 +1,1 @@
+{"sessionId":"eefb20","runId":"post-fix","hypothesisId":"C","location":"translation.ts:translateText:fetch","message":"calling model","data":{"provider":"ollama","model":"huihui_ai/qwen3.5-abliterated:9b","direction":"en-to-target","textLen":593},"timestamp":1784604644459}
