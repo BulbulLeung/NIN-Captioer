@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import type { AppSettings, ImageItem } from '../types'
 import {
   CAPTION_CATEGORIES,
   DETAIL_COLORS,
-  emptyClassification,
   type CaptionAnalysisResult,
-  type CaptionClassification,
   type DetailCount
 } from '../services/captionAnalysis'
-import { classifyCaption } from '../services/captionClassify'
-import { buildCaptionAnalysisResult } from '../services/loraHealthScore'
 
 interface Props {
   open: boolean
-  images: ImageItem[]
-  settings: AppSettings
+  imageCount: number
+  analyzing: boolean
+  progress: { done: number; total: number } | null
+  error: string | null
+  result: CaptionAnalysisResult | null
   onClose: () => void
 }
 
@@ -148,95 +145,15 @@ function CategoryPieChart({
   )
 }
 
-export function AnalysisDialog({ open, images, settings, onClose }: Props) {
-  const [analyzing, setAnalyzing] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<CaptionAnalysisResult | null>(null)
-  const loadId = useRef(0)
-  const abortRef = useRef<AbortController | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      abortRef.current?.abort('cancel')
-      abortRef.current = null
-      setResult(null)
-      setError(null)
-      setAnalyzing(false)
-      setProgress(null)
-      return
-    }
-
-    if (images.length === 0) {
-      setResult(null)
-      setError(null)
-      setAnalyzing(false)
-      setProgress(null)
-      return
-    }
-
-    const id = ++loadId.current
-    const abort = new AbortController()
-    abortRef.current = abort
-    setAnalyzing(true)
-    setError(null)
-    setResult(null)
-    setProgress(null)
-
-    void (async () => {
-      try {
-        if (!settings.model.trim()) {
-          throw new Error('Model is required in Settings before analyzing captions.')
-        }
-
-        const captions = await Promise.all(
-          images.map((img) => window.api.readCaption(img.path))
-        )
-        if (id !== loadId.current) return
-
-        const nonEmptyIndexes: number[] = []
-        for (let i = 0; i < captions.length; i++) {
-          if (captions[i].trim()) nonEmptyIndexes.push(i)
-        }
-
-        const classifications: CaptionClassification[] = captions.map(() =>
-          emptyClassification()
-        )
-
-        // Show page immediately with baseline stats (pies empty until AI finishes items)
-        setResult(buildCaptionAnalysisResult(captions, classifications))
-        setProgress({ done: 0, total: nonEmptyIndexes.length })
-
-        for (let step = 0; step < nonEmptyIndexes.length; step++) {
-          if (abort.signal.aborted || id !== loadId.current) return
-          const idx = nonEmptyIndexes[step]
-          classifications[idx] = await classifyCaption(
-            settings,
-            captions[idx],
-            abort.signal
-          )
-          if (id !== loadId.current) return
-          setResult(buildCaptionAnalysisResult(captions, classifications))
-          setProgress({ done: step + 1, total: nonEmptyIndexes.length })
-        }
-      } catch (err) {
-        if (id !== loadId.current) return
-        if (abort.signal.aborted) return
-        setError(err instanceof Error ? err.message : String(err))
-      } finally {
-        if (id === loadId.current) {
-          setAnalyzing(false)
-          setProgress(null)
-          if (abortRef.current === abort) abortRef.current = null
-        }
-      }
-    })()
-
-    return () => {
-      abort.abort('cancel')
-    }
-  }, [open, images, settings])
-
+export function AnalysisDialog({
+  open,
+  imageCount,
+  analyzing,
+  progress,
+  error,
+  result,
+  onClose
+}: Props) {
   if (!open) return null
 
   return (
@@ -258,7 +175,7 @@ export function AnalysisDialog({ open, images, settings, onClose }: Props) {
           )}
         </div>
 
-        {images.length === 0 ? (
+        {imageCount === 0 ? (
           <p className="modal-text">Open a folder that contains images first.</p>
         ) : (
           <>

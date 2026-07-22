@@ -258,16 +258,23 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
             />
           </label>
         ) : (
-          <label className="field">
-            <span>Ollama Base URL</span>
-            <input
-              type="text"
-              value={draft.ollamaBaseUrl}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
-              }
-            />
-          </label>
+          <>
+            <label className="field">
+              <span>Ollama Base URL</span>
+              <input
+                type="text"
+                value={draft.ollamaBaseUrl}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
+                }
+              />
+            </label>
+            <p className="field-hint">
+              Interactive translation / captioning has priority; analysis pauses until idle.
+              Optional: <code>OLLAMA_NUM_PARALLEL=2</code> for hard concurrency (restart
+              Ollama).
+            </p>
+          </>
         )}
 
         <div className="field">
@@ -300,6 +307,23 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
           {modelsError && <p className="field-hint warn">{modelsError}</p>}
           <p className="field-hint">Used for translation, Auto Caption, and reCaption.</p>
         </div>
+
+        <label className="field checkbox-field">
+          <span className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={draft.autoAnalysis}
+              onChange={(e) =>
+                setDraft((prev) => ({ ...prev, autoAnalysis: e.target.checked }))
+              }
+            />
+            Auto analysis
+          </span>
+          <p className="field-hint">
+            On: analyze captions in the background. Off: only while the Analyze dialog is
+            open.
+          </p>
+        </label>
 
         <div className="settings-section">
           <h3>Auto Caption prompt</h3>

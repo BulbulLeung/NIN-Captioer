@@ -7,6 +7,7 @@ import { ImagePreview } from './components/ImagePreview'
 import { SettingsDialog } from './components/SettingsDialog'
 import { UnsavedDialog } from './components/UnsavedDialog'
 import { useBidirectionalTranslate } from './hooks/useBidirectionalTranslate'
+import { useCaptionAnalysis } from './hooks/useCaptionAnalysis'
 import { generateCaptionForImage } from './services/captioning'
 import type { AppSettings, ImageItem } from './types'
 import {
@@ -42,6 +43,7 @@ export default function App() {
   selectedPathRef.current = selectedPath
 
   const dirty = english !== savedEnglish
+  const captionBusy = batchCaptioning || singleCaptioning
   const dirtyPaths = useMemo(() => {
     const set = new Set<string>()
     if (selectedPath && dirty) set.add(selectedPath)
@@ -77,12 +79,23 @@ export default function App() {
     enabled: Boolean(selectedPath)
   })
 
+  const aiBusy = captionBusy || translating
+  const analysisEnabled = settings.autoAnalysis || analysisOpen
+  const {
+    result: analysisResult,
+    analyzing: analysisAnalyzing,
+    progress: analysisProgress,
+    error: analysisError,
+    invalidate: invalidateAnalysis
+  } = useCaptionAnalysis(images, settings, aiBusy, analysisEnabled)
+
   const applyCaptionToUi = useCallback(
     async (imagePath: string, caption: string) => {
       await window.api.writeCaption(imagePath, caption)
       setImages((prev) =>
         prev.map((img) => (img.path === imagePath ? { ...img, hasCaption: true } : img))
       )
+      invalidateAnalysis(imagePath, caption)
       if (selectedPathRef.current === imagePath) {
         setEnglish(caption)
         setSavedEnglish(caption)
@@ -91,7 +104,7 @@ export default function App() {
         if (caption.trim()) translateEnglishToTargetNow(caption)
       }
     },
-    [setEnglishSnapshot, translateEnglishToTargetNow]
+    [invalidateAnalysis, setEnglishSnapshot, translateEnglishToTargetNow]
   )
 
   const loadImage = useCallback(
@@ -180,6 +193,7 @@ export default function App() {
           img.path === selectedPath ? { ...img, hasCaption: true } : img
         )
       )
+      invalidateAnalysis(selectedPath, english)
       setStatus('Caption saved')
       window.setTimeout(() => setStatus(''), 2000)
       return true
@@ -187,7 +201,7 @@ export default function App() {
       setError(err instanceof Error ? err.message : String(err))
       return false
     }
-  }, [selectedPath, english, setError])
+  }, [selectedPath, english, invalidateAnalysis, setError])
 
   const ensureCanLeave = useCallback(async (): Promise<boolean> => {
     if (!dirty) return true
@@ -417,7 +431,13 @@ export default function App() {
   ])
 
   const imageUrl = selectedPath ? window.api.toLocalUrl(selectedPath) : null
-  const captionBusy = batchCaptioning || singleCaptioning
+  const toolbarStatus =
+    status ||
+    (analysisAnalyzing
+      ? analysisProgress
+        ? `Analyzing ${analysisProgress.done}/${analysisProgress.total}…`
+        : 'Analyzing…'
+      : '')
 
   const persistPaneWidths = useCallback((next: AppSettings) => {
     const normalized = normalizeSettings(next)
@@ -511,7 +531,7 @@ export default function App() {
               {folder}
             </span>
           )}
-          {status && <span className="status-msg">{status}</span>}
+          {toolbarStatus && <span className="status-msg">{toolbarStatus}</span>}
           {dirty && <span className="dirty-flag">Unsaved</span>}
         </div>
       </header>
@@ -584,8 +604,11 @@ export default function App() {
 
       <AnalysisDialog
         open={analysisOpen}
-        images={images}
-        settings={settings}
+        imageCount={images.length}
+        analyzing={analysisAnalyzing}
+        progress={analysisProgress}
+        error={analysisError}
+        result={analysisResult}
         onClose={() => setAnalysisOpen(false)}
       />
 

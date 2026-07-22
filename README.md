@@ -106,9 +106,12 @@ In **Settings** you can configure:
 - **Translation provider**: LM Studio / Ollama
 - **Base URL** (defaults: LM Studio `http://localhost:1234/v1`, Ollama `http://localhost:11434`)
 - **Model**: auto-detected list, with Refresh
+- **Auto analysis**: on by default (background); turn off to analyze only while the Analyze dialog is open
 - **Auto Caption prompt**: multiple presets (name + prompt); PNG Info is appended at runtime
 
 The same model is used for translation, Auto Caption, reCaption, and Analyze.
+
+**Interactive AI priority:** Translation, Auto Caption, and reCaption take the model first. Caption Analysis pauses while those run and resumes about 0.8s after they finish (cache and queue are kept). Optional: set Ollama `OLLAMA_NUM_PARALLEL=2` only if you want hard server-side concurrency; it is not required for this app’s yield behavior, and parallel inference can slow individual interactive requests.
 
 ### 5. Auto Caption / reCaption
 
@@ -126,12 +129,11 @@ Before running, confirm the model and prompt preset in Settings, and that your b
 
 ### 6. Caption Analysis
 
-Click **Analyze** to:
+With **Auto analysis** on (default), analysis runs in the background when interactive AI is idle. With it off, analysis starts only while the Analyze dialog is open. Click **Analyze** to view:
 
-1. Load all captions
-2. Classify detail tags in each caption with AI
-3. Show **Total Images**, **LoRA Health Score (/100)**, score breakdown, strengths / improvements
-4. Draw per-category detail distributions (Subject, Camera, Clothing, …)
+1. Caption coverage and AI-classified detail tags
+2. **Total Images**, **LoRA Health Score (/100)**, score breakdown, strengths / improvements
+3. Per-category detail distributions (Subject, Camera, Clothing, …)
 
 Use this to check dataset diversity and whether captions are skewed.
 

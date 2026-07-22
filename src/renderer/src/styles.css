@@ -805,6 +805,12 @@ button.danger.kbd-focus {
   gap: 0.35rem;
 }
 
+.checkbox-field .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .modal-actions {
   display: flex;
   align-items: center;

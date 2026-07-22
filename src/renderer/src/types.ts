@@ -19,6 +19,8 @@ export interface AppSettings {
   activeCaptionPresetId: string
   sidebarWidth: number
   rightPaneWidth: number
+  /** When true, analyze captions in the background; when false, only while Analyze dialog is open. */
+  autoAnalysis: boolean
 }
 
 export interface ImageItem {
@@ -57,7 +59,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
   sidebarWidth: 260,
-  rightPaneWidth: 380
+  rightPaneWidth: 380,
+  autoAnalysis: true
 }
 
 const SIDEBAR_MIN = 160
@@ -95,7 +98,8 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     model: merged.model ?? '',
     lastFolder: merged.lastFolder ?? null,
     sidebarWidth: clampSidebarWidth(merged.sidebarWidth ?? DEFAULT_SETTINGS.sidebarWidth),
-    rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth)
+    rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
+    autoAnalysis: merged.autoAnalysis !== false
   }
 }
 

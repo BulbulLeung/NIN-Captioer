@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
   activeCaptionPresetId: "",
   sidebarWidth: 260,
   rightPaneWidth: 380,
+  autoAnalysis: true,
   windowWidth: DEFAULT_WINDOW.width,
   windowHeight: DEFAULT_WINDOW.height,
   windowX: null,

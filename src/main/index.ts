@@ -32,6 +32,7 @@ interface AppSettings {
   activeCaptionPresetId: string
   sidebarWidth: number
   rightPaneWidth: number
+  autoAnalysis: boolean
   windowWidth: number
   windowHeight: number
   windowX: number | null
@@ -58,6 +59,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   activeCaptionPresetId: '',
   sidebarWidth: 260,
   rightPaneWidth: 380,
+  autoAnalysis: true,
   windowWidth: DEFAULT_WINDOW.width,
   windowHeight: DEFAULT_WINDOW.height,
   windowX: null,
