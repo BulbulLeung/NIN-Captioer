@@ -8,6 +8,8 @@ export interface CaptionPreset {
   prompt: string
 }
 
+export type ListViewMode = 'list' | 'thumbnails'
+
 export interface AppSettings {
   provider: TranslationProvider
   lmStudioBaseUrl: string
@@ -21,6 +23,8 @@ export interface AppSettings {
   rightPaneWidth: number
   /** When true, analyze captions in the background; when false, only while Analyze dialog is open. */
   autoAnalysis: boolean
+  listViewMode: ListViewMode
+  thumbnailWidth: number
 }
 
 export interface ImageItem {
@@ -60,13 +64,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
   sidebarWidth: 260,
   rightPaneWidth: 380,
-  autoAnalysis: true
+  autoAnalysis: true,
+  listViewMode: 'list',
+  thumbnailWidth: 96
 }
 
 const SIDEBAR_MIN = 160
 const SIDEBAR_MAX = 480
 const RIGHT_PANE_MIN = 280
 const RIGHT_PANE_MAX = 720
+const THUMB_MIN = 48
+const THUMB_MAX = 160
 
 function clamp(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min
@@ -79,6 +87,14 @@ export function clampSidebarWidth(n: number): number {
 
 export function clampRightPaneWidth(n: number): number {
   return clamp(n, RIGHT_PANE_MIN, RIGHT_PANE_MAX)
+}
+
+export function clampThumbnailWidth(n: number): number {
+  return clamp(n, THUMB_MIN, THUMB_MAX)
+}
+
+export function normalizeListViewMode(value: unknown): ListViewMode {
+  return value === 'thumbnails' ? 'thumbnails' : 'list'
 }
 
 export function normalizeSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
@@ -99,7 +115,9 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     lastFolder: merged.lastFolder ?? null,
     sidebarWidth: clampSidebarWidth(merged.sidebarWidth ?? DEFAULT_SETTINGS.sidebarWidth),
     rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
-    autoAnalysis: merged.autoAnalysis !== false
+    autoAnalysis: merged.autoAnalysis !== false,
+    listViewMode: normalizeListViewMode(merged.listViewMode),
+    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth)
   }
 }
 

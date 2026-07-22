@@ -9,14 +9,27 @@ import { UnsavedDialog } from './components/UnsavedDialog'
 import { useBidirectionalTranslate } from './hooks/useBidirectionalTranslate'
 import { useCaptionAnalysis } from './hooks/useCaptionAnalysis'
 import { generateCaptionForImage } from './services/captioning'
-import type { AppSettings, ImageItem } from './types'
+import type { AppSettings, ImageItem, ListViewMode } from './types'
 import {
   clampRightPaneWidth,
   clampSidebarWidth,
+  clampThumbnailWidth,
   normalizeSettings
 } from './types'
 
 type ConfirmAction = 'save' | 'discard' | 'cancel'
+
+function getThumbnailColumns(): number {
+  const items = document.querySelectorAll('.image-list.thumbnails > li')
+  if (items.length === 0) return 1
+  const firstTop = (items[0] as HTMLElement).offsetTop
+  let cols = 0
+  for (const el of items) {
+    if ((el as HTMLElement).offsetTop !== firstTop) break
+    cols++
+  }
+  return Math.max(1, cols)
+}
 
 export default function App() {
   const [folder, setFolder] = useState<string | null>(null)
@@ -374,7 +387,11 @@ export default function App() {
       const el = document.activeElement
       if (!el) return false
       const tag = el.tagName
-      if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return true
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return true
+      if (tag === 'INPUT') {
+        const type = (el as HTMLInputElement).type
+        return type !== 'range'
+      }
       return el.getAttribute('contenteditable') === 'true'
     }
 
@@ -404,19 +421,40 @@ export default function App() {
 
       const idx = selectedPath ? images.findIndex((img) => img.path === selectedPath) : -1
       if (images.length === 0) return
-
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-        e.preventDefault()
-        const next = idx < 0 ? 0 : Math.min(idx + 1, images.length - 1)
-        if (next !== idx) void selectImage(images[next].path)
+      if (
+        e.key !== 'ArrowDown' &&
+        e.key !== 'ArrowRight' &&
+        e.key !== 'ArrowUp' &&
+        e.key !== 'ArrowLeft'
+      ) {
         return
       }
 
-      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-        e.preventDefault()
-        const prev = idx < 0 ? 0 : Math.max(idx - 1, 0)
-        if (prev !== idx) void selectImage(images[prev].path)
+      e.preventDefault()
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active.classList.contains('list-toolbar-slider')) {
+        active.blur()
       }
+      if (idx < 0) {
+        void selectImage(images[0].path)
+        return
+      }
+
+      let next = idx
+
+      if (settingsRef.current.listViewMode === 'thumbnails') {
+        const cols = getThumbnailColumns()
+        if (e.key === 'ArrowLeft') next = Math.max(0, idx - 1)
+        else if (e.key === 'ArrowRight') next = Math.min(images.length - 1, idx + 1)
+        else if (e.key === 'ArrowUp') next = idx >= cols ? idx - cols : idx
+        else if (e.key === 'ArrowDown') next = idx + cols < images.length ? idx + cols : idx
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        next = Math.min(idx + 1, images.length - 1)
+      } else {
+        next = Math.max(idx - 1, 0)
+      }
+
+      if (next !== idx) void selectImage(images[next].path)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -444,6 +482,29 @@ export default function App() {
     setSettings(normalized)
     void window.api.setSettings(normalized)
   }, [])
+
+  const persistListView = useCallback(
+    (patch: Partial<Pick<AppSettings, 'listViewMode' | 'thumbnailWidth'>>) => {
+      const next = normalizeSettings({ ...settingsRef.current, ...patch })
+      setSettings(next)
+      void window.api.setSettings(next)
+    },
+    []
+  )
+
+  const setListViewMode = (mode: ListViewMode) => {
+    if (settings.listViewMode === mode) return
+    persistListView({ listViewMode: mode })
+  }
+
+  const onThumbnailWidthChange = (value: number) => {
+    const thumbnailWidth = clampThumbnailWidth(value)
+    setSettings((prev) => ({ ...prev, thumbnailWidth }))
+  }
+
+  const onThumbnailWidthCommit = (value: number) => {
+    persistListView({ thumbnailWidth: clampThumbnailWidth(value) })
+  }
 
   const startPaneResize = (which: 'sidebar' | 'right') => (e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault()
@@ -546,12 +607,68 @@ export default function App() {
         }
       >
         <aside className="sidebar">
-          <ImageList
-            images={images}
-            selectedPath={selectedPath}
-            dirtyPaths={dirtyPaths}
-            onSelect={(path) => void selectImage(path)}
-          />
+          <div className="list-toolbar">
+            <div className="list-toolbar-right">
+              <button
+                type="button"
+                className={`list-toolbar-btn${settings.listViewMode === 'list' ? ' active' : ''}`}
+                aria-pressed={settings.listViewMode === 'list'}
+                title="List view"
+                onClick={() => setListViewMode('list')}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M1 2.5h12v1.5H1V2.5zm0 4h12V8H1V6.5zm0 4h12V12H1v-1.5z"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={`list-toolbar-btn${settings.listViewMode === 'thumbnails' ? ' active' : ''}`}
+                aria-pressed={settings.listViewMode === 'thumbnails'}
+                title="Thumbnail view"
+                onClick={() => setListViewMode('thumbnails')}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M1 1h5v5H1V1zm7 0h5v5H8V1zM1 8h5v5H1V8zm7 0h5v5H8V8z"
+                  />
+                </svg>
+              </button>
+              <input
+                type="range"
+                className="list-toolbar-slider"
+                min={48}
+                max={160}
+                step={4}
+                value={settings.thumbnailWidth}
+                disabled={settings.listViewMode !== 'thumbnails'}
+                title="Thumbnail width"
+                aria-label="Thumbnail width"
+                onChange={(e) => onThumbnailWidthChange(Number(e.target.value))}
+                onPointerUp={(e) => {
+                  onThumbnailWidthCommit(Number(e.currentTarget.value))
+                  e.currentTarget.blur()
+                }}
+                onKeyUp={(e) => {
+                  onThumbnailWidthCommit(Number(e.currentTarget.value))
+                  e.currentTarget.blur()
+                }}
+              />
+            </div>
+          </div>
+          <div className="sidebar-list">
+            <ImageList
+              images={images}
+              selectedPath={selectedPath}
+              dirtyPaths={dirtyPaths}
+              viewMode={settings.listViewMode}
+              thumbnailWidth={settings.thumbnailWidth}
+              onSelect={(path) => void selectImage(path)}
+            />
+          </div>
         </aside>
 
         <button

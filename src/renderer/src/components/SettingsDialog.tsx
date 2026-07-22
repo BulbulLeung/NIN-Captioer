@@ -208,7 +208,9 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       captionPresets: draft.captionPresets,
       activeCaptionPresetId: draft.activeCaptionPresetId,
       sidebarWidth: draft.sidebarWidth,
-      rightPaneWidth: draft.rightPaneWidth
+      rightPaneWidth: draft.rightPaneWidth,
+      listViewMode: draft.listViewMode,
+      thumbnailWidth: draft.thumbnailWidth
     })
   }
 
