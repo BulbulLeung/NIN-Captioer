@@ -17,6 +17,7 @@ export interface AppSettings {
   model: string
   targetLanguage: string
   lastFolder: string | null
+  datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
   sidebarWidth: number
@@ -60,6 +61,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   model: '',
   targetLanguage: 'zh-TW',
   lastFolder: null,
+  datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
   sidebarWidth: 260,
@@ -97,6 +99,23 @@ export function normalizeListViewMode(value: unknown): ListViewMode {
   return value === 'thumbnails' ? 'thumbnails' : 'list'
 }
 
+function normalizeDatasetFolders(raw: unknown, lastFolder: string | null): string[] {
+  const seen = new Set<string>()
+  const folders: string[] = []
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item !== 'string' || !item) continue
+      if (seen.has(item)) continue
+      seen.add(item)
+      folders.push(item)
+    }
+  }
+  if (lastFolder && !seen.has(lastFolder)) {
+    folders.unshift(lastFolder)
+  }
+  return folders
+}
+
 export function normalizeSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
   const merged = { ...DEFAULT_SETTINGS, ...raw }
   let presets = Array.isArray(merged.captionPresets) ? merged.captionPresets.filter(Boolean) : []
@@ -107,12 +126,21 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
   if (!presets.some((p) => p.id === activeId)) {
     activeId = presets[0].id
   }
+  let lastFolder = merged.lastFolder ?? null
+  const datasetFolders = normalizeDatasetFolders(merged.datasetFolders, lastFolder)
+  if (!lastFolder && datasetFolders.length > 0) {
+    lastFolder = datasetFolders[0]
+  }
+  if (lastFolder && !datasetFolders.includes(lastFolder) && datasetFolders.length > 0) {
+    lastFolder = datasetFolders[0]
+  }
   return {
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
     model: merged.model ?? '',
-    lastFolder: merged.lastFolder ?? null,
+    lastFolder,
+    datasetFolders,
     sidebarWidth: clampSidebarWidth(merged.sidebarWidth ?? DEFAULT_SETTINGS.sidebarWidth),
     rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
     autoAnalysis: merged.autoAnalysis !== false,

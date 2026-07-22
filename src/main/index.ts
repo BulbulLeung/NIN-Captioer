@@ -28,6 +28,7 @@ interface AppSettings {
   model: string
   targetLanguage: string
   lastFolder: string | null
+  datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
   sidebarWidth: number
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   model: '',
   targetLanguage: 'zh-TW',
   lastFolder: null,
+  datasetFolders: [],
   captionPresets: [],
   activeCaptionPresetId: '',
   sidebarWidth: 260,

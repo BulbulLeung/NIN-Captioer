@@ -205,6 +205,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       targetLanguage: draft.targetLanguage,
       model: draft.model,
       lastFolder: draft.lastFolder,
+      datasetFolders: draft.datasetFolders,
       captionPresets: draft.captionPresets,
       activeCaptionPresetId: draft.activeCaptionPresetId,
       sidebarWidth: draft.sidebarWidth,

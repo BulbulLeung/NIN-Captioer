@@ -25,18 +25,16 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n))
 }
 
-function median(nums: number[]): number {
-  if (nums.length === 0) return 0
-  const sorted = [...nums].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1] + sorted[mid]) / 2
-  }
-  return sorted[mid]
+/** Flux.1-dev / Krea2 T5 fit band (not SDXL CLIP 77). */
+const FLUX_T5_TOKEN_MIN = 15
+const FLUX_T5_TOKEN_MAX = 512
+
+function isInFluxT5TokenRange(tokens: number): boolean {
+  return tokens >= FLUX_T5_TOKEN_MIN && tokens <= FLUX_T5_TOKEN_MAX
 }
 
 /**
- * Rough CLIP-like token estimate.
+ * Rough token estimate for Flux/Krea T5 fit checks.
  * Latin: whitespace-separated tokens; CJK runs: ceil(chars / 1.5).
  */
 export function estimateClipTokens(text: string): number {
@@ -73,13 +71,6 @@ function scoreDetailRichness(avg: number): number {
   if (avg >= 2) return 50
   if (avg >= 1) return 30
   return 0
-}
-
-function scoreLengthMedian(m: number): number {
-  if (m >= 15 && m <= 75) return 100
-  if ((m >= 10 && m < 15) || (m > 75 && m <= 100)) return 70
-  if ((m >= 5 && m < 10) || (m > 100 && m <= 120)) return 40
-  return 15
 }
 
 /**
@@ -318,12 +309,13 @@ export function calculateLoraHealthScore(input: {
   const detailScore = scoreDetailRichness(avgDetails)
   const detailNotes = `Avg ${avgDetails.toFixed(1)} unique details / caption`
 
-  // --- 4. Length / token fit ---
-  const medTokens = median(tokenCounts)
-  let lengthScore = scoreLengthMedian(medTokens)
+  // --- 4. Length / token fit (Flux/Krea T5 pass rate) ---
+  const outOfRange = tokenCounts.filter((t) => !isInFluxT5TokenRange(t)).length
+  const inRangeRatio = (captionedCount - outOfRange) / captionedCount
+  let lengthScore = 100 * inRangeRatio
   lengthScore *= 1 - emptyRatio * 0.5
   lengthScore = clamp(lengthScore, 0, 100)
-  const lengthNotes = `Median ~${Math.round(medTokens)} est. CLIP tokens (ideal 15–75)`
+  const lengthNotes = `${outOfRange}/${captionedCount} outside Flux/Krea T5 fit (ideal ${FLUX_T5_TOKEN_MIN}–${FLUX_T5_TOKEN_MAX})`
 
   // --- 5. Category coverage ---
   const coverageRates = CAPTION_CATEGORIES.map(

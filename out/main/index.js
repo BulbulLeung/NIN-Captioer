@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
   model: "",
   targetLanguage: "zh-TW",
   lastFolder: null,
+  datasetFolders: [],
   captionPresets: [],
   activeCaptionPresetId: "",
   sidebarWidth: 260,

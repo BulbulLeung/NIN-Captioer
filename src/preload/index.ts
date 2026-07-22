@@ -21,6 +21,7 @@ export interface AppSettings {
   model: string
   targetLanguage: string
   lastFolder: string | null
+  datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
   sidebarWidth: number
