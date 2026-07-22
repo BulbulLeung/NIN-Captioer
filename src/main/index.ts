@@ -242,7 +242,7 @@ async function createWindow(): Promise<void> {
     height: Math.max(600, saved.height),
     minWidth: 900,
     minHeight: 600,
-    title: 'Captioer Ver0.1',
+    title: `${app.getName()} Ver${app.getVersion()}`,
     show: false,
     autoHideMenuBar: true,
     // Dev: build/icon.ico. Packaged Windows builds use the exe icon from electron-builder.
@@ -274,6 +274,10 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow(options)
   mainWindow.setMenuBarVisibility(false)
   Menu.setApplicationMenu(null)
+  // Keep BrowserWindow title (from package.json version); ignore document.title from index.html
+  mainWindow.on('page-title-updated', (event) => {
+    event.preventDefault()
+  })
 
   mainWindow.once('ready-to-show', () => {
     if (!mainWindow) return

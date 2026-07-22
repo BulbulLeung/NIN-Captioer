@@ -12605,596 +12605,6 @@ function aggregateCategoryDetails(captions, classifications) {
     categoryDetails
   };
 }
-const CLASSIFY_TIMEOUT_MS = 12e4;
-async function fetchWithTimeout$2(url, init, userSignal, timeoutMs) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort("timeout"), timeoutMs);
-  const onUserAbort = () => ctrl.abort("cancel");
-  if (userSignal) {
-    if (userSignal.aborted) ctrl.abort("cancel");
-    else userSignal.addEventListener("abort", onUserAbort, { once: true });
-  }
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } catch (err) {
-    const reason = ctrl.signal.reason;
-    if (reason === "timeout") {
-      throw new Error(
-        `Classification timed out (${Math.round(timeoutMs / 1e3)}s). Check that Ollama / LM Studio is running and the model is loaded.`
-      );
-    }
-    if (reason === "cancel") {
-      throw new Error("Classification cancelled");
-    }
-    throw err instanceof Error ? err : new Error(String(err));
-  } finally {
-    clearTimeout(timer);
-    userSignal?.removeEventListener("abort", onUserAbort);
-  }
-}
-function taxonomyPromptBlock() {
-  return CAPTION_CATEGORIES.map((cat) => {
-    const ids = cat.details.map((d) => d.id).join(", ");
-    return `- ${cat.id}: [${ids}]`;
-  }).join("\n");
-}
-function buildClassifyPrompt(caption) {
-  return `Classify this image caption into the given categories.
-Only use detail ids from the allowed lists below. Include a detail only if the caption clearly implies it (synonyms OK).
-Return ONLY valid JSON with exactly these keys, each an array of detail id strings (empty array if none):
-{"subject":[],"camera":[],"clothing":[],"pose":[],"expression":[],"scene":[]}
-
-Allowed detail ids per category:
-${taxonomyPromptBlock()}
-
-Caption:
-${caption}`;
-}
-function stripThinkTags(text) {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-}
-function extractJsonObject(raw) {
-  const cleaned = stripThinkTags(raw).replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  return cleaned.slice(start, end + 1);
-}
-const CATEGORY_IDS = [
-  "subject",
-  "camera",
-  "clothing",
-  "pose",
-  "expression",
-  "scene"
-];
-function parseClassificationResponse(raw) {
-  const lookup = buildDetailLookup();
-  const empty = emptyClassification();
-  const jsonStr = extractJsonObject(raw);
-  if (!jsonStr) return empty;
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    return empty;
-  }
-  if (!parsed || typeof parsed !== "object") return empty;
-  const obj = parsed;
-  const result = emptyClassification();
-  for (const catId of CATEGORY_IDS) {
-    const value = obj[catId];
-    if (!Array.isArray(value)) continue;
-    const allowed = lookup[catId];
-    const ids = [];
-    for (const item of value) {
-      if (typeof item !== "string") continue;
-      const key = item.trim().toLowerCase();
-      const canonical = allowed.get(key);
-      if (canonical && !ids.includes(canonical)) ids.push(canonical);
-    }
-    result[catId] = ids;
-  }
-  return result;
-}
-async function classifyWithLmStudio(baseUrl, model, caption, signal) {
-  if (!model) throw new Error("Model is required in Settings");
-  const url = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
-  const res = await fetchWithTimeout$2(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: "You classify captions. Reply with JSON only. No markdown, no explanations."
-          },
-          {
-            role: "user",
-            content: buildClassifyPrompt(caption)
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 512
-      })
-    },
-    signal,
-    CLASSIFY_TIMEOUT_MS
-  );
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`LM Studio error ${res.status}: ${body || res.statusText}`);
-  }
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("LM Studio returned empty classification");
-  return content;
-}
-async function classifyWithOllama(baseUrl, model, caption, signal) {
-  if (!model) throw new Error("Ollama model name is required in Settings");
-  const url = `${baseUrl.replace(/\/$/, "")}/api/chat`;
-  const res = await fetchWithTimeout$2(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        think: false,
-        keep_alive: "60m",
-        messages: [
-          {
-            role: "system",
-            content: "You classify captions. Reply with JSON only. No markdown, no explanations. No thinking tags."
-          },
-          {
-            role: "user",
-            content: buildClassifyPrompt(caption)
-          }
-        ],
-        options: {
-          temperature: 0.1,
-          num_ctx: 4096,
-          num_predict: 512
-        }
-      })
-    },
-    signal,
-    CLASSIFY_TIMEOUT_MS
-  );
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Ollama error ${res.status}: ${body || res.statusText}`);
-  }
-  const data = await res.json();
-  let content = data.message?.content?.trim() ?? "";
-  content = stripThinkTags(content);
-  if (!content) throw new Error("Ollama returned empty classification");
-  return content;
-}
-async function classifyOnce(settings, caption, signal) {
-  const raw = settings.provider === "lmstudio" ? await classifyWithLmStudio(
-    settings.lmStudioBaseUrl,
-    settings.model,
-    caption,
-    signal
-  ) : await classifyWithOllama(settings.ollamaBaseUrl, settings.model, caption, signal);
-  return parseClassificationResponse(raw);
-}
-async function classifyCaption(settings, caption, signal) {
-  const trimmed = caption.trim();
-  if (!trimmed) return emptyClassification();
-  const first = await classifyOnce(settings, trimmed, signal);
-  const anyHit = CAPTION_CATEGORIES.some((cat) => first[cat.id].length > 0);
-  if (anyHit) return first;
-  const second = await classifyOnce(settings, trimmed, signal);
-  return second;
-}
-const IDENTITY_DETAILS = /* @__PURE__ */ new Set(["woman", "man", "girl", "boy"]);
-function clamp$1(n, min, max) {
-  return Math.min(max, Math.max(min, n));
-}
-function median(nums) {
-  if (nums.length === 0) return 0;
-  const sorted = [...nums].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-  return sorted[mid];
-}
-function estimateClipTokens(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  let tokens = 0;
-  const parts = trimmed.split(/([\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)/);
-  for (const part of parts) {
-    if (!part) continue;
-    if (/^[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+$/.test(part)) {
-      tokens += Math.ceil(part.length / 1.5);
-    } else {
-      const words = part.match(/\S+/g);
-      if (words) tokens += words.length;
-    }
-  }
-  return tokens;
-}
-function countUniqueDetails(hits) {
-  let n = 0;
-  for (const cat of CAPTION_CATEGORIES) {
-    n += new Set(hits[cat.id] ?? []).size;
-  }
-  return n;
-}
-function scoreDetailRichness(avg) {
-  if (avg >= 5) return 100;
-  if (avg >= 4) return 85;
-  if (avg >= 3) return 70;
-  if (avg >= 2) return 50;
-  if (avg >= 1) return 30;
-  return 0;
-}
-function scoreLengthMedian(m) {
-  if (m >= 15 && m <= 75) return 100;
-  if (m >= 10 && m < 15 || m > 75 && m <= 100) return 70;
-  if (m >= 5 && m < 10 || m > 100 && m <= 120) return 40;
-  return 15;
-}
-function calculateLoraHealthScore(input) {
-  const { captions, classifications } = input;
-  const totalImages = captions.length;
-  const emptyBreakdown = (summary2) => ({
-    total: 0,
-    level: "red",
-    breakdown: [
-      {
-        id: "subject",
-        label: "Subject completeness",
-        weight: 0.25,
-        score: 0,
-        weightContribution: 0,
-        notes: "No images"
-      },
-      {
-        id: "diversity",
-        label: "Diversity & balance",
-        weight: 0.2,
-        score: 0,
-        weightContribution: 0,
-        notes: "No images"
-      },
-      {
-        id: "detail",
-        label: "Detail richness",
-        weight: 0.15,
-        score: 0,
-        weightContribution: 0,
-        notes: "No images"
-      },
-      {
-        id: "length",
-        label: "Length / token fit",
-        weight: 0.15,
-        score: 0,
-        weightContribution: 0,
-        notes: "No images"
-      },
-      {
-        id: "coverage",
-        label: "Category coverage",
-        weight: 0.15,
-        score: 0,
-        weightContribution: 0,
-        notes: "No images"
-      },
-      {
-        id: "penalty",
-        label: "Problem cases",
-        weight: 0.1,
-        score: 0,
-        weightContribution: 0,
-        notes: "No images"
-      }
-    ],
-    strengths: [],
-    improvements: ["Add images and captions to score the dataset."],
-    summary: summary2
-  });
-  if (totalImages === 0) {
-    return emptyBreakdown("No images to score.");
-  }
-  const nonEmptyIndexes = [];
-  const tokenCounts = [];
-  const captionKeys = /* @__PURE__ */ new Map();
-  for (let i = 0; i < totalImages; i++) {
-    const text = captions[i]?.trim() ?? "";
-    if (!text) continue;
-    nonEmptyIndexes.push(i);
-    tokenCounts.push(estimateClipTokens(text));
-    const key = text.toLowerCase();
-    captionKeys.set(key, (captionKeys.get(key) ?? 0) + 1);
-  }
-  const captionedCount = nonEmptyIndexes.length;
-  const emptyRatio = (totalImages - captionedCount) / totalImages;
-  if (captionedCount === 0) {
-    const penalty2 = clamp$1(emptyRatio * 40, 0, 100);
-    const total2 = clamp$1(0 - penalty2 * 0.1, 0, 100);
-    return {
-      total: Math.round(total2),
-      level: fitnessLevelForScore(Math.round(total2)),
-      breakdown: [
-        {
-          id: "subject",
-          label: "Subject completeness",
-          weight: 0.25,
-          score: 0,
-          weightContribution: 0,
-          notes: "All captions empty"
-        },
-        {
-          id: "diversity",
-          label: "Diversity & balance",
-          weight: 0.2,
-          score: 0,
-          weightContribution: 0,
-          notes: "All captions empty"
-        },
-        {
-          id: "detail",
-          label: "Detail richness",
-          weight: 0.15,
-          score: 0,
-          weightContribution: 0,
-          notes: "All captions empty"
-        },
-        {
-          id: "length",
-          label: "Length / token fit",
-          weight: 0.15,
-          score: 0,
-          weightContribution: 0,
-          notes: "All captions empty"
-        },
-        {
-          id: "coverage",
-          label: "Category coverage",
-          weight: 0.15,
-          score: 0,
-          weightContribution: 0,
-          notes: "All captions empty"
-        },
-        {
-          id: "penalty",
-          label: "Problem cases",
-          weight: 0.1,
-          score: Math.round(penalty2),
-          weightContribution: -Math.round(penalty2 * 0.1 * 10) / 10,
-          notes: `${Math.round(emptyRatio * 100)}% missing captions`
-        }
-      ],
-      strengths: [],
-      improvements: ["Write captions for every image before training."],
-      summary: "Dataset has no usable captions yet."
-    };
-  }
-  let subjectSum = 0;
-  let identityCount = 0;
-  let subjectAnyCount = 0;
-  for (const i of nonEmptyIndexes) {
-    const hits = classifications[i] ?? emptyClassification();
-    const subjectIds = [...new Set(hits.subject ?? [])];
-    let s = 0;
-    if (subjectIds.length > 0) {
-      s += 0.6;
-      subjectAnyCount += 1;
-    }
-    if (subjectIds.some((id) => IDENTITY_DETAILS.has(id))) {
-      s += 0.4;
-      identityCount += 1;
-    }
-    subjectSum += s;
-  }
-  const subjectScore = subjectSum / captionedCount * 100;
-  const subjectNotes = identityCount / captionedCount >= 0.8 ? `Identity terms on ${identityCount}/${captionedCount} captions` : `Subject tags ${subjectAnyCount}/${captionedCount}; identity ${identityCount}/${captionedCount}`;
-  const categoryDetailTotals = {
-    subject: /* @__PURE__ */ new Map(),
-    camera: /* @__PURE__ */ new Map(),
-    clothing: /* @__PURE__ */ new Map(),
-    pose: /* @__PURE__ */ new Map(),
-    expression: /* @__PURE__ */ new Map(),
-    scene: /* @__PURE__ */ new Map()
-  };
-  const categoryPresence = {
-    subject: 0,
-    camera: 0,
-    clothing: 0,
-    pose: 0,
-    expression: 0,
-    scene: 0
-  };
-  for (const i of nonEmptyIndexes) {
-    const hits = classifications[i] ?? emptyClassification();
-    for (const cat of CAPTION_CATEGORIES) {
-      const ids = [...new Set(hits[cat.id] ?? [])];
-      if (ids.length > 0) categoryPresence[cat.id] += 1;
-      for (const id of ids) {
-        const map = categoryDetailTotals[cat.id];
-        map.set(id, (map.get(id) ?? 0) + 1);
-      }
-    }
-  }
-  const diversityScores = [];
-  for (const cat of CAPTION_CATEGORIES) {
-    const map = categoryDetailTotals[cat.id];
-    const taxonomySize = Math.max(1, cat.details.length);
-    const unique = map.size;
-    let catScore = unique / taxonomySize * 100;
-    let hitTotal = 0;
-    let maxCount = 0;
-    for (const c of map.values()) {
-      hitTotal += c;
-      if (c > maxCount) maxCount = c;
-    }
-    const maxShare = hitTotal > 0 ? maxCount / hitTotal : 0;
-    if (maxShare > 0.7) catScore *= 0.6;
-    diversityScores.push(catScore);
-  }
-  const diversityScore = diversityScores.reduce((a, b) => a + b, 0) / diversityScores.length;
-  const diversityNotes = `Avg taxonomy fill ${Math.round(diversityScore)}%; concentrated labels penalized`;
-  let detailSum = 0;
-  for (const i of nonEmptyIndexes) {
-    detailSum += countUniqueDetails(classifications[i] ?? emptyClassification());
-  }
-  const avgDetails = detailSum / captionedCount;
-  const detailScore = scoreDetailRichness(avgDetails);
-  const detailNotes = `Avg ${avgDetails.toFixed(1)} unique details / caption`;
-  const medTokens = median(tokenCounts);
-  let lengthScore = scoreLengthMedian(medTokens);
-  lengthScore *= 1 - emptyRatio * 0.5;
-  lengthScore = clamp$1(lengthScore, 0, 100);
-  const lengthNotes = `Median ~${Math.round(medTokens)} est. CLIP tokens (ideal 15–75)`;
-  const coverageRates = CAPTION_CATEGORIES.map(
-    (cat) => categoryPresence[cat.id] / captionedCount
-  );
-  const coverageScore = coverageRates.reduce((a, b) => a + b, 0) / 6 * 100;
-  const weakCats = CAPTION_CATEGORIES.filter(
-    (_, idx) => coverageRates[idx] < 0.5
-  ).map((c) => c.label);
-  const coverageNotes = weakCats.length === 0 ? "All six categories appear in ≥50% of captions" : `Weak: ${weakCats.slice(0, 3).join(", ")}${weakCats.length > 3 ? "…" : ""}`;
-  const veryShortRatio = tokenCounts.filter((t) => t < 5).length / captionedCount;
-  let duplicateExtras = 0;
-  for (const count of captionKeys.values()) {
-    if (count > 1) duplicateExtras += count - 1;
-  }
-  const duplicateRatio = duplicateExtras / captionedCount;
-  const penalty = clamp$1(
-    emptyRatio * 40 + veryShortRatio * 30 + duplicateRatio * 30,
-    0,
-    100
-  );
-  const penaltyParts = [];
-  if (emptyRatio > 0) penaltyParts.push(`${Math.round(emptyRatio * 100)}% empty`);
-  if (veryShortRatio > 0) {
-    penaltyParts.push(`${Math.round(veryShortRatio * 100)}% very short`);
-  }
-  if (duplicateRatio > 0) {
-    penaltyParts.push(`${Math.round(duplicateRatio * 100)}% duplicates`);
-  }
-  const penaltyNotes = penaltyParts.length > 0 ? penaltyParts.join("; ") : "No major issues detected";
-  const subjectW = subjectScore * 0.25;
-  const diversityW = diversityScore * 0.2;
-  const detailW = detailScore * 0.15;
-  const lengthW = lengthScore * 0.15;
-  const coverageW = coverageScore * 0.15;
-  const penaltyW = penalty * 0.1;
-  const total = Math.round(
-    clamp$1(subjectW + diversityW + detailW + lengthW + coverageW - penaltyW, 0, 100)
-  );
-  const breakdown = [
-    {
-      id: "subject",
-      label: "Subject completeness",
-      weight: 0.25,
-      score: Math.round(subjectScore),
-      weightContribution: Math.round(subjectW * 10) / 10,
-      notes: subjectNotes
-    },
-    {
-      id: "diversity",
-      label: "Diversity & balance",
-      weight: 0.2,
-      score: Math.round(diversityScore),
-      weightContribution: Math.round(diversityW * 10) / 10,
-      notes: diversityNotes
-    },
-    {
-      id: "detail",
-      label: "Detail richness",
-      weight: 0.15,
-      score: Math.round(detailScore),
-      weightContribution: Math.round(detailW * 10) / 10,
-      notes: detailNotes
-    },
-    {
-      id: "length",
-      label: "Length / token fit",
-      weight: 0.15,
-      score: Math.round(lengthScore),
-      weightContribution: Math.round(lengthW * 10) / 10,
-      notes: lengthNotes
-    },
-    {
-      id: "coverage",
-      label: "Category coverage",
-      weight: 0.15,
-      score: Math.round(coverageScore),
-      weightContribution: Math.round(coverageW * 10) / 10,
-      notes: coverageNotes
-    },
-    {
-      id: "penalty",
-      label: "Problem cases",
-      weight: 0.1,
-      score: Math.round(penalty),
-      weightContribution: -Math.round(penaltyW * 10) / 10,
-      notes: penaltyNotes
-    }
-  ];
-  const strengths = [];
-  const improvements = [];
-  for (const item of breakdown) {
-    if (item.id === "penalty") {
-      if (item.score <= 10) strengths.push("Few dataset hygiene issues");
-      else if (item.score >= 30) {
-        improvements.push(`Fix issues: ${item.notes}`);
-      }
-      continue;
-    }
-    if (item.score >= 75) strengths.push(`${item.label} looks solid (${item.score})`);
-    else if (item.score < 55) {
-      improvements.push(`Improve ${item.label.toLowerCase()}: ${item.notes}`);
-    }
-  }
-  if (strengths.length === 0) {
-    strengths.push("Keep iterating captions as analysis completes");
-  }
-  if (improvements.length === 0) {
-    improvements.push("Dataset looks balanced — spot-check hard cases manually");
-  }
-  let summary;
-  if (total >= 70) {
-    summary = "Healthy for character LoRA training — minor polish only.";
-  } else if (total >= 40) {
-    summary = "Usable but uneven — prioritize the improvements below.";
-  } else {
-    summary = "Weak dataset health — fix missing/short captions and coverage first.";
-  }
-  return {
-    total,
-    level: fitnessLevelForScore(total),
-    breakdown,
-    strengths: strengths.slice(0, 4),
-    improvements: improvements.slice(0, 4),
-    summary
-  };
-}
-function buildCaptionAnalysisResult(captions, classifications) {
-  const base = aggregateCategoryDetails(captions, classifications);
-  const health = calculateLoraHealthScore({ captions, classifications });
-  return {
-    ...base,
-    fitnessScore: health.total,
-    fitnessLevel: health.level,
-    healthBreakdown: health.breakdown,
-    strengths: health.strengths,
-    improvements: health.improvements,
-    summary: health.summary
-  };
-}
 function polarToCartesian(cx, cy, r, angleDeg) {
   const rad = (angleDeg - 90) * Math.PI / 180;
   return {
@@ -13289,83 +12699,15 @@ function CategoryPieChart({
     ] })
   ] });
 }
-function AnalysisDialog({ open, images, settings, onClose }) {
-  const [analyzing, setAnalyzing] = reactExports.useState(false);
-  const [progress, setProgress] = reactExports.useState(null);
-  const [error, setError] = reactExports.useState(null);
-  const [result, setResult] = reactExports.useState(null);
-  const loadId = reactExports.useRef(0);
-  const abortRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    if (!open) {
-      abortRef.current?.abort("cancel");
-      abortRef.current = null;
-      setResult(null);
-      setError(null);
-      setAnalyzing(false);
-      setProgress(null);
-      return;
-    }
-    if (images.length === 0) {
-      setResult(null);
-      setError(null);
-      setAnalyzing(false);
-      setProgress(null);
-      return;
-    }
-    const id = ++loadId.current;
-    const abort = new AbortController();
-    abortRef.current = abort;
-    setAnalyzing(true);
-    setError(null);
-    setResult(null);
-    setProgress(null);
-    void (async () => {
-      try {
-        if (!settings.model.trim()) {
-          throw new Error("Model is required in Settings before analyzing captions.");
-        }
-        const captions = await Promise.all(
-          images.map((img) => window.api.readCaption(img.path))
-        );
-        if (id !== loadId.current) return;
-        const nonEmptyIndexes = [];
-        for (let i = 0; i < captions.length; i++) {
-          if (captions[i].trim()) nonEmptyIndexes.push(i);
-        }
-        const classifications = captions.map(
-          () => emptyClassification()
-        );
-        setResult(buildCaptionAnalysisResult(captions, classifications));
-        setProgress({ done: 0, total: nonEmptyIndexes.length });
-        for (let step = 0; step < nonEmptyIndexes.length; step++) {
-          if (abort.signal.aborted || id !== loadId.current) return;
-          const idx = nonEmptyIndexes[step];
-          classifications[idx] = await classifyCaption(
-            settings,
-            captions[idx],
-            abort.signal
-          );
-          if (id !== loadId.current) return;
-          setResult(buildCaptionAnalysisResult(captions, classifications));
-          setProgress({ done: step + 1, total: nonEmptyIndexes.length });
-        }
-      } catch (err) {
-        if (id !== loadId.current) return;
-        if (abort.signal.aborted) return;
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (id === loadId.current) {
-          setAnalyzing(false);
-          setProgress(null);
-          if (abortRef.current === abort) abortRef.current = null;
-        }
-      }
-    })();
-    return () => {
-      abort.abort("cancel");
-    };
-  }, [open, images, settings]);
+function AnalysisDialog({
+  open,
+  imageCount,
+  analyzing,
+  progress,
+  error,
+  result,
+  onClose
+}) {
   if (!open) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -13379,7 +12721,7 @@ function AnalysisDialog({ open, images, settings, onClose }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "analysis-title", children: "Caption Analysis" }),
           analyzing && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "analysis-progress", "aria-live": "polite", children: progress ? `Analyzing ${progress.done} / ${progress.total}…` : "Preparing analysis…" })
         ] }),
-        images.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "Open a folder that contains images first." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        imageCount === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "Open a folder that contains images first." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: error }),
           result ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "analysis-dashboard", children: [
@@ -13527,24 +12869,52 @@ const DEFAULT_SETTINGS = {
   model: "",
   targetLanguage: "zh-TW",
   lastFolder: null,
+  datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
   sidebarWidth: 260,
-  rightPaneWidth: 380
+  rightPaneWidth: 380,
+  autoAnalysis: true,
+  listViewMode: "list",
+  thumbnailWidth: 96
 };
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 480;
 const RIGHT_PANE_MIN = 280;
 const RIGHT_PANE_MAX = 720;
-function clamp(n, min, max) {
+const THUMB_MIN = 48;
+const THUMB_MAX = 160;
+function clamp$1(n, min, max) {
   if (!Number.isFinite(n)) return min;
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 function clampSidebarWidth(n) {
-  return clamp(n, SIDEBAR_MIN, SIDEBAR_MAX);
+  return clamp$1(n, SIDEBAR_MIN, SIDEBAR_MAX);
 }
 function clampRightPaneWidth(n) {
-  return clamp(n, RIGHT_PANE_MIN, RIGHT_PANE_MAX);
+  return clamp$1(n, RIGHT_PANE_MIN, RIGHT_PANE_MAX);
+}
+function clampThumbnailWidth(n) {
+  return clamp$1(n, THUMB_MIN, THUMB_MAX);
+}
+function normalizeListViewMode(value) {
+  return value === "thumbnails" ? "thumbnails" : "list";
+}
+function normalizeDatasetFolders(raw, lastFolder) {
+  const seen = /* @__PURE__ */ new Set();
+  const folders = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item !== "string" || !item) continue;
+      if (seen.has(item)) continue;
+      seen.add(item);
+      folders.push(item);
+    }
+  }
+  if (lastFolder && !seen.has(lastFolder)) {
+    folders.unshift(lastFolder);
+  }
+  return folders;
 }
 function normalizeSettings(raw) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
@@ -13556,14 +12926,26 @@ function normalizeSettings(raw) {
   if (!presets.some((p) => p.id === activeId)) {
     activeId = presets[0].id;
   }
+  let lastFolder = merged.lastFolder ?? null;
+  const datasetFolders = normalizeDatasetFolders(merged.datasetFolders, lastFolder);
+  if (!lastFolder && datasetFolders.length > 0) {
+    lastFolder = datasetFolders[0];
+  }
+  if (lastFolder && !datasetFolders.includes(lastFolder) && datasetFolders.length > 0) {
+    lastFolder = datasetFolders[0];
+  }
   return {
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
     model: merged.model ?? "",
-    lastFolder: merged.lastFolder ?? null,
+    lastFolder,
+    datasetFolders,
     sidebarWidth: clampSidebarWidth(merged.sidebarWidth ?? DEFAULT_SETTINGS.sidebarWidth),
-    rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth)
+    rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
+    autoAnalysis: merged.autoAnalysis !== false,
+    listViewMode: normalizeListViewMode(merged.listViewMode),
+    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth)
   };
 }
 function CaptionEditor({
@@ -13732,43 +13114,140 @@ function DeleteConfirmDialog({ open, fileName, onConfirm, onCancel }) {
     }
   ) });
 }
-function ImageList({ images, selectedPath, dirtyPaths, onSelect }) {
+function ImageList({
+  images,
+  selectedPath,
+  dirtyPaths,
+  viewMode,
+  thumbnailWidth,
+  onSelect
+}) {
   const selectedRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     selectedRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selectedPath]);
+  }, [selectedPath, viewMode]);
   if (images.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-list empty", children: "No images. Open a folder to begin." });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "image-list", children: images.map((img) => {
-    const selected = img.path === selectedPath;
-    const dirty = dirtyPaths.has(img.path);
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        ref: selected ? selectedRef : void 0,
-        className: `image-list-item${selected ? " selected" : ""}`,
-        tabIndex: -1,
-        onMouseDown: (e) => e.preventDefault(),
-        onClick: () => onSelect(img.path),
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-name", title: img.name, children: [
-            dirty ? "● " : "",
-            img.name
-          ] }),
-          !img.hasCaption && !dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge missing", title: "No caption file", children: "no txt" }),
-          dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge dirty", children: "unsaved" })
-        ]
-      }
-    ) }, img.path);
-  }) });
+  const isThumbnails = viewMode === "thumbnails";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "ul",
+    {
+      className: `image-list${isThumbnails ? " thumbnails" : ""}`,
+      style: isThumbnails ? { "--thumb-w": `${thumbnailWidth}px` } : void 0,
+      children: images.map((img) => {
+        const selected = img.path === selectedPath;
+        const dirty = dirtyPaths.has(img.path);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            ref: selected ? selectedRef : void 0,
+            className: `image-list-item${selected ? " selected" : ""}${isThumbnails ? " thumb" : ""}`,
+            tabIndex: -1,
+            onMouseDown: (e) => e.preventDefault(),
+            onClick: () => onSelect(img.path),
+            children: [
+              isThumbnails && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "image-list-thumb", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: window.api.toLocalUrl(img.path), alt: "", loading: "lazy" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-meta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-name", title: img.name, children: [
+                  dirty ? "● " : "",
+                  img.name
+                ] }),
+                !img.hasCaption && !dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge missing", title: "No caption file", children: "no txt" }),
+                dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge dirty", children: "unsaved" })
+              ] })
+            ]
+          }
+        ) }, img.path);
+      })
+    }
+  );
 }
 function ImagePreview({ imagePath, imageUrl }) {
   if (!imagePath || !imageUrl) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview empty", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Select an image from the list to preview" }) });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageUrl, alt: "" }) });
+}
+function RemoveDatasetFolderDialog({ open, folderName, onConfirm, onCancel }) {
+  const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
+  const focusRef = reactExports.useRef("cancel");
+  focusRef.current = focusBtn;
+  const onConfirmRef = reactExports.useRef(onConfirm);
+  const onCancelRef = reactExports.useRef(onCancel);
+  onConfirmRef.current = onConfirm;
+  onCancelRef.current = onCancel;
+  reactExports.useEffect(() => {
+    if (!open) return;
+    setFocusBtn("cancel");
+  }, [open]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancelRef.current();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        setFocusBtn((prev) => prev === "cancel" ? "remove" : "cancel");
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (focusRef.current === "remove") onConfirmRef.current();
+        else onCancelRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
+  if (!open) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "modal",
+      role: "dialog",
+      "aria-labelledby": "remove-dataset-title",
+      onClick: (e) => e.stopPropagation(),
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "remove-dataset-title", children: "Remove dataset folder" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+          'Remove "',
+          folderName,
+          '" from the dataset list? Files on disk will not be deleted.'
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: focusBtn === "cancel" ? "kbd-focus" : void 0,
+              onClick: onCancel,
+              onMouseEnter: () => setFocusBtn("cancel"),
+              children: "Cancel"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: `danger${focusBtn === "remove" ? " kbd-focus" : ""}`,
+              onClick: onConfirm,
+              onMouseEnter: () => setFocusBtn("remove"),
+              children: "Remove"
+            }
+          )
+        ] })
+      ]
+    }
+  ) });
 }
 const TRANSLATE_TIMEOUT_MS = 12e4;
 const CACHE_MAX = 80;
@@ -13811,7 +13290,7 @@ ${text}`;
 function maxPredictTokens(textLen) {
   return Math.min(2048, Math.max(256, Math.ceil(textLen / 2) + 128));
 }
-async function fetchWithTimeout$1(url, init, userSignal, timeoutMs) {
+async function fetchWithTimeout$2(url, init, userSignal, timeoutMs) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort("timeout"), timeoutMs);
   const onUserAbort = () => ctrl.abort("cancel");
@@ -13839,7 +13318,7 @@ async function fetchWithTimeout$1(url, init, userSignal, timeoutMs) {
 }
 async function translateWithLmStudio(baseUrl, model, text, sourceLang, targetLang, signal) {
   const url = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
-  const res = await fetchWithTimeout$1(
+  const res = await fetchWithTimeout$2(
     url,
     {
       method: "POST",
@@ -13875,7 +13354,7 @@ async function translateWithLmStudio(baseUrl, model, text, sourceLang, targetLan
 async function translateWithOllama(baseUrl, model, text, sourceLang, targetLang, signal) {
   if (!model) throw new Error("Ollama model name is required in Settings");
   const url = `${baseUrl.replace(/\/$/, "")}/api/chat`;
-  const res = await fetchWithTimeout$1(
+  const res = await fetchWithTimeout$2(
     url,
     {
       method: "POST",
@@ -14140,10 +13619,13 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       targetLanguage: draft.targetLanguage,
       model: draft.model,
       lastFolder: draft.lastFolder,
+      datasetFolders: draft.datasetFolders,
       captionPresets: draft.captionPresets,
       activeCaptionPresetId: draft.activeCaptionPresetId,
       sidebarWidth: draft.sidebarWidth,
-      rightPaneWidth: draft.rightPaneWidth
+      rightPaneWidth: draft.rightPaneWidth,
+      listViewMode: draft.listViewMode,
+      thumbnailWidth: draft.thumbnailWidth
     });
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -14194,16 +13676,23 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
               onChange: (e) => setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
             }
           )
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Ollama Base URL" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              value: draft.ollamaBaseUrl,
-              onChange: (e) => setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
-            }
-          )
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Ollama Base URL" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                value: draft.ollamaBaseUrl,
+                onChange: (e) => setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+            "Interactive translation / captioning has priority; analysis pauses until idle. Optional: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "OLLAMA_NUM_PARALLEL=2" }),
+            " for hard concurrency (restart Ollama)."
+          ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model" }),
@@ -14230,6 +13719,20 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
           ] }),
           modelsError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: modelsError }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used for translation, Auto Caption, and reCaption." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field checkbox-field", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "checkbox-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: draft.autoAnalysis,
+                onChange: (e) => setDraft((prev) => ({ ...prev, autoAnalysis: e.target.checked }))
+              }
+            ),
+            "Auto analysis"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "On: analyze captions in the background. Off: only while the Analyze dialog is open." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Auto Caption prompt" }),
@@ -14417,6 +13920,857 @@ function useBidirectionalTranslate({
     setEnglishSnapshot
   };
 }
+const CLASSIFY_TIMEOUT_MS = 12e4;
+async function fetchWithTimeout$1(url, init, userSignal, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort("timeout"), timeoutMs);
+  const onUserAbort = () => ctrl.abort("cancel");
+  if (userSignal) {
+    if (userSignal.aborted) ctrl.abort("cancel");
+    else userSignal.addEventListener("abort", onUserAbort, { once: true });
+  }
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    const reason = ctrl.signal.reason;
+    if (reason === "timeout") {
+      throw new Error(
+        `Classification timed out (${Math.round(timeoutMs / 1e3)}s). Check that Ollama / LM Studio is running and the model is loaded.`
+      );
+    }
+    if (reason === "cancel") {
+      throw new Error("Classification cancelled");
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  } finally {
+    clearTimeout(timer);
+    userSignal?.removeEventListener("abort", onUserAbort);
+  }
+}
+function taxonomyPromptBlock() {
+  return CAPTION_CATEGORIES.map((cat) => {
+    const ids = cat.details.map((d) => d.id).join(", ");
+    return `- ${cat.id}: [${ids}]`;
+  }).join("\n");
+}
+function buildClassifyPrompt(caption) {
+  return `Classify this image caption into the given categories.
+Only use detail ids from the allowed lists below. Include a detail only if the caption clearly implies it (synonyms OK).
+Return ONLY valid JSON with exactly these keys, each an array of detail id strings (empty array if none):
+{"subject":[],"camera":[],"clothing":[],"pose":[],"expression":[],"scene":[]}
+
+Allowed detail ids per category:
+${taxonomyPromptBlock()}
+
+Caption:
+${caption}`;
+}
+function stripThinkTags(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+function extractJsonObject(raw) {
+  const cleaned = stripThinkTags(raw).replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  return cleaned.slice(start, end + 1);
+}
+const CATEGORY_IDS = [
+  "subject",
+  "camera",
+  "clothing",
+  "pose",
+  "expression",
+  "scene"
+];
+function parseClassificationResponse(raw) {
+  const lookup = buildDetailLookup();
+  const empty = emptyClassification();
+  const jsonStr = extractJsonObject(raw);
+  if (!jsonStr) return empty;
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return empty;
+  }
+  if (!parsed || typeof parsed !== "object") return empty;
+  const obj = parsed;
+  const result = emptyClassification();
+  for (const catId of CATEGORY_IDS) {
+    const value = obj[catId];
+    if (!Array.isArray(value)) continue;
+    const allowed = lookup[catId];
+    const ids = [];
+    for (const item of value) {
+      if (typeof item !== "string") continue;
+      const key = item.trim().toLowerCase();
+      const canonical = allowed.get(key);
+      if (canonical && !ids.includes(canonical)) ids.push(canonical);
+    }
+    result[catId] = ids;
+  }
+  return result;
+}
+async function classifyWithLmStudio(baseUrl, model, caption, signal) {
+  if (!model) throw new Error("Model is required in Settings");
+  const url = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const res = await fetchWithTimeout$1(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "You classify captions. Reply with JSON only. No markdown, no explanations."
+          },
+          {
+            role: "user",
+            content: buildClassifyPrompt(caption)
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 512
+      })
+    },
+    signal,
+    CLASSIFY_TIMEOUT_MS
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`LM Studio error ${res.status}: ${body || res.statusText}`);
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error("LM Studio returned empty classification");
+  return content;
+}
+async function classifyWithOllama(baseUrl, model, caption, signal) {
+  if (!model) throw new Error("Ollama model name is required in Settings");
+  const url = `${baseUrl.replace(/\/$/, "")}/api/chat`;
+  const res = await fetchWithTimeout$1(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        think: false,
+        keep_alive: "60m",
+        messages: [
+          {
+            role: "system",
+            content: "You classify captions. Reply with JSON only. No markdown, no explanations. No thinking tags."
+          },
+          {
+            role: "user",
+            content: buildClassifyPrompt(caption)
+          }
+        ],
+        options: {
+          temperature: 0.1,
+          num_ctx: 4096,
+          num_predict: 512
+        }
+      })
+    },
+    signal,
+    CLASSIFY_TIMEOUT_MS
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Ollama error ${res.status}: ${body || res.statusText}`);
+  }
+  const data = await res.json();
+  let content = data.message?.content?.trim() ?? "";
+  content = stripThinkTags(content);
+  if (!content) throw new Error("Ollama returned empty classification");
+  return content;
+}
+async function classifyOnce(settings, caption, signal) {
+  const raw = settings.provider === "lmstudio" ? await classifyWithLmStudio(
+    settings.lmStudioBaseUrl,
+    settings.model,
+    caption,
+    signal
+  ) : await classifyWithOllama(settings.ollamaBaseUrl, settings.model, caption, signal);
+  return parseClassificationResponse(raw);
+}
+async function classifyCaption(settings, caption, signal) {
+  const trimmed = caption.trim();
+  if (!trimmed) return emptyClassification();
+  const first = await classifyOnce(settings, trimmed, signal);
+  const anyHit = CAPTION_CATEGORIES.some((cat) => first[cat.id].length > 0);
+  if (anyHit) return first;
+  const second = await classifyOnce(settings, trimmed, signal);
+  return second;
+}
+const IDENTITY_DETAILS = /* @__PURE__ */ new Set(["woman", "man", "girl", "boy"]);
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+const FLUX_T5_TOKEN_MIN = 15;
+const FLUX_T5_TOKEN_MAX = 512;
+function isInFluxT5TokenRange(tokens) {
+  return tokens >= FLUX_T5_TOKEN_MIN && tokens <= FLUX_T5_TOKEN_MAX;
+}
+function estimateClipTokens(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  let tokens = 0;
+  const parts = trimmed.split(/([\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)/);
+  for (const part of parts) {
+    if (!part) continue;
+    if (/^[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+$/.test(part)) {
+      tokens += Math.ceil(part.length / 1.5);
+    } else {
+      const words = part.match(/\S+/g);
+      if (words) tokens += words.length;
+    }
+  }
+  return tokens;
+}
+function countUniqueDetails(hits) {
+  let n = 0;
+  for (const cat of CAPTION_CATEGORIES) {
+    n += new Set(hits[cat.id] ?? []).size;
+  }
+  return n;
+}
+function scoreDetailRichness(avg) {
+  if (avg >= 5) return 100;
+  if (avg >= 4) return 85;
+  if (avg >= 3) return 70;
+  if (avg >= 2) return 50;
+  if (avg >= 1) return 30;
+  return 0;
+}
+function calculateLoraHealthScore(input) {
+  const { captions, classifications } = input;
+  const totalImages = captions.length;
+  const emptyBreakdown = (summary2) => ({
+    total: 0,
+    level: "red",
+    breakdown: [
+      {
+        id: "subject",
+        label: "Subject completeness",
+        weight: 0.25,
+        score: 0,
+        weightContribution: 0,
+        notes: "No images"
+      },
+      {
+        id: "diversity",
+        label: "Diversity & balance",
+        weight: 0.2,
+        score: 0,
+        weightContribution: 0,
+        notes: "No images"
+      },
+      {
+        id: "detail",
+        label: "Detail richness",
+        weight: 0.15,
+        score: 0,
+        weightContribution: 0,
+        notes: "No images"
+      },
+      {
+        id: "length",
+        label: "Length / token fit",
+        weight: 0.15,
+        score: 0,
+        weightContribution: 0,
+        notes: "No images"
+      },
+      {
+        id: "coverage",
+        label: "Category coverage",
+        weight: 0.15,
+        score: 0,
+        weightContribution: 0,
+        notes: "No images"
+      },
+      {
+        id: "penalty",
+        label: "Problem cases",
+        weight: 0.1,
+        score: 0,
+        weightContribution: 0,
+        notes: "No images"
+      }
+    ],
+    strengths: [],
+    improvements: ["Add images and captions to score the dataset."],
+    summary: summary2
+  });
+  if (totalImages === 0) {
+    return emptyBreakdown("No images to score.");
+  }
+  const nonEmptyIndexes = [];
+  const tokenCounts = [];
+  const captionKeys = /* @__PURE__ */ new Map();
+  for (let i = 0; i < totalImages; i++) {
+    const text = captions[i]?.trim() ?? "";
+    if (!text) continue;
+    nonEmptyIndexes.push(i);
+    tokenCounts.push(estimateClipTokens(text));
+    const key = text.toLowerCase();
+    captionKeys.set(key, (captionKeys.get(key) ?? 0) + 1);
+  }
+  const captionedCount = nonEmptyIndexes.length;
+  const emptyRatio = (totalImages - captionedCount) / totalImages;
+  if (captionedCount === 0) {
+    const penalty2 = clamp(emptyRatio * 40, 0, 100);
+    const total2 = clamp(0 - penalty2 * 0.1, 0, 100);
+    return {
+      total: Math.round(total2),
+      level: fitnessLevelForScore(Math.round(total2)),
+      breakdown: [
+        {
+          id: "subject",
+          label: "Subject completeness",
+          weight: 0.25,
+          score: 0,
+          weightContribution: 0,
+          notes: "All captions empty"
+        },
+        {
+          id: "diversity",
+          label: "Diversity & balance",
+          weight: 0.2,
+          score: 0,
+          weightContribution: 0,
+          notes: "All captions empty"
+        },
+        {
+          id: "detail",
+          label: "Detail richness",
+          weight: 0.15,
+          score: 0,
+          weightContribution: 0,
+          notes: "All captions empty"
+        },
+        {
+          id: "length",
+          label: "Length / token fit",
+          weight: 0.15,
+          score: 0,
+          weightContribution: 0,
+          notes: "All captions empty"
+        },
+        {
+          id: "coverage",
+          label: "Category coverage",
+          weight: 0.15,
+          score: 0,
+          weightContribution: 0,
+          notes: "All captions empty"
+        },
+        {
+          id: "penalty",
+          label: "Problem cases",
+          weight: 0.1,
+          score: Math.round(penalty2),
+          weightContribution: -Math.round(penalty2 * 0.1 * 10) / 10,
+          notes: `${Math.round(emptyRatio * 100)}% missing captions`
+        }
+      ],
+      strengths: [],
+      improvements: ["Write captions for every image before training."],
+      summary: "Dataset has no usable captions yet."
+    };
+  }
+  let subjectSum = 0;
+  let identityCount = 0;
+  let subjectAnyCount = 0;
+  for (const i of nonEmptyIndexes) {
+    const hits = classifications[i] ?? emptyClassification();
+    const subjectIds = [...new Set(hits.subject ?? [])];
+    let s = 0;
+    if (subjectIds.length > 0) {
+      s += 0.6;
+      subjectAnyCount += 1;
+    }
+    if (subjectIds.some((id) => IDENTITY_DETAILS.has(id))) {
+      s += 0.4;
+      identityCount += 1;
+    }
+    subjectSum += s;
+  }
+  const subjectScore = subjectSum / captionedCount * 100;
+  const subjectNotes = identityCount / captionedCount >= 0.8 ? `Identity terms on ${identityCount}/${captionedCount} captions` : `Subject tags ${subjectAnyCount}/${captionedCount}; identity ${identityCount}/${captionedCount}`;
+  const categoryDetailTotals = {
+    subject: /* @__PURE__ */ new Map(),
+    camera: /* @__PURE__ */ new Map(),
+    clothing: /* @__PURE__ */ new Map(),
+    pose: /* @__PURE__ */ new Map(),
+    expression: /* @__PURE__ */ new Map(),
+    scene: /* @__PURE__ */ new Map()
+  };
+  const categoryPresence = {
+    subject: 0,
+    camera: 0,
+    clothing: 0,
+    pose: 0,
+    expression: 0,
+    scene: 0
+  };
+  for (const i of nonEmptyIndexes) {
+    const hits = classifications[i] ?? emptyClassification();
+    for (const cat of CAPTION_CATEGORIES) {
+      const ids = [...new Set(hits[cat.id] ?? [])];
+      if (ids.length > 0) categoryPresence[cat.id] += 1;
+      for (const id of ids) {
+        const map = categoryDetailTotals[cat.id];
+        map.set(id, (map.get(id) ?? 0) + 1);
+      }
+    }
+  }
+  const diversityScores = [];
+  for (const cat of CAPTION_CATEGORIES) {
+    const map = categoryDetailTotals[cat.id];
+    const taxonomySize = Math.max(1, cat.details.length);
+    const unique = map.size;
+    let catScore = unique / taxonomySize * 100;
+    let hitTotal = 0;
+    let maxCount = 0;
+    for (const c of map.values()) {
+      hitTotal += c;
+      if (c > maxCount) maxCount = c;
+    }
+    const maxShare = hitTotal > 0 ? maxCount / hitTotal : 0;
+    if (maxShare > 0.7) catScore *= 0.6;
+    diversityScores.push(catScore);
+  }
+  const diversityScore = diversityScores.reduce((a, b) => a + b, 0) / diversityScores.length;
+  const diversityNotes = `Avg taxonomy fill ${Math.round(diversityScore)}%; concentrated labels penalized`;
+  let detailSum = 0;
+  for (const i of nonEmptyIndexes) {
+    detailSum += countUniqueDetails(classifications[i] ?? emptyClassification());
+  }
+  const avgDetails = detailSum / captionedCount;
+  const detailScore = scoreDetailRichness(avgDetails);
+  const detailNotes = `Avg ${avgDetails.toFixed(1)} unique details / caption`;
+  const outOfRange = tokenCounts.filter((t) => !isInFluxT5TokenRange(t)).length;
+  const inRangeRatio = (captionedCount - outOfRange) / captionedCount;
+  let lengthScore = 100 * inRangeRatio;
+  lengthScore *= 1 - emptyRatio * 0.5;
+  lengthScore = clamp(lengthScore, 0, 100);
+  const lengthNotes = `${outOfRange}/${captionedCount} outside Flux/Krea T5 fit (ideal ${FLUX_T5_TOKEN_MIN}–${FLUX_T5_TOKEN_MAX})`;
+  const coverageRates = CAPTION_CATEGORIES.map(
+    (cat) => categoryPresence[cat.id] / captionedCount
+  );
+  const coverageScore = coverageRates.reduce((a, b) => a + b, 0) / 6 * 100;
+  const weakCats = CAPTION_CATEGORIES.filter(
+    (_, idx) => coverageRates[idx] < 0.5
+  ).map((c) => c.label);
+  const coverageNotes = weakCats.length === 0 ? "All six categories appear in ≥50% of captions" : `Weak: ${weakCats.slice(0, 3).join(", ")}${weakCats.length > 3 ? "…" : ""}`;
+  const veryShortRatio = tokenCounts.filter((t) => t < 5).length / captionedCount;
+  let duplicateExtras = 0;
+  for (const count of captionKeys.values()) {
+    if (count > 1) duplicateExtras += count - 1;
+  }
+  const duplicateRatio = duplicateExtras / captionedCount;
+  const penalty = clamp(
+    emptyRatio * 40 + veryShortRatio * 30 + duplicateRatio * 30,
+    0,
+    100
+  );
+  const penaltyParts = [];
+  if (emptyRatio > 0) penaltyParts.push(`${Math.round(emptyRatio * 100)}% empty`);
+  if (veryShortRatio > 0) {
+    penaltyParts.push(`${Math.round(veryShortRatio * 100)}% very short`);
+  }
+  if (duplicateRatio > 0) {
+    penaltyParts.push(`${Math.round(duplicateRatio * 100)}% duplicates`);
+  }
+  const penaltyNotes = penaltyParts.length > 0 ? penaltyParts.join("; ") : "No major issues detected";
+  const subjectW = subjectScore * 0.25;
+  const diversityW = diversityScore * 0.2;
+  const detailW = detailScore * 0.15;
+  const lengthW = lengthScore * 0.15;
+  const coverageW = coverageScore * 0.15;
+  const penaltyW = penalty * 0.1;
+  const total = Math.round(
+    clamp(subjectW + diversityW + detailW + lengthW + coverageW - penaltyW, 0, 100)
+  );
+  const breakdown = [
+    {
+      id: "subject",
+      label: "Subject completeness",
+      weight: 0.25,
+      score: Math.round(subjectScore),
+      weightContribution: Math.round(subjectW * 10) / 10,
+      notes: subjectNotes
+    },
+    {
+      id: "diversity",
+      label: "Diversity & balance",
+      weight: 0.2,
+      score: Math.round(diversityScore),
+      weightContribution: Math.round(diversityW * 10) / 10,
+      notes: diversityNotes
+    },
+    {
+      id: "detail",
+      label: "Detail richness",
+      weight: 0.15,
+      score: Math.round(detailScore),
+      weightContribution: Math.round(detailW * 10) / 10,
+      notes: detailNotes
+    },
+    {
+      id: "length",
+      label: "Length / token fit",
+      weight: 0.15,
+      score: Math.round(lengthScore),
+      weightContribution: Math.round(lengthW * 10) / 10,
+      notes: lengthNotes
+    },
+    {
+      id: "coverage",
+      label: "Category coverage",
+      weight: 0.15,
+      score: Math.round(coverageScore),
+      weightContribution: Math.round(coverageW * 10) / 10,
+      notes: coverageNotes
+    },
+    {
+      id: "penalty",
+      label: "Problem cases",
+      weight: 0.1,
+      score: Math.round(penalty),
+      weightContribution: -Math.round(penaltyW * 10) / 10,
+      notes: penaltyNotes
+    }
+  ];
+  const strengths = [];
+  const improvements = [];
+  for (const item of breakdown) {
+    if (item.id === "penalty") {
+      if (item.score <= 10) strengths.push("Few dataset hygiene issues");
+      else if (item.score >= 30) {
+        improvements.push(`Fix issues: ${item.notes}`);
+      }
+      continue;
+    }
+    if (item.score >= 75) strengths.push(`${item.label} looks solid (${item.score})`);
+    else if (item.score < 55) {
+      improvements.push(`Improve ${item.label.toLowerCase()}: ${item.notes}`);
+    }
+  }
+  if (strengths.length === 0) {
+    strengths.push("Keep iterating captions as analysis completes");
+  }
+  if (improvements.length === 0) {
+    improvements.push("Dataset looks balanced — spot-check hard cases manually");
+  }
+  let summary;
+  if (total >= 70) {
+    summary = "Healthy for character LoRA training — minor polish only.";
+  } else if (total >= 40) {
+    summary = "Usable but uneven — prioritize the improvements below.";
+  } else {
+    summary = "Weak dataset health — fix missing/short captions and coverage first.";
+  }
+  return {
+    total,
+    level: fitnessLevelForScore(total),
+    breakdown,
+    strengths: strengths.slice(0, 4),
+    improvements: improvements.slice(0, 4),
+    summary
+  };
+}
+function buildCaptionAnalysisResult(captions, classifications) {
+  const base = aggregateCategoryDetails(captions, classifications);
+  const health = calculateLoraHealthScore({ captions, classifications });
+  return {
+    ...base,
+    fitnessScore: health.total,
+    fitnessLevel: health.level,
+    healthBreakdown: health.breakdown,
+    strengths: health.strengths,
+    improvements: health.improvements,
+    summary: health.summary
+  };
+}
+const IDLE_RESUME_MS = 800;
+function useCaptionAnalysis(images, settings, aiBusy, analysisEnabled) {
+  const [result, setResult] = reactExports.useState(null);
+  const [analyzing, setAnalyzing] = reactExports.useState(false);
+  const [progress, setProgress] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const cacheRef = reactExports.useRef(/* @__PURE__ */ new Map());
+  const queueRef = reactExports.useRef([]);
+  const abortRef = reactExports.useRef(null);
+  const runningRef = reactExports.useRef(false);
+  const syncGenRef = reactExports.useRef(0);
+  const resumeTimerRef = reactExports.useRef(null);
+  const imagesRef = reactExports.useRef(images);
+  const settingsRef = reactExports.useRef(settings);
+  const aiBusyRef = reactExports.useRef(aiBusy);
+  const analysisEnabledRef = reactExports.useRef(analysisEnabled);
+  imagesRef.current = images;
+  settingsRef.current = settings;
+  aiBusyRef.current = aiBusy;
+  analysisEnabledRef.current = analysisEnabled;
+  const imagePathsKey = reactExports.useMemo(
+    () => images.map((img) => img.path).join("\0"),
+    [images]
+  );
+  const clearResumeTimer = reactExports.useCallback(() => {
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+  }, []);
+  const rebuildResult = reactExports.useCallback(() => {
+    const imgs = imagesRef.current;
+    if (imgs.length === 0) {
+      setResult(null);
+      return;
+    }
+    const captions = [];
+    const classifications = [];
+    for (const img of imgs) {
+      const entry = cacheRef.current.get(img.path);
+      captions.push(entry?.captionText ?? "");
+      classifications.push(entry?.classification ?? emptyClassification());
+    }
+    setResult(buildCaptionAnalysisResult(captions, classifications));
+  }, []);
+  const enqueue = reactExports.useCallback((paths) => {
+    const q = queueRef.current;
+    for (const p of paths) {
+      if (!q.includes(p)) q.push(p);
+    }
+  }, []);
+  const updateProgress = reactExports.useCallback(() => {
+    const nonEmpty = imagesRef.current.map((img) => img.path).filter((p) => {
+      const e = cacheRef.current.get(p);
+      return Boolean(e?.captionText.trim());
+    });
+    const total = nonEmpty.length;
+    if (total === 0) {
+      setProgress(null);
+      return;
+    }
+    const done = nonEmpty.filter((p) => cacheRef.current.get(p)?.fresh).length;
+    setProgress({ done, total });
+  }, []);
+  const pump = reactExports.useCallback(async () => {
+    if (runningRef.current) return;
+    if (!analysisEnabledRef.current) return;
+    if (aiBusyRef.current) return;
+    runningRef.current = true;
+    try {
+      while (true) {
+        if (!analysisEnabledRef.current || aiBusyRef.current) {
+          setAnalyzing(false);
+          setProgress(null);
+          break;
+        }
+        if (!settingsRef.current.model.trim()) {
+          setAnalyzing(false);
+          setProgress(null);
+          if (imagesRef.current.length > 0) {
+            setError("Model is required in Settings before analyzing captions.");
+          }
+          break;
+        }
+        const pathSet = new Set(imagesRef.current.map((img) => img.path));
+        queueRef.current = queueRef.current.filter((p) => {
+          if (!pathSet.has(p)) return false;
+          const e = cacheRef.current.get(p);
+          return Boolean(e && !e.fresh && e.captionText.trim());
+        });
+        if (queueRef.current.length === 0) {
+          setAnalyzing(false);
+          setProgress(null);
+          break;
+        }
+        setAnalyzing(true);
+        setError(null);
+        updateProgress();
+        const path = queueRef.current.shift();
+        const entry = cacheRef.current.get(path);
+        if (!entry || entry.fresh || !entry.captionText.trim()) continue;
+        const abort = new AbortController();
+        abortRef.current = abort;
+        try {
+          const classification = await classifyCaption(
+            settingsRef.current,
+            entry.captionText,
+            abort.signal
+          );
+          const current = cacheRef.current.get(path);
+          if (current && current.captionText === entry.captionText) {
+            cacheRef.current.set(path, {
+              captionText: entry.captionText,
+              classification,
+              fresh: true
+            });
+            rebuildResult();
+            updateProgress();
+          }
+        } catch (err) {
+          if (abort.signal.aborted) {
+            const current = cacheRef.current.get(path);
+            if (current && !current.fresh && current.captionText.trim()) {
+              enqueue([path]);
+            }
+            break;
+          }
+          setError(err instanceof Error ? err.message : String(err));
+          setAnalyzing(false);
+          setProgress(null);
+          break;
+        } finally {
+          if (abortRef.current === abort) abortRef.current = null;
+        }
+      }
+    } finally {
+      runningRef.current = false;
+      if (analysisEnabledRef.current && !aiBusyRef.current && queueRef.current.length > 0 && settingsRef.current.model.trim()) {
+        void pump();
+      }
+    }
+  }, [enqueue, rebuildResult, updateProgress]);
+  const tryPumpSoon = reactExports.useCallback(() => {
+    if (!analysisEnabledRef.current || aiBusyRef.current) return;
+    void pump();
+  }, [pump]);
+  const schedulePumpAfterIdle = reactExports.useCallback(() => {
+    clearResumeTimer();
+    if (!analysisEnabledRef.current || aiBusyRef.current) return;
+    resumeTimerRef.current = setTimeout(() => {
+      resumeTimerRef.current = null;
+      if (analysisEnabledRef.current && !aiBusyRef.current) void pump();
+    }, IDLE_RESUME_MS);
+  }, [clearResumeTimer, pump]);
+  reactExports.useEffect(() => {
+    const paths = imagePathsKey ? imagePathsKey.split("\0") : [];
+    const pathSet = new Set(paths);
+    for (const key of [...cacheRef.current.keys()]) {
+      if (!pathSet.has(key)) cacheRef.current.delete(key);
+    }
+    queueRef.current = queueRef.current.filter((p) => pathSet.has(p));
+    if (paths.length === 0) {
+      clearResumeTimer();
+      abortRef.current?.abort("cancel");
+      abortRef.current = null;
+      setResult(null);
+      setAnalyzing(false);
+      setProgress(null);
+      setError(null);
+      return;
+    }
+    const gen = ++syncGenRef.current;
+    void (async () => {
+      const captions = await Promise.all(paths.map((p) => window.api.readCaption(p)));
+      if (gen !== syncGenRef.current) return;
+      const toQueue = [];
+      paths.forEach((path, i) => {
+        const text = captions[i];
+        const existing = cacheRef.current.get(path);
+        if (existing && existing.captionText === text && existing.fresh) {
+          return;
+        }
+        if (!text.trim()) {
+          cacheRef.current.set(path, {
+            captionText: text,
+            classification: emptyClassification(),
+            fresh: true
+          });
+          return;
+        }
+        if (existing && existing.captionText === text && !existing.fresh) {
+          toQueue.push(path);
+          return;
+        }
+        cacheRef.current.set(path, {
+          captionText: text,
+          classification: emptyClassification(),
+          fresh: false
+        });
+        toQueue.push(path);
+      });
+      rebuildResult();
+      enqueue(toQueue);
+      tryPumpSoon();
+    })();
+  }, [imagePathsKey, clearResumeTimer, enqueue, rebuildResult, tryPumpSoon]);
+  reactExports.useEffect(() => {
+    if (!analysisEnabled) {
+      clearResumeTimer();
+      abortRef.current?.abort("cancel");
+      setAnalyzing(false);
+      setProgress(null);
+      return;
+    }
+    tryPumpSoon();
+  }, [analysisEnabled, clearResumeTimer, tryPumpSoon]);
+  reactExports.useEffect(() => {
+    if (!analysisEnabled) return;
+    if (aiBusy) {
+      clearResumeTimer();
+      abortRef.current?.abort("cancel");
+      setAnalyzing(false);
+      setProgress(null);
+      return;
+    }
+    schedulePumpAfterIdle();
+    return () => clearResumeTimer();
+  }, [aiBusy, analysisEnabled, clearResumeTimer, schedulePumpAfterIdle]);
+  reactExports.useEffect(() => {
+    if (!analysisEnabled || !settings.model.trim() || aiBusy) return;
+    const stale = [];
+    for (const img of imagesRef.current) {
+      const e = cacheRef.current.get(img.path);
+      if (e && !e.fresh && e.captionText.trim()) stale.push(img.path);
+    }
+    enqueue(stale);
+    tryPumpSoon();
+  }, [settings.model, aiBusy, analysisEnabled, enqueue, tryPumpSoon]);
+  reactExports.useEffect(() => {
+    return () => clearResumeTimer();
+  }, [clearResumeTimer]);
+  const invalidate = reactExports.useCallback(
+    (imagePath, newCaption) => {
+      const existing = cacheRef.current.get(imagePath);
+      if (existing && existing.captionText === newCaption && existing.fresh) {
+        return;
+      }
+      if (!newCaption.trim()) {
+        cacheRef.current.set(imagePath, {
+          captionText: newCaption,
+          classification: emptyClassification(),
+          fresh: true
+        });
+        queueRef.current = queueRef.current.filter((p) => p !== imagePath);
+        rebuildResult();
+        return;
+      }
+      cacheRef.current.set(imagePath, {
+        captionText: newCaption,
+        classification: emptyClassification(),
+        fresh: false
+      });
+      rebuildResult();
+      enqueue([imagePath]);
+      tryPumpSoon();
+    },
+    [enqueue, rebuildResult, tryPumpSoon]
+  );
+  return { result, analyzing, progress, error, invalidate };
+}
 const CAPTION_TIMEOUT_MS = 3e5;
 async function fetchWithTimeout(url, init, userSignal, timeoutMs) {
   const ctrl = new AbortController();
@@ -14564,6 +14918,20 @@ ${pngInfo}`;
   }
   return captionWithOllama(settings, fullPrompt, base64, signal);
 }
+function folderLabel(dir) {
+  return dir.split(/[/\\]/).pop() ?? dir;
+}
+function getThumbnailColumns() {
+  const items = document.querySelectorAll(".image-list.thumbnails > li");
+  if (items.length === 0) return 1;
+  const firstTop = items[0].offsetTop;
+  let cols = 0;
+  for (const el of items) {
+    if (el.offsetTop !== firstTop) break;
+    cols++;
+  }
+  return Math.max(1, cols);
+}
 function App() {
   const [folder, setFolder] = reactExports.useState(null);
   const [images, setImages] = reactExports.useState([]);
@@ -14576,6 +14944,8 @@ function App() {
   const [analysisOpen, setAnalysisOpen] = reactExports.useState(false);
   const [unsavedOpen, setUnsavedOpen] = reactExports.useState(false);
   const [deleteOpen, setDeleteOpen] = reactExports.useState(false);
+  const [removeDatasetOpen, setRemoveDatasetOpen] = reactExports.useState(false);
+  const [datasetMenuOpen, setDatasetMenuOpen] = reactExports.useState(false);
   const [status, setStatus] = reactExports.useState("");
   const [batchCaptioning, setBatchCaptioning] = reactExports.useState(false);
   const [singleCaptioning, setSingleCaptioning] = reactExports.useState(false);
@@ -14583,11 +14953,13 @@ function App() {
   const unsavedResolver = reactExports.useRef(null);
   const captionAbortRef = reactExports.useRef(null);
   const batchCancelRef = reactExports.useRef(false);
+  const datasetMenuRef = reactExports.useRef(null);
   const settingsRef = reactExports.useRef(settings);
   settingsRef.current = settings;
   const selectedPathRef = reactExports.useRef(selectedPath);
   selectedPathRef.current = selectedPath;
   const dirty = english !== savedEnglish;
+  const captionBusy = batchCaptioning || singleCaptioning;
   const dirtyPaths = reactExports.useMemo(() => {
     const set = /* @__PURE__ */ new Set();
     if (selectedPath && dirty) set.add(selectedPath);
@@ -14619,12 +14991,22 @@ function App() {
     setTranslated,
     enabled: Boolean(selectedPath)
   });
+  const aiBusy = captionBusy || translating;
+  const analysisEnabled = settings.autoAnalysis || analysisOpen;
+  const {
+    result: analysisResult,
+    analyzing: analysisAnalyzing,
+    progress: analysisProgress,
+    error: analysisError,
+    invalidate: invalidateAnalysis
+  } = useCaptionAnalysis(images, settings, aiBusy, analysisEnabled);
   const applyCaptionToUi = reactExports.useCallback(
     async (imagePath, caption) => {
       await window.api.writeCaption(imagePath, caption);
       setImages(
         (prev) => prev.map((img) => img.path === imagePath ? { ...img, hasCaption: true } : img)
       );
+      invalidateAnalysis(imagePath, caption);
       if (selectedPathRef.current === imagePath) {
         setEnglish(caption);
         setSavedEnglish(caption);
@@ -14633,7 +15015,7 @@ function App() {
         if (caption.trim()) translateEnglishToTargetNow(caption);
       }
     },
-    [setEnglishSnapshot, translateEnglishToTargetNow]
+    [invalidateAnalysis, setEnglishSnapshot, translateEnglishToTargetNow]
   );
   const loadImage = reactExports.useCallback(
     async (imagePath) => {
@@ -14665,10 +15047,15 @@ function App() {
         if (list.length > 0) {
           await loadImage(list[0].path);
         }
-        setStatus(`${list.length} image(s)`);
+        setStatus("");
         if (persist) {
           setSettings((prev) => {
-            const next = normalizeSettings({ ...prev, lastFolder: dir });
+            const folders = prev.datasetFolders.includes(dir) ? prev.datasetFolders : [...prev.datasetFolders, dir];
+            const next = normalizeSettings({
+              ...prev,
+              lastFolder: dir,
+              datasetFolders: folders
+            });
             void window.api.setSettings(next);
             return next;
           });
@@ -14693,6 +15080,24 @@ function App() {
   reactExports.useEffect(() => {
     setEnglishSnapshot(english);
   }, [english, setEnglishSnapshot]);
+  reactExports.useEffect(() => {
+    if (!datasetMenuOpen) return;
+    const onPointerDown = (e) => {
+      const root2 = datasetMenuRef.current;
+      if (!root2) return;
+      if (e.target instanceof Node && root2.contains(e.target)) return;
+      setDatasetMenuOpen(false);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setDatasetMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [datasetMenuOpen]);
   const askUnsaved = reactExports.useCallback(() => {
     return new Promise((resolve) => {
       unsavedResolver.current = resolve;
@@ -14714,6 +15119,7 @@ function App() {
           (img) => img.path === selectedPath ? { ...img, hasCaption: true } : img
         )
       );
+      invalidateAnalysis(selectedPath, english);
       setStatus("Caption saved");
       window.setTimeout(() => setStatus(""), 2e3);
       return true;
@@ -14721,7 +15127,7 @@ function App() {
       setError(err instanceof Error ? err.message : String(err));
       return false;
     }
-  }, [selectedPath, english, setError]);
+  }, [selectedPath, english, invalidateAnalysis, setError]);
   const ensureCanLeave = reactExports.useCallback(async () => {
     if (!dirty) return true;
     const action = await askUnsaved();
@@ -14731,11 +15137,49 @@ function App() {
     }
     return true;
   }, [dirty, askUnsaved, saveCurrent]);
-  const openFolder = async () => {
+  const addDatasetFolder = async () => {
     if (!await ensureCanLeave()) return;
     const dir = await window.api.openFolder();
     if (!dir) return;
     await loadFolder(dir, true);
+  };
+  const switchDatasetFolder = async (dir) => {
+    setDatasetMenuOpen(false);
+    if (!dir || dir === folder) return;
+    if (!await ensureCanLeave()) return;
+    await loadFolder(dir, true);
+  };
+  const requestRemoveDatasetFolder = () => {
+    if (!folder) return;
+    setRemoveDatasetOpen(true);
+  };
+  const confirmRemoveDatasetFolder = async () => {
+    setRemoveDatasetOpen(false);
+    if (!folder) return;
+    if (!await ensureCanLeave()) return;
+    const removing = folder;
+    const remaining = settingsRef.current.datasetFolders.filter((f) => f !== removing);
+    const nextFolder = remaining[0] ?? null;
+    cancelInFlight();
+    setTranslated("");
+    setEnglish("");
+    setSavedEnglish("");
+    setSelectedPath(null);
+    setSettings((prev) => {
+      const next = normalizeSettings({
+        ...prev,
+        datasetFolders: remaining,
+        lastFolder: nextFolder
+      });
+      void window.api.setSettings(next);
+      return next;
+    });
+    if (nextFolder) {
+      await loadFolder(nextFolder, false);
+    } else {
+      setFolder(null);
+      setImages([]);
+    }
   };
   const selectImage = async (path) => {
     if (path === selectedPath) return;
@@ -14873,7 +15317,11 @@ function App() {
       const el = document.activeElement;
       if (!el) return false;
       const tag = el.tagName;
-      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return true;
+      if (tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (tag === "INPUT") {
+        const type = el.type;
+        return type !== "range";
+      }
       return el.getAttribute("contenteditable") === "true";
     };
     const onKeyDown = (e) => {
@@ -14884,7 +15332,7 @@ function App() {
       }
       if (isCaptionFocused()) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (deleteOpen || unsavedOpen || settingsOpen) return;
+      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen) return;
       if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
         e.preventDefault();
         return;
@@ -14897,17 +15345,31 @@ function App() {
       }
       const idx = selectedPath ? images.findIndex((img) => img.path === selectedPath) : -1;
       if (images.length === 0) return;
-      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-        e.preventDefault();
-        const next = idx < 0 ? 0 : Math.min(idx + 1, images.length - 1);
-        if (next !== idx) void selectImage(images[next].path);
+      if (e.key !== "ArrowDown" && e.key !== "ArrowRight" && e.key !== "ArrowUp" && e.key !== "ArrowLeft") {
         return;
       }
-      if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-        e.preventDefault();
-        const prev = idx < 0 ? 0 : Math.max(idx - 1, 0);
-        if (prev !== idx) void selectImage(images[prev].path);
+      e.preventDefault();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.classList.contains("list-toolbar-slider")) {
+        active.blur();
       }
+      if (idx < 0) {
+        void selectImage(images[0].path);
+        return;
+      }
+      let next = idx;
+      if (settingsRef.current.listViewMode === "thumbnails") {
+        const cols = getThumbnailColumns();
+        if (e.key === "ArrowLeft") next = Math.max(0, idx - 1);
+        else if (e.key === "ArrowRight") next = Math.min(images.length - 1, idx + 1);
+        else if (e.key === "ArrowUp") next = idx >= cols ? idx - cols : idx;
+        else if (e.key === "ArrowDown") next = idx + cols < images.length ? idx + cols : idx;
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        next = Math.min(idx + 1, images.length - 1);
+      } else {
+        next = Math.max(idx - 1, 0);
+      }
+      if (next !== idx) void selectImage(images[next].path);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -14918,15 +15380,35 @@ function App() {
     selectImage,
     deleteOpen,
     unsavedOpen,
-    settingsOpen
+    settingsOpen,
+    removeDatasetOpen
   ]);
   const imageUrl = selectedPath ? window.api.toLocalUrl(selectedPath) : null;
-  const captionBusy = batchCaptioning || singleCaptioning;
+  const toolbarStatus = status || (translating ? "Translating…" : analysisAnalyzing ? analysisProgress ? `Analyzing ${analysisProgress.done}/${analysisProgress.total}…` : "Analyzing…" : "");
   const persistPaneWidths = reactExports.useCallback((next) => {
     const normalized = normalizeSettings(next);
     setSettings(normalized);
     void window.api.setSettings(normalized);
   }, []);
+  const persistListView = reactExports.useCallback(
+    (patch) => {
+      const next = normalizeSettings({ ...settingsRef.current, ...patch });
+      setSettings(next);
+      void window.api.setSettings(next);
+    },
+    []
+  );
+  const setListViewMode = (mode) => {
+    if (settings.listViewMode === mode) return;
+    persistListView({ listViewMode: mode });
+  };
+  const onThumbnailWidthChange = (value) => {
+    const thumbnailWidth = clampThumbnailWidth(value);
+    setSettings((prev) => ({ ...prev, thumbnailWidth }));
+  };
+  const onThumbnailWidthCommit = (value) => {
+    persistListView({ thumbnailWidth: clampThumbnailWidth(value) });
+  };
   const startPaneResize = (which) => (e) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -14968,39 +15450,95 @@ function App() {
     target.addEventListener("pointercancel", onUp);
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "toolbar", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-left", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => void openFolder(), children: "Open folder" }),
-        batchCaptioning ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: stopBatchCaption, children: "Cancel Auto Caption" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: () => void startAutoCaption(),
-            disabled: !folder || missingCount === 0 || captionBusy,
-            title: missingCount === 0 ? "All images already have .txt captions" : `Caption ${missingCount} image(s) without .txt`,
-            children: [
-              "Auto Caption",
-              missingCount > 0 ? ` (${missingCount})` : ""
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setSettingsOpen(true), children: "Settings" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            disabled: !folder || images.length === 0,
-            onClick: () => setAnalysisOpen(true),
-            children: "Analyze"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-right", children: [
-        folder && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "folder-path", title: folder, children: folder }),
-        status && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "status-msg", children: status }),
-        dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "dirty-flag", children: "Unsaved" })
-      ] })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "header",
+      {
+        className: "toolbar",
+        onMouseDown: (e) => {
+          const target = e.target;
+          if (!(target instanceof Element)) return;
+          if (target.closest("button")) e.preventDefault();
+        },
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-left", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-dataset", ref: datasetMenuRef, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-dataset-trigger",
+                disabled: settings.datasetFolders.length === 0,
+                title: folder ?? "No dataset folder",
+                "aria-label": "Dataset folder",
+                "aria-haspopup": "listbox",
+                "aria-expanded": datasetMenuOpen,
+                onClick: () => setDatasetMenuOpen((open) => !open),
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "toolbar-dataset-label", children: folder ? folderLabel(folder) : "No dataset folder" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "10", height: "10", viewBox: "0 0 10 10", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fill: "currentColor", d: "M2 3.5h6L5 7.5 2 3.5z" }) })
+                ]
+              }
+            ),
+            datasetMenuOpen && settings.datasetFolders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "toolbar-dataset-menu", role: "listbox", "aria-label": "Dataset folders", children: settings.datasetFolders.map((dir) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { role: "presentation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                role: "option",
+                className: dir === folder ? "toolbar-dataset-option active" : "toolbar-dataset-option",
+                "aria-selected": dir === folder,
+                title: dir,
+                onClick: () => void switchDatasetFolder(dir),
+                children: folderLabel(dir)
+              }
+            ) }, dir)) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "primary toolbar-icon-btn",
+              title: "Add Dataset Folder",
+              "aria-label": "Add Dataset Folder",
+              onClick: () => void addDatasetFolder(),
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  fill: "currentColor",
+                  d: "M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                }
+              ) })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "toolbar-icon-btn danger",
+              disabled: !folder,
+              title: "Remove dataset folder",
+              "aria-label": "Remove dataset folder",
+              onClick: requestRemoveDatasetFolder,
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  fill: "currentColor",
+                  d: "M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                }
+              ) })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setSettingsOpen(true), children: "Settings" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: !folder || images.length === 0,
+              onClick: () => setAnalysisOpen(true),
+              children: "Analyze"
+            }
+          )
+        ] })
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
@@ -15010,15 +15548,93 @@ function App() {
           "--right-pane-width": `${settings.rightPaneWidth}px`
         },
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("aside", { className: "sidebar", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ImageList,
-            {
-              images,
-              selectedPath,
-              dirtyPaths,
-              onSelect: (path) => void selectImage(path)
-            }
-          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "sidebar", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-toolbar", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "list-toolbar-left", children: batchCaptioning ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: stopBatchCaption, children: "Cancel Auto Caption" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => void startAutoCaption(),
+                  disabled: !folder || missingCount === 0 || captionBusy,
+                  title: missingCount === 0 ? "All images already have .txt captions" : `Caption ${missingCount} image(s) without .txt`,
+                  children: [
+                    "Auto Caption",
+                    missingCount > 0 ? ` (${missingCount})` : ""
+                  ]
+                }
+              ) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-toolbar-right", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: `list-toolbar-btn${settings.listViewMode === "list" ? " active" : ""}`,
+                    "aria-pressed": settings.listViewMode === "list",
+                    title: "List view",
+                    onClick: () => setListViewMode("list"),
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "path",
+                      {
+                        fill: "currentColor",
+                        d: "M1 2.5h12v1.5H1V2.5zm0 4h12V8H1V6.5zm0 4h12V12H1v-1.5z"
+                      }
+                    ) })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: `list-toolbar-btn${settings.listViewMode === "thumbnails" ? " active" : ""}`,
+                    "aria-pressed": settings.listViewMode === "thumbnails",
+                    title: "Thumbnail view",
+                    onClick: () => setListViewMode("thumbnails"),
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "path",
+                      {
+                        fill: "currentColor",
+                        d: "M1 1h5v5H1V1zm7 0h5v5H8V1zM1 8h5v5H1V8zm7 0h5v5H8V8z"
+                      }
+                    ) })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "range",
+                    className: "list-toolbar-slider",
+                    min: 48,
+                    max: 160,
+                    step: 4,
+                    value: settings.thumbnailWidth,
+                    disabled: settings.listViewMode !== "thumbnails",
+                    title: "Thumbnail width",
+                    "aria-label": "Thumbnail width",
+                    onChange: (e) => onThumbnailWidthChange(Number(e.target.value)),
+                    onPointerUp: (e) => {
+                      onThumbnailWidthCommit(Number(e.currentTarget.value));
+                      e.currentTarget.blur();
+                    },
+                    onKeyUp: (e) => {
+                      onThumbnailWidthCommit(Number(e.currentTarget.value));
+                      e.currentTarget.blur();
+                    }
+                  }
+                )
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sidebar-list", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ImageList,
+              {
+                images,
+                selectedPath,
+                dirtyPaths,
+                viewMode: settings.listViewMode,
+                thumbnailWidth: settings.thumbnailWidth,
+                onSelect: (path) => void selectImage(path)
+              }
+            ) })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -15062,6 +15678,19 @@ function App() {
         ]
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "system-bar", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "system-bar-left", children: [
+        folder && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "folder-path", title: folder, children: folder }),
+        folder && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-count", children: [
+          images.length,
+          " image(s)"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "system-bar-right", children: [
+        toolbarStatus && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "status-msg", children: toolbarStatus }),
+        dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "dirty-flag", children: "Unsaved" })
+      ] })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsDialog,
       {
@@ -15076,8 +15705,11 @@ function App() {
       AnalysisDialog,
       {
         open: analysisOpen,
-        images,
-        settings,
+        imageCount: images.length,
+        analyzing: analysisAnalyzing,
+        progress: analysisProgress,
+        error: analysisError,
+        result: analysisResult,
         onClose: () => setAnalysisOpen(false)
       }
     ),
@@ -15097,6 +15729,15 @@ function App() {
         fileName: selectedFileName,
         onConfirm: () => void confirmDeleteSelected(),
         onCancel: () => setDeleteOpen(false)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      RemoveDatasetFolderDialog,
+      {
+        open: removeDatasetOpen,
+        folderName: folder ? folderLabel(folder) : "",
+        onConfirm: () => void confirmRemoveDatasetFolder(),
+        onCancel: () => setRemoveDatasetOpen(false)
       }
     )
   ] });

@@ -1,8 +1,8 @@
 {
-  "name": "nin-capto",
-  "version": "0.1.0",
-  "description": "NIN Capto — LoRA training image caption editor with AI translation",
-  "productName": "NIN Capto",
+  "name": "captioer",
+  "version": "0.1.1",
+  "description": "Captioer — LoRA training image caption editor with AI translation",
+  "productName": "Captioer",
   "author": "NIN",
   "main": "./out/main/index.js",
   "scripts": {
@@ -14,8 +14,8 @@
     "dist:dir": "npm run build && electron-builder --win --dir"
   },
   "build": {
-    "appId": "com.nin.capto",
-    "productName": "NIN Capto",
+    "appId": "com.nin.captioer",
+    "productName": "Captioer",
     "directories": {
       "output": "release"
     },

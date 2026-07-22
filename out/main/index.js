@@ -178,7 +178,7 @@ async function createWindow() {
     height: Math.max(600, saved.height),
     minWidth: 900,
     minHeight: 600,
-    title: "Captioer Ver0.1",
+    title: `${electron.app.getName()} Ver${electron.app.getVersion()}`,
     show: false,
     autoHideMenuBar: true,
     // Dev: build/icon.ico. Packaged Windows builds use the exe icon from electron-builder.
@@ -202,6 +202,9 @@ async function createWindow() {
   mainWindow = new electron.BrowserWindow(options);
   mainWindow.setMenuBarVisibility(false);
   electron.Menu.setApplicationMenu(null);
+  mainWindow.on("page-title-updated", (event) => {
+    event.preventDefault();
+  });
   mainWindow.once("ready-to-show", () => {
     if (!mainWindow) return;
     if (saved.isMaximized) mainWindow.maximize();
