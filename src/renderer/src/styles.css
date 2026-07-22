@@ -500,13 +500,58 @@ button.danger.kbd-focus {
   border-color: #3a5278;
 }
 
+.image-list-item.is-busy {
+  position: relative;
+  overflow: hidden;
+}
+
+.image-list-item.is-busy:not(.thumb)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 45%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  animation: analyze-marquee 1.1s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+.image-list-item.is-busy:not(.thumb) .image-list-meta {
+  position: relative;
+  z-index: 1;
+}
+
 .image-list-thumb {
+  position: relative;
   display: block;
   width: 100%;
   aspect-ratio: 1;
   border-radius: 4px;
   overflow: hidden;
   background: #0e1014;
+}
+
+.image-list-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #0e1014 55%, transparent);
+  pointer-events: none;
+}
+
+.image-list-thumb-spinner {
+  width: 2rem;
+  height: 2rem;
+  border-width: 3px;
 }
 
 .image-list-thumb img {

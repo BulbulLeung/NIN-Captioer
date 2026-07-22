@@ -56,6 +56,7 @@ export default function App() {
   const [status, setStatus] = useState('')
   const [batchCaptioning, setBatchCaptioning] = useState(false)
   const [singleCaptioning, setSingleCaptioning] = useState(false)
+  const [captioningPath, setCaptioningPath] = useState<string | null>(null)
   const [draggingPane, setDraggingPane] = useState<'sidebar' | 'right' | null>(null)
   const unsavedResolver = useRef<((action: ConfirmAction) => void) | null>(null)
   const captionAbortRef = useRef<AbortController | null>(null)
@@ -86,6 +87,7 @@ export default function App() {
 
   const {
     translating,
+    translatingPath,
     error,
     setError,
     cancelInFlight,
@@ -95,6 +97,7 @@ export default function App() {
     setEnglishSnapshot
   } = useBidirectionalTranslate({
     settings,
+    selectedPath,
     setEnglish: (value) => {
       setEnglish(value)
       setEnglishSnapshot(value)
@@ -102,6 +105,13 @@ export default function App() {
     setTranslated,
     enabled: Boolean(selectedPath)
   })
+
+  const busyPaths = useMemo(() => {
+    const s = new Set<string>()
+    if (captioningPath) s.add(captioningPath)
+    if (translating && translatingPath) s.add(translatingPath)
+    return s
+  }, [captioningPath, translating, translatingPath])
 
   const aiBusy = captionBusy || translating
   const analysisEnabled = settings.autoAnalysis || analysisOpen
@@ -125,7 +135,7 @@ export default function App() {
         setSavedEnglish(caption)
         setEnglishSnapshot(caption)
         setTranslated('')
-        if (caption.trim()) translateEnglishToTargetNow(caption)
+        if (caption.trim()) translateEnglishToTargetNow(caption, imagePath)
       }
     },
     [invalidateAnalysis, setEnglishSnapshot, translateEnglishToTargetNow]
@@ -135,6 +145,7 @@ export default function App() {
     async (imagePath: string) => {
       cancelInFlight()
       const caption = await window.api.readCaption(imagePath)
+      selectedPathRef.current = imagePath
       setSelectedPath(imagePath)
       setEnglish(caption)
       setSavedEnglish(caption)
@@ -142,7 +153,7 @@ export default function App() {
       setEnglishSnapshot(caption)
       setError(null)
       if (caption.trim()) {
-        translateEnglishToTargetNow(caption)
+        translateEnglishToTargetNow(caption, imagePath)
       }
     },
     [cancelInFlight, setEnglishSnapshot, setError, translateEnglishToTargetNow]
@@ -386,8 +397,13 @@ export default function App() {
     captionAbortRef.current?.abort()
     const ac = new AbortController()
     captionAbortRef.current = ac
-    const caption = await generateCaptionForImage(settingsRef.current, imagePath, ac.signal)
-    await applyCaptionToUi(imagePath, caption)
+    setCaptioningPath(imagePath)
+    try {
+      const caption = await generateCaptionForImage(settingsRef.current, imagePath, ac.signal)
+      await applyCaptionToUi(imagePath, caption)
+    } finally {
+      setCaptioningPath(null)
+    }
   }
 
   const startAutoCaption = async () => {
@@ -849,6 +865,7 @@ export default function App() {
               images={images}
               selectedPath={selectedPath}
               dirtyPaths={dirtyPaths}
+              busyPaths={busyPaths}
               viewMode={settings.listViewMode}
               thumbnailWidth={settings.thumbnailWidth}
               onSelect={(path) => void selectImage(path)}
@@ -881,8 +898,8 @@ export default function App() {
             english={english}
             translated={translated}
             targetLanguage={settings.targetLanguage}
-            translating={translating}
-            captioning={captionBusy}
+            translating={Boolean(translating && translatingPath === selectedPath)}
+            captioning={captioningPath !== null && captioningPath === selectedPath}
             canSave={Boolean(selectedPath) && dirty && !captionBusy}
             canRecaption={Boolean(selectedPath) && !captionBusy}
             onEnglishChange={onEnglishChange}

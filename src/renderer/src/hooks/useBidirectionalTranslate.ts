@@ -6,6 +6,7 @@ const DEBOUNCE_MS = 700
 
 interface Options {
   settings: AppSettings
+  selectedPath: string | null
   setEnglish: (value: string) => void
   setTranslated: (value: string) => void
   enabled: boolean
@@ -13,11 +14,13 @@ interface Options {
 
 export function useBidirectionalTranslate({
   settings,
+  selectedPath,
   setEnglish,
   setTranslated,
   enabled
 }: Options) {
   const [translating, setTranslating] = useState(false)
+  const [translatingPath, setTranslatingPath] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const requestId = useRef(0)
@@ -26,6 +29,8 @@ export function useBidirectionalTranslate({
   const abortRef = useRef<AbortController | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  const selectedPathRef = useRef(selectedPath)
+  selectedPathRef.current = selectedPath
 
   const clearTimers = useCallback(() => {
     if (enTimer.current) clearTimeout(enTimer.current)
@@ -40,16 +45,24 @@ export function useBidirectionalTranslate({
     abortRef.current = null
     requestId.current += 1
     setTranslating(false)
+    setTranslatingPath(null)
   }, [clearTimers])
 
   const runTranslate = useCallback(
-    async (text: string, direction: 'en-to-target' | 'target-to-en') => {
+    async (
+      text: string,
+      direction: 'en-to-target' | 'target-to-en',
+      imagePath?: string | null
+    ) => {
       // Do not gate on `enabled` — loadImage may translate before selectedPath re-renders.
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac
       const id = ++requestId.current
+      const pathForRequest =
+        imagePath !== undefined ? imagePath : selectedPathRef.current
       setTranslating(true)
+      setTranslatingPath(pathForRequest)
       setError(null)
       try {
         const result = await translateText(settingsRef.current, text, direction, ac.signal)
@@ -65,7 +78,10 @@ export function useBidirectionalTranslate({
         if (message === 'Translation cancelled') return
         setError(message)
       } finally {
-        if (id === requestId.current) setTranslating(false)
+        if (id === requestId.current) {
+          setTranslating(false)
+          setTranslatingPath(null)
+        }
       }
     },
     [setEnglish, setTranslated]
@@ -75,8 +91,9 @@ export function useBidirectionalTranslate({
     (text: string) => {
       if (!enabled) return
       if (enTimer.current) clearTimeout(enTimer.current)
+      const pathAtSchedule = selectedPathRef.current
       enTimer.current = setTimeout(() => {
-        void runTranslate(text, 'en-to-target')
+        void runTranslate(text, 'en-to-target', pathAtSchedule)
       }, DEBOUNCE_MS)
     },
     [enabled, runTranslate]
@@ -86,17 +103,18 @@ export function useBidirectionalTranslate({
     (text: string) => {
       if (!enabled) return
       if (trTimer.current) clearTimeout(trTimer.current)
+      const pathAtSchedule = selectedPathRef.current
       trTimer.current = setTimeout(() => {
-        void runTranslate(text, 'target-to-en')
+        void runTranslate(text, 'target-to-en', pathAtSchedule)
       }, DEBOUNCE_MS)
     },
     [enabled, runTranslate]
   )
 
   const translateEnglishToTargetNow = useCallback(
-    (text: string) => {
+    (text: string, imagePath?: string | null) => {
       clearTimers()
-      void runTranslate(text, 'en-to-target')
+      void runTranslate(text, 'en-to-target', imagePath)
     },
     [clearTimers, runTranslate]
   )
@@ -122,6 +140,7 @@ export function useBidirectionalTranslate({
 
   return {
     translating,
+    translatingPath,
     error,
     setError,
     cancelInFlight,
