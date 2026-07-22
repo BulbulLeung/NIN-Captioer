@@ -4,6 +4,7 @@ import { CaptionEditor } from './components/CaptionEditor'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
 import { ImageList } from './components/ImageList'
 import { ImagePreview } from './components/ImagePreview'
+import { MissingDatasetFolderDialog } from './components/MissingDatasetFolderDialog'
 import { RemoveDatasetFolderDialog } from './components/RemoveDatasetFolderDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { UnsavedDialog } from './components/UnsavedDialog'
@@ -49,6 +50,8 @@ export default function App() {
   const [unsavedOpen, setUnsavedOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [removeDatasetOpen, setRemoveDatasetOpen] = useState(false)
+  const [missingDatasetOpen, setMissingDatasetOpen] = useState(false)
+  const [missingDatasetPath, setMissingDatasetPath] = useState<string | null>(null)
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false)
   const [status, setStatus] = useState('')
   const [batchCaptioning, setBatchCaptioning] = useState(false)
@@ -271,7 +274,34 @@ export default function App() {
     setDatasetMenuOpen(false)
     if (!dir || dir === folder) return
     if (!(await ensureCanLeave())) return
-    await loadFolder(dir, true)
+    const ok = await loadFolder(dir, true)
+    if (!ok) {
+      setMissingDatasetPath(dir)
+      setMissingDatasetOpen(true)
+    }
+  }
+
+  const cancelMissingDatasetFolder = () => {
+    setMissingDatasetOpen(false)
+    setMissingDatasetPath(null)
+  }
+
+  const confirmDeleteMissingDatasetFolder = () => {
+    const removing = missingDatasetPath
+    setMissingDatasetOpen(false)
+    setMissingDatasetPath(null)
+    if (!removing) return
+
+    setSettings((prev) => {
+      const remaining = prev.datasetFolders.filter((f) => f !== removing)
+      const next = normalizeSettings({
+        ...prev,
+        datasetFolders: remaining,
+        lastFolder: prev.lastFolder === removing ? (remaining[0] ?? null) : prev.lastFolder
+      })
+      void window.api.setSettings(next)
+      return next
+    })
   }
 
   const requestRemoveDatasetFolder = () => {
@@ -482,7 +512,7 @@ export default function App() {
 
       if (isCaptionFocused()) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen) return
+      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen || missingDatasetOpen) return
 
       // Space/Enter would activate a previously focused control (e.g. list button).
       if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
@@ -544,7 +574,8 @@ export default function App() {
     deleteOpen,
     unsavedOpen,
     settingsOpen,
-    removeDatasetOpen
+    removeDatasetOpen,
+    missingDatasetOpen
   ])
 
   const imageUrl = selectedPath ? window.api.toLocalUrl(selectedPath) : null
@@ -911,6 +942,13 @@ export default function App() {
         folderName={folder ? folderLabel(folder) : ''}
         onConfirm={() => void confirmRemoveDatasetFolder()}
         onCancel={() => setRemoveDatasetOpen(false)}
+      />
+
+      <MissingDatasetFolderDialog
+        open={missingDatasetOpen}
+        folderName={missingDatasetPath ? folderLabel(missingDatasetPath) : ''}
+        onConfirm={confirmDeleteMissingDatasetFolder}
+        onCancel={cancelMissingDatasetFolder}
       />
     </div>
   )
