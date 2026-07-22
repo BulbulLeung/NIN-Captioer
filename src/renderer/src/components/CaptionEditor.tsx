@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { LANGUAGES } from '../types'
 
 interface Props {
@@ -6,13 +7,11 @@ interface Props {
   targetLanguage: string
   translating: boolean
   captioning: boolean
-  error: string | null
   canSave: boolean
   canRecaption: boolean
   onEnglishChange: (value: string) => void
   onTranslatedChange: (value: string) => void
   onLanguageChange: (code: string) => void
-  onDismissError: () => void
   onSave: () => void
   onRecaption: () => void
 }
@@ -23,29 +22,31 @@ export function CaptionEditor({
   targetLanguage,
   translating,
   captioning,
-  error,
   canSave,
   canRecaption,
   onEnglishChange,
   onTranslatedChange,
   onLanguageChange,
-  onDismissError,
   onSave,
   onRecaption
 }: Props) {
+  const englishRef = useRef<HTMLTextAreaElement>(null)
+  const translatedRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (captioning) englishRef.current?.blur()
+  }, [captioning])
+
+  useEffect(() => {
+    if (translating) translatedRef.current?.blur()
+  }, [translating])
+
   return (
     <div className="caption-editor">
       <div className="caption-panel">
         <div className="caption-header">
           <label htmlFor="caption-en">English Caption (saved to .txt)</label>
           <div className="caption-header-actions">
-            {(translating || captioning) && (
-              <span className="status translating">
-                {captioning
-                  ? 'Captioning…'
-                  : 'Translating (faster after model warmup)…'}
-              </span>
-            )}
             <button
               type="button"
               onClick={onRecaption}
@@ -63,14 +64,23 @@ export function CaptionEditor({
             </button>
           </div>
         </div>
-        <textarea
-          id="caption-en"
-          className="caption-textarea"
-          value={english}
-          onChange={(e) => onEnglishChange(e.target.value)}
-          placeholder="English caption…"
-          spellCheck={false}
-        />
+        <div className="caption-field" aria-busy={captioning}>
+          <textarea
+            ref={englishRef}
+            id="caption-en"
+            className="caption-textarea"
+            value={english}
+            onChange={(e) => onEnglishChange(e.target.value)}
+            placeholder="English caption…"
+            spellCheck={false}
+            disabled={captioning}
+          />
+          {captioning && (
+            <div className="caption-field-overlay" aria-hidden="true">
+              <div className="caption-spinner" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="caption-panel">
@@ -89,24 +99,24 @@ export function CaptionEditor({
             ))}
           </select>
         </div>
-        <textarea
-          id="caption-tr"
-          className="caption-textarea"
-          value={translated}
-          onChange={(e) => onTranslatedChange(e.target.value)}
-          placeholder="Edits here are translated back to English above…"
-          spellCheck={false}
-        />
-      </div>
-
-      {error && (
-        <div className="caption-error" role="alert">
-          <span>{error}</span>
-          <button type="button" onClick={onDismissError}>
-            Dismiss
-          </button>
+        <div className="caption-field" aria-busy={translating}>
+          <textarea
+            ref={translatedRef}
+            id="caption-tr"
+            className="caption-textarea"
+            value={translated}
+            onChange={(e) => onTranslatedChange(e.target.value)}
+            placeholder="Edits here are translated back to English above…"
+            spellCheck={false}
+            disabled={translating}
+          />
+          {translating && (
+            <div className="caption-field-overlay" aria-hidden="true">
+              <div className="caption-spinner" />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

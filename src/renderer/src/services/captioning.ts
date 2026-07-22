@@ -1,4 +1,5 @@
 import type { AppSettings } from '../types'
+import { formatLocalAiError } from './localAiError'
 
 const CAPTION_TIMEOUT_MS = 300_000
 
@@ -190,16 +191,21 @@ export async function generateCaptionForImage(
   const presetPrompt = activePresetPrompt(settings)
   if (!presetPrompt) throw new Error('No caption prompt preset selected')
 
-  const [{ positivePrompt }, { mimeType, base64 }] = await Promise.all([
-    window.api.readImageMeta(imagePath),
-    window.api.readImageBase64(imagePath)
-  ])
+  try {
+    const [{ positivePrompt }, { mimeType, base64 }] = await Promise.all([
+      window.api.readImageMeta(imagePath),
+      window.api.readImageBase64(imagePath)
+    ])
 
-  const pngInfo = positivePrompt.trim() || '(no PNG Info / positive prompt found in image metadata)'
-  const fullPrompt = `${presetPrompt}\n${pngInfo}`
+    const pngInfo =
+      positivePrompt.trim() || '(no PNG Info / positive prompt found in image metadata)'
+    const fullPrompt = `${presetPrompt}\n${pngInfo}`
 
-  if (settings.provider === 'lmstudio') {
-    return captionWithLmStudio(settings, fullPrompt, mimeType, base64, signal)
+    if (settings.provider === 'lmstudio') {
+      return await captionWithLmStudio(settings, fullPrompt, mimeType, base64, signal)
+    }
+    return await captionWithOllama(settings, fullPrompt, base64, signal)
+  } catch (err) {
+    throw new Error(formatLocalAiError(err, settings))
   }
-  return captionWithOllama(settings, fullPrompt, base64, signal)
 }

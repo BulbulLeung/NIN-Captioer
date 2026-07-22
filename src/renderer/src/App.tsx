@@ -446,7 +446,10 @@ export default function App() {
       window.setTimeout(() => setStatus(''), 2000)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      if (msg !== 'Caption cancelled') setError(msg)
+      if (msg !== 'Caption cancelled') {
+        setStatus('')
+        setError(msg)
+      }
     } finally {
       setSingleCaptioning(false)
       captionAbortRef.current = null
@@ -581,6 +584,7 @@ export default function App() {
   const imageUrl = selectedPath ? window.api.toLocalUrl(selectedPath) : null
   const toolbarStatus =
     status ||
+    error ||
     (translating
       ? 'Translating…'
       : analysisAnalyzing
@@ -588,6 +592,7 @@ export default function App() {
           ? `Analyzing ${analysisProgress.done}/${analysisProgress.total}…`
           : 'Analyzing…'
         : '')
+  const toolbarStatusIsError = Boolean(error && !status)
 
   const persistPaneWidths = useCallback((next: AppSettings) => {
     const normalized = normalizeSettings(next)
@@ -748,10 +753,11 @@ export default function App() {
           </button>
           <button
             type="button"
+            className={analysisAnalyzing ? 'analyze-btn is-analyzing' : 'analyze-btn'}
             disabled={!folder || images.length === 0}
             onClick={() => setAnalysisOpen(true)}
           >
-            Analyze
+            <span className="analyze-btn-label">Analyze</span>
           </button>
         </div>
       </header>
@@ -877,13 +883,11 @@ export default function App() {
             targetLanguage={settings.targetLanguage}
             translating={translating}
             captioning={captionBusy}
-            error={error}
             canSave={Boolean(selectedPath) && dirty && !captionBusy}
             canRecaption={Boolean(selectedPath) && !captionBusy}
             onEnglishChange={onEnglishChange}
             onTranslatedChange={onTranslatedChange}
             onLanguageChange={(code) => void onLanguageChange(code)}
-            onDismissError={() => setError(null)}
             onSave={() => void saveCurrent()}
             onRecaption={() => void reCaptionCurrent()}
           />
@@ -900,7 +904,11 @@ export default function App() {
           {folder && <span className="image-count">{images.length} image(s)</span>}
         </div>
         <div className="system-bar-right">
-          {toolbarStatus && <span className="status-msg">{toolbarStatus}</span>}
+          {toolbarStatus && (
+            <span className={`status-msg${toolbarStatusIsError ? ' is-error' : ''}`}>
+              {toolbarStatus}
+            </span>
+          )}
           {dirty && <span className="dirty-flag">Unsaved</span>}
         </div>
       </footer>

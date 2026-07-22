@@ -1,5 +1,6 @@
 import type { AppSettings } from '../types'
 import { LANGUAGES } from '../types'
+import { formatLocalAiError } from './localAiError'
 
 const TRANSLATE_TIMEOUT_MS = 120_000
 const CACHE_MAX = 80
@@ -206,27 +207,31 @@ export async function translateText(
   const sourceLang = direction === 'en-to-target' ? 'English' : targetName
   const targetLang = direction === 'en-to-target' ? targetName : 'English'
 
-  const result =
-    settings.provider === 'lmstudio'
-      ? await translateWithLmStudio(
-          settings.lmStudioBaseUrl,
-          settings.model,
-          trimmed,
-          sourceLang,
-          targetLang,
-          signal
-        )
-      : await translateWithOllama(
-          settings.ollamaBaseUrl,
-          settings.model,
-          trimmed,
-          sourceLang,
-          targetLang,
-          signal
-        )
+  try {
+    const result =
+      settings.provider === 'lmstudio'
+        ? await translateWithLmStudio(
+            settings.lmStudioBaseUrl,
+            settings.model,
+            trimmed,
+            sourceLang,
+            targetLang,
+            signal
+          )
+        : await translateWithOllama(
+            settings.ollamaBaseUrl,
+            settings.model,
+            trimmed,
+            sourceLang,
+            targetLang,
+            signal
+          )
 
-  cacheSet(key, result)
-  return result
+    cacheSet(key, result)
+    return result
+  } catch (err) {
+    throw new Error(formatLocalAiError(err, settings))
+  }
 }
 
 export async function listModels(settings: AppSettings): Promise<string[]> {

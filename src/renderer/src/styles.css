@@ -117,6 +117,45 @@ button.danger.kbd-focus {
   outline: none;
 }
 
+.analyze-btn {
+  position: relative;
+}
+
+.analyze-btn.is-analyzing {
+  overflow: hidden;
+}
+
+.analyze-btn-label {
+  position: relative;
+  z-index: 1;
+}
+
+.analyze-btn.is-analyzing::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 45%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  animation: analyze-marquee 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes analyze-marquee {
+  from {
+    transform: translateX(-30%);
+  }
+  to {
+    transform: translateX(160%);
+  }
+}
+
 .toolbar-dataset {
   position: relative;
   min-width: 0;
@@ -244,6 +283,10 @@ button.danger.kbd-focus {
 .status-msg {
   color: var(--ok);
   font-size: 0.8rem;
+}
+
+.status-msg.is-error {
+  color: var(--danger);
 }
 
 .dirty-flag {
@@ -589,17 +632,18 @@ button.danger.kbd-focus {
   flex-shrink: 0;
 }
 
-
-.status.translating {
-  font-size: 0.8rem;
-  color: var(--accent);
-}
-
 .lang-select {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.25rem 0.45rem;
+}
+
+.caption-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .caption-textarea {
@@ -621,17 +665,37 @@ button.danger.kbd-focus {
   border-color: var(--accent);
 }
 
-.caption-error {
+.caption-textarea:disabled {
+  background: var(--bg-input);
+  color: inherit;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.caption-field-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 6px;
-  border: 1px solid #6a3038;
-  background: #2a181c;
-  color: var(--danger);
-  font-size: 0.85rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-input) 72%, transparent);
+  pointer-events: auto;
+}
+
+.caption-spinner {
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: caption-spin 0.7s linear infinite;
+}
+
+@keyframes caption-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .modal-backdrop {
