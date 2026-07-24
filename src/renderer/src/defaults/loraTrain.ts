@@ -57,16 +57,23 @@ export interface LoraTrainModelConfig {
   low_vram: boolean
 }
 
+export interface LoraTrainSamplePrompt {
+  prompt: string
+  width: number
+  height: number
+  seed: number
+}
+
 export interface LoraTrainSampleConfig {
   sampler: string
   sample_every: number
   sample_start_step: number
+  /** Fallback size/seed for legacy migration and empty prompt lists */
   width: number
   height: number
-  prompts: string[]
+  prompts: LoraTrainSamplePrompt[]
   neg: string
   seed: number
-  walk_seed: boolean
   guidance_scale: number
   sample_steps: number
 }
@@ -115,6 +122,19 @@ export const DEFAULT_SAMPLE_PROMPTS: string[] = [
   "a man holding a sign that says, 'this is a sign'",
   'a bulldog, in a post apocalyptic world, with a shotgun, in a leather jacket, in a desert, with a motorcycle'
 ]
+
+const DEFAULT_SAMPLE_WIDTH = 1024
+const DEFAULT_SAMPLE_HEIGHT = 1024
+const DEFAULT_SAMPLE_SEED = 42
+
+function buildDefaultSamplePrompts(): LoraTrainSamplePrompt[] {
+  return DEFAULT_SAMPLE_PROMPTS.map((prompt, i) => ({
+    prompt,
+    width: DEFAULT_SAMPLE_WIDTH,
+    height: DEFAULT_SAMPLE_HEIGHT,
+    seed: DEFAULT_SAMPLE_SEED + i
+  }))
+}
 
 export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
   name: 'my_first_krea2_lora_v1',
@@ -172,12 +192,11 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     sampler: 'flowmatch',
     sample_every: 250,
     sample_start_step: 0,
-    width: 1024,
-    height: 1024,
-    prompts: [...DEFAULT_SAMPLE_PROMPTS],
+    width: DEFAULT_SAMPLE_WIDTH,
+    height: DEFAULT_SAMPLE_HEIGHT,
+    prompts: buildDefaultSamplePrompts(),
     neg: '',
-    seed: 42,
-    walk_seed: true,
+    seed: DEFAULT_SAMPLE_SEED,
     guidance_scale: 0,
     sample_steps: 8
   }
@@ -212,11 +231,6 @@ function asString(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
 }
 
-function asStringArray(value: unknown, fallback: string[]): string[] {
-  if (!Array.isArray(value)) return [...fallback]
-  return value.filter((v): v is string => typeof v === 'string')
-}
-
 function asNumberArray(value: unknown, fallback: number[]): number[] {
   if (!Array.isArray(value)) return [...fallback]
   const nums = value.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
@@ -238,6 +252,48 @@ function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraT
 
 function normalizeArch(value: unknown): LoraTrainArch {
   return value === 'krea2' || value === 'flux' ? 'krea2' : 'krea2'
+}
+
+function normalizeSamplePrompts(
+  raw: unknown,
+  defaults: {
+    width: number
+    height: number
+    seed: number
+    prompts: LoraTrainSamplePrompt[]
+  }
+): LoraTrainSamplePrompt[] {
+  if (!Array.isArray(raw)) {
+    return defaults.prompts.map((p) => ({ ...p }))
+  }
+  if (raw.length === 0) return []
+
+  return raw.map((item, i) => {
+    const seedFallback = defaults.seed + i
+    if (typeof item === 'string') {
+      return {
+        prompt: item,
+        width: defaults.width,
+        height: defaults.height,
+        seed: seedFallback
+      }
+    }
+    const o = asRecord(item)
+    if (!o) {
+      return {
+        prompt: '',
+        width: defaults.width,
+        height: defaults.height,
+        seed: seedFallback
+      }
+    }
+    return {
+      prompt: asString(o.prompt ?? o.text, ''),
+      width: asNumber(o.width, defaults.width),
+      height: asNumber(o.height, defaults.height),
+      seed: asNumber(o.seed, seedFallback)
+    }
+  })
 }
 
 export function normalizeLoraTrainJob(
@@ -323,10 +379,14 @@ export function normalizeLoraTrainJob(
       sample_start_step: asNumber(sample.sample_start_step, d.sample.sample_start_step),
       width: asNumber(sample.width, d.sample.width),
       height: asNumber(sample.height, d.sample.height),
-      prompts: asStringArray(sample.prompts, d.sample.prompts),
+      prompts: normalizeSamplePrompts(sample.prompts, {
+        width: asNumber(sample.width, d.sample.width),
+        height: asNumber(sample.height, d.sample.height),
+        seed: asNumber(sample.seed, d.sample.seed),
+        prompts: d.sample.prompts
+      }),
       neg: asString(sample.neg, d.sample.neg),
       seed: asNumber(sample.seed, d.sample.seed),
-      walk_seed: asBool(sample.walk_seed, d.sample.walk_seed),
       guidance_scale: asNumber(sample.guidance_scale, d.sample.guidance_scale),
       sample_steps: asNumber(sample.sample_steps, d.sample.sample_steps)
     }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { LoraTrainAppSettings } from '../types'
 import { DEFAULT_LORA_TRAIN_APP, normalizeLoraTrainApp } from '../types'
 import { GpuDeviceSelect } from './GpuDeviceSelect'
+import { PythonExecutableField } from './PythonExecutableField'
 
 interface Props {
   open: boolean
@@ -25,18 +26,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
   }, [open, settings])
 
   if (!open) return null
-
-  const browsePython = async () => {
-    const file = await window.api.openFile({
-      title: 'Select Python executable',
-      filters: [
-        { name: 'Python', extensions: ['exe'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    })
-    if (!file) return
-    setDraft((prev) => ({ ...prev, pythonPath: file }))
-  }
 
   const browseExportDir = async () => {
     const dir = await window.api.openFolder()
@@ -106,23 +95,17 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
           panel. Train on Raw, use LoRA on Turbo.
         </p>
 
-        <label className="field">
-          <span>Python executable</span>
-          <div className="model-row">
-            <input
-              type="text"
-              value={draft.pythonPath}
-              onChange={(e) => setDraft((prev) => ({ ...prev, pythonPath: e.target.value }))}
-              placeholder="e.g. C:\Python311\python.exe or python"
-            />
-            <button type="button" onClick={() => void browsePython()}>
-              Browse
-            </button>
-          </div>
-          <p className="field-hint">
-            CUDA-enabled Python with packages from <code>trainer/requirements.txt</code>.
-          </p>
-        </label>
+        <PythonExecutableField
+          value={draft.pythonPath}
+          onChange={(pythonPath) => setDraft((prev) => ({ ...prev, pythonPath }))}
+          hint={
+            <>
+              Same setting as Dataset Edit Settings. CUDA-enabled Python with packages from{' '}
+              <code>trainer/requirements.txt</code> (training) and{' '}
+              <code>trainer/requirements-wd14.txt</code> (WD14 tagging).
+            </>
+          }
+        />
 
         <div className="field">
           <div className="model-row">
@@ -135,16 +118,27 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
         </div>
 
         <label className="field">
-          <span>Hugging Face token (optional)</span>
+          <span>Hugging Face token (for gated Krea models)</span>
           <input
             type="password"
             value={draft.huggingfaceToken}
             onChange={(e) =>
               setDraft((prev) => ({ ...prev, huggingfaceToken: e.target.value }))
             }
-            placeholder="hf_… if models require auth"
+            placeholder="hf_… from huggingface.co/settings/tokens"
             autoComplete="off"
           />
+          <p className="field-hint">
+            Also open{' '}
+            <a
+              href="https://huggingface.co/krea/Krea-2-Raw"
+              target="_blank"
+              rel="noreferrer"
+            >
+              krea/Krea-2-Raw
+            </a>{' '}
+            (and Turbo) while logged in and click Agree — token alone is not enough.
+          </p>
         </label>
 
         <label className="field">

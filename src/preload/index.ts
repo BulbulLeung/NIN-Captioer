@@ -157,9 +157,16 @@ const api = {
     ipcRenderer.invoke('model:cancelDownload'),
   modelDownloadStatus: (): Promise<{ running: boolean }> =>
     ipcRenderer.invoke('model:downloadStatus'),
-  onModelDownloadProgress: (cb: (payload: { repoId: string; pct: number }) => void) => {
-    const listener = (_e: IpcRendererEvent, payload: { repoId: string; pct: number }) =>
-      cb(payload)
+  onModelDownloadProgress: (cb: (payload: {
+    repoId: string
+    pct: number
+    done?: number
+    total?: number
+  }) => void) => {
+    const listener = (
+      _e: IpcRendererEvent,
+      payload: { repoId: string; pct: number; done?: number; total?: number }
+    ) => cb(payload)
     ipcRenderer.on('model:downloadProgress', listener)
     return () => ipcRenderer.removeListener('model:downloadProgress', listener)
   },

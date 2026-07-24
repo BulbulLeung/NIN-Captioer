@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -58,31 +57,89 @@ def write_sidecar(directory: Path, repo_id: str, revision: str) -> None:
     )
 
 
-def dir_has_model_files(directory: Path) -> bool:
-    """True only for a usable snapshot (sidecar or diffusers model_index.json).
-
-    Partial / failed downloads often leave .cache crumbs; those must not count as ready.
-    """
-    if not directory.is_dir():
+def download_is_incomplete(directory: Path) -> bool:
+    """True if huggingface_hub left resume markers from an interrupted snapshot_download."""
+    cache_dl = directory / ".cache" / "huggingface" / "download"
+    if not cache_dl.is_dir():
         return False
-    if (directory / SIDECAR_NAME).is_file():
-        return True
-    if (directory / "model_index.json").is_file():
-        return True
     try:
-        for child in directory.rglob("model_index.json"):
-            if child.is_file():
+        for p in cache_dl.rglob("*"):
+            if not p.is_file():
+                continue
+            name = p.name
+            if name.endswith(".lock") or name.endswith(".incomplete"):
                 return True
     except OSError:
         return False
     return False
 
 
+def has_weight_files(directory: Path) -> bool:
+    """True if a non-trivial weight file exists outside .cache."""
+    try:
+        for p in directory.rglob("*"):
+            if not p.is_file():
+                continue
+            if ".cache" in p.parts:
+                continue
+            name = p.name.lower()
+            if name.endswith((".safetensors", ".bin", ".pt", ".ckpt")):
+                try:
+                    if p.stat().st_size > 1_000_000:
+                        return True
+                except OSError:
+                    continue
+    except OSError:
+        return False
+    return False
+
+
+def dir_has_model_files(directory: Path) -> bool:
+    """True only for a usable snapshot — not a partial interrupted download.
+
+    Our downloads write `.captioer_model.json` only after success. `model_index.json`
+    alone is not enough: HF often fetches it early while large weights are still
+    incomplete (leaving `.lock` / `.incomplete` under `.cache`).
+    """
+    if not directory.is_dir():
+        return False
+    if download_is_incomplete(directory):
+        return False
+    if (directory / SIDECAR_NAME).is_file():
+        return True
+    has_index = (directory / "model_index.json").is_file()
+    if not has_index:
+        try:
+            for child in directory.rglob("model_index.json"):
+                if child.is_file() and ".cache" not in child.parts:
+                    has_index = True
+                    break
+        except OSError:
+            return False
+    return bool(has_index and has_weight_files(directory))
+
+
 def format_hf_error(err: BaseException, repo_id: str = "") -> str:
     msg = str(err).replace("\n", " ").strip()
     low = msg.lower()
+    page = f"https://huggingface.co/{repo_id}" if repo_id else "the model page on Hugging Face"
+    # Token present but HF account has not agreed / been approved for this gated repo
+    if (
+        "not in the authorized list" in low
+        or ("access to model" in low and "restricted" in low)
+        or type(err).__name__ == "GatedRepoError"
+    ):
+        return (
+            f"Gated model access not granted for your Hugging Face account. "
+            f"Open {page} while logged in, click Agree / request access, "
+            f"then retry Download. Token is fine — the license gate is blocking files."
+        )
+    if "no hugging face token" in low:
+        return (
+            f"Hugging Face token required for gated model {repo_id or 'download'}. "
+            f"Set it in LoRA Train Settings, accept access at {page}, then retry."
+        )
     if any(k in low for k in ("gated", "403", "401", "cannot access gated", "unauthorized")):
-        page = f"https://huggingface.co/{repo_id}" if repo_id else "the model page on Hugging Face"
         return (
             f"Gated model — set Hugging Face token in LoRA Train Settings, "
             f"login/accept access at {page}, then retry. ({msg[:240]})"
@@ -133,7 +190,10 @@ def check_one(
             has_files = dir_has_model_files(local_path)
             if not has_files:
                 base["status"] = "missing"
-                base["message"] = "Not downloaded"
+                if local_path.is_dir() and download_is_incomplete(local_path):
+                    base["message"] = "Download incomplete — resume with Download"
+                else:
+                    base["message"] = "Not downloaded"
                 return base
             local_rev = (sidecar or {}).get("revision") if sidecar else None
             base["localRevision"] = local_rev
@@ -224,7 +284,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_download(args: argparse.Namespace) -> int:
-    from huggingface_hub import snapshot_download
+    from huggingface_hub import HfApi, snapshot_download
     from huggingface_hub.utils import tqdm as hf_tqdm
 
     repo_id = (args.repo_id or "").strip()
@@ -240,24 +300,98 @@ def cmd_download(args: argparse.Namespace) -> int:
     local_dir = local_dir_for(download_path, repo_id)
     local_dir.mkdir(parents=True, exist_ok=True)
 
-    last_pct = {"v": -1}
+    repo_total = 0
+    try:
+        info = HfApi(token=token).model_info(repo_id, token=token, files_metadata=True)
+        for sib in getattr(info, "siblings", None) or []:
+            size = getattr(sib, "size", None)
+            if isinstance(size, int) and size > 0:
+                repo_total += size
+    except Exception:
+        repo_total = 0
+
+    # Track multi-file snapshot progress across parallel byte bars.
+    # Non-TTY spawns create bars with disable=True (self.n never advances); files
+    # also download in parallel, so aggregate via active dict + nArg fallback.
+    prog_state: dict[str, Any] = {
+        "completed": 0,
+        "active": {},  # tqdm id -> bytes so far
+        "finished": set(),
+        "last_key": None,
+        "last_emit_at": 0.0,
+    }
+
+    def emit_progress(done: int, total: int, pct: int) -> None:
+        parts = [f"CAPTIOER_MODEL_PROGRESS repo={repo_id} pct={pct}"]
+        if done >= 0:
+            parts.append(f"done={done}")
+        if total > 0:
+            parts.append(f"total={total}")
+        print(" ".join(parts), flush=True)
 
     class ProgressTqdm(hf_tqdm):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[no-untyped-def]
+            # Non-TTY spawns set disable=True; disabled bars do not advance self.n.
+            kwargs["disable"] = False
+            super().__init__(*args, **kwargs)
+
         def update(self, n: float | int = 1) -> None | bool:  # type: ignore[override]
             result = super().update(n)
-            total = getattr(self, "total", None) or 0
-            n_done = getattr(self, "n", 0) or 0
-            if total and total > 0:
+            total = int(getattr(self, "total", None) or 0)
+            n_inc = int(n or 0)
+            n_done = int(getattr(self, "n", 0) or 0)
+            unit = getattr(self, "unit", None)
+            tid = id(self)
+
+            # Outer "Fetching N files" counter is not byte progress.
+            is_file_counter = unit == "it" or (
+                isinstance(getattr(self, "desc", None), str)
+                and str(self.desc).lower().startswith("fetching")
+            )
+            if is_file_counter:
+                return result
+
+            active: dict[int, int] = prog_state["active"]
+            finished: set[int] = prog_state["finished"]
+
+            # If disable still ate self.n, accumulate nArg manually.
+            if n_inc > 0 and n_done == 0:
+                n_done = int(active.get(tid, 0)) + n_inc
+            elif n_done == 0 and n_inc == 0:
+                n_done = int(active.get(tid, 0))
+
+            if tid in finished:
+                display_done = int(prog_state["completed"]) + sum(active.values())
+            elif total > 0 and n_done >= total:
+                active.pop(tid, None)
+                if tid not in finished:
+                    finished.add(tid)
+                    prog_state["completed"] = int(prog_state["completed"]) + total
+                display_done = int(prog_state["completed"]) + sum(active.values())
+            else:
+                active[tid] = n_done
+                display_done = int(prog_state["completed"]) + sum(active.values())
+
+            display_total = repo_total if repo_total > 0 else total
+            if display_total > 0:
+                pct = int(min(99, max(0, (100 * display_done) // display_total)))
+            elif total > 0:
                 pct = int(min(99, max(0, (100 * n_done) // total)))
-                if pct != last_pct["v"]:
-                    last_pct["v"] = pct
-                    print(
-                        f"CAPTIOER_MODEL_PROGRESS repo={repo_id} pct={pct}",
-                        flush=True,
-                    )
+            else:
+                pct = 0
+
+            key = (pct, display_done, display_total)
+            now = __import__("time").monotonic()
+            # Throttle emits: on pct/done change, or at least every 0.5s while moving.
+            if key != prog_state["last_key"] or (
+                display_done > 0 and now - float(prog_state["last_emit_at"]) >= 0.5
+            ):
+                prog_state["last_key"] = key
+                prog_state["last_emit_at"] = now
+                emit_progress(display_done, display_total, pct)
             return result
 
-    print(f"CAPTIOER_MODEL_PROGRESS repo={repo_id} pct=0", flush=True)
+    emit_progress(0, repo_total, 0)
     try:
         if not token:
             print(

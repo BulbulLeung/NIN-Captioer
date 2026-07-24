@@ -7,6 +7,7 @@ import {
   FALLBACK_WD14_MODEL_REPOS,
   listWd14ModelReposOrFallback
 } from '../services/wd14Models'
+import { PythonExecutableField } from './PythonExecutableField'
 
 interface Props {
   open: boolean
@@ -379,10 +380,18 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
 
         <div className="settings-section">
           <h3>WD14 Tagging</h3>
+          <PythonExecutableField
+            value={draft.loraTrainApp.pythonPath}
+            onChange={(pythonPath) =>
+              setDraft((prev) => ({
+                ...prev,
+                loraTrainApp: { ...prev.loraTrainApp, pythonPath }
+              }))
+            }
+          />
           <p className="field-hint">
             Used when Caption format is set to Danbooru Tags(SD/XL). Requires{' '}
-            <code>pip install -r trainer/requirements-wd14.txt</code>. Python path follows
-            LoRA Train settings.
+            <code>pip install -r trainer/requirements-wd14.txt</code> in the Python above.
           </p>
           <label className="field">
             <span>Model repo</span>

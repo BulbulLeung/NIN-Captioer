@@ -37,6 +37,26 @@ function resolveDownloadRepoId(st?: ModelStatusItem | null): string | null {
   return null
 }
 
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = n
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i += 1
+  }
+  const digits = i === 0 ? 0 : v >= 10 ? 1 : 2
+  return `${v.toFixed(digits)} ${units[i]}`
+}
+
+function downloadInputLabel(pct: number, done: number, total: number): string {
+  if (total > 0) {
+    return `Downloading … ${formatBytes(done)} / ${formatBytes(total)} ${pct}%`
+  }
+  return `Downloading … ${pct}%`
+}
+
 function folderLabel(dir: string): string {
   return dir.split(/[/\\]/).pop() ?? dir
 }
@@ -78,7 +98,7 @@ function Field({
   )
 }
 
-function CheckboxField({
+function ToggleField({
   label,
   checked,
   onChange,
@@ -92,18 +112,25 @@ function CheckboxField({
   disabled?: boolean
 }) {
   return (
-    <label className="field checkbox-field">
-      <span className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={checked}
+    <div className="field">
+      <div
+        className={`lora-toggle${checked ? ' is-on' : ''}${disabled ? ' is-disabled' : ''}`}
+      >
+        <button
+          type="button"
+          role="switch"
+          className="lora-switch"
+          aria-checked={checked}
+          aria-label={label}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.checked)}
-        />
-        {label}
-      </span>
+          onClick={() => onChange(!checked)}
+        >
+          <span className="lora-switch-knob" aria-hidden="true" />
+        </button>
+        <span className="lora-toggle-label">{label}</span>
+      </div>
       {hint ? <p className="field-hint">{hint}</p> : null}
-    </label>
+    </div>
   )
 }
 
@@ -128,7 +155,8 @@ export function LoraTrainView({
   const [modelCheckError, setModelCheckError] = useState<string | null>(null)
   const [dlCurrent, setDlCurrent] = useState<string | null>(null)
   const [dlPct, setDlPct] = useState(0)
-  const [dlQueue, setDlQueue] = useState<string[]>([])
+  const [dlDone, setDlDone] = useState(0)
+  const [dlTotal, setDlTotal] = useState(0)
   const skipPersist = useRef(true)
   const draftRef = useRef(draft)
   draftRef.current = draft
@@ -243,13 +271,15 @@ export function LoraTrainView({
     if (!next) {
       setDlCurrent(null)
       setDlPct(0)
-      setDlQueue([])
+      setDlDone(0)
+      setDlTotal(0)
       return
     }
     downloadingRef.current = true
     setDlCurrent(next)
     setDlPct(0)
-    setDlQueue([...dlQueueRef.current])
+    setDlDone(0)
+    setDlTotal(0)
     const settings = appSettingsRef.current
     const result = await window.api.downloadModel({
       pythonPath: settings.pythonPath.trim() || undefined,
@@ -260,8 +290,10 @@ export function LoraTrainView({
     if (!result.ok) {
       downloadingRef.current = false
       dlQueueRef.current = []
-      setDlQueue([])
       setDlCurrent(null)
+      setDlPct(0)
+      setDlDone(0)
+      setDlTotal(0)
       onStatus(result.error || 'Failed to start model download', true)
     }
   }, [onStatus])
@@ -273,7 +305,6 @@ export function LoraTrainView({
       for (const id of unique) {
         if (!dlQueueRef.current.includes(id)) dlQueueRef.current.push(id)
       }
-      setDlQueue([...dlQueueRef.current])
       void pumpDownloadQueue()
     },
     [pumpDownloadQueue]
@@ -290,19 +321,22 @@ export function LoraTrainView({
       setTraining(false)
       onStatus(message, true)
     })
-    const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct }) => {
+    const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
       setDlCurrent(repoId)
       setDlPct(pct)
+      if (typeof done === 'number') setDlDone(done)
+      if (typeof total === 'number') setDlTotal(total)
     })
     const offDlDone = window.api.onModelDownloadDone(({ repoId, path }) => {
       applyDownloadedPath(repoId, path)
       onStatus(`Model ready: ${repoId}`)
       dlQueueRef.current = dlQueueRef.current.filter((id) => id !== repoId)
-      setDlQueue([...dlQueueRef.current])
       downloadingRef.current = false
       if (dlQueueRef.current.length === 0) {
         setDlCurrent(null)
         setDlPct(0)
+        setDlDone(0)
+        setDlTotal(0)
         void refreshModelStatus()
       } else {
         void pumpDownloadQueue()
@@ -311,9 +345,10 @@ export function LoraTrainView({
     const offDlErr = window.api.onModelDownloadError(({ message }) => {
       downloadingRef.current = false
       dlQueueRef.current = []
-      setDlQueue([])
       setDlCurrent(null)
       setDlPct(0)
+      setDlDone(0)
+      setDlTotal(0)
       onStatus(message, true)
       void refreshModelStatus()
     })
@@ -385,8 +420,8 @@ export function LoraTrainView({
     (s) => s.status === 'updateAvailable' && Boolean(resolveDownloadRepoId(s))
   )
   const isDownloading = Boolean(dlCurrent)
-  // Top banner only for in-progress download / check errors (Download lives next to Missing label)
-  const showBanner = Boolean(isDownloading || modelCheckError)
+  // Top banner only for model check errors (download progress lives in the model row)
+  const showBanner = Boolean(modelCheckError)
 
   const downloadForRole = (role: string) => {
     const st = statusForRole(role)
@@ -407,11 +442,61 @@ export function LoraTrainView({
     await window.api.cancelModelDownload()
     downloadingRef.current = false
     dlQueueRef.current = []
-    setDlQueue([])
     setDlCurrent(null)
     setDlPct(0)
+    setDlDone(0)
+    setDlTotal(0)
     onStatus('Model download cancelled')
     void refreshModelStatus()
+  }
+
+  const isRoleDownloading = (role: string): boolean => {
+    const repo = resolveDownloadRepoId(statusForRole(role))
+    return Boolean(dlCurrent && repo && dlCurrent === repo)
+  }
+
+  const renderModelDlButton = (role: 'train' | 'sample') => {
+    const st = statusForRole(role)
+    const repo = resolveDownloadRepoId(st)
+    const downloading = isRoleDownloading(role)
+    if (downloading) {
+      return (
+        <button
+          type="button"
+          className="danger lora-dl-btn"
+          disabled={training}
+          onClick={() => void cancelDownload()}
+        >
+          Cancel
+        </button>
+      )
+    }
+    if (!repo) return null
+    if (st?.status === 'missing') {
+      return (
+        <button
+          type="button"
+          className="primary lora-dl-btn"
+          disabled={training || isDownloading}
+          onClick={() => downloadForRole(role)}
+        >
+          Download
+        </button>
+      )
+    }
+    if (st?.status === 'updateAvailable') {
+      return (
+        <button
+          type="button"
+          className="primary lora-dl-btn"
+          disabled={training || isDownloading}
+          onClick={() => downloadForRole(role)}
+        >
+          Update
+        </button>
+      )
+    }
+    return null
   }
 
   const browseTrainingFolder = async () => {
@@ -493,29 +578,12 @@ export function LoraTrainView({
     <div className="lora-train">
       {(showBanner) && (
         <div className="lora-model-banner" role="status">
-          {isDownloading ? (
-            <>
-              <p>
-                Downloading <code>{dlCurrent}</code>
-                {dlQueue.length > 1 ? ` (+${dlQueue.length - 1} queued)` : ''}
-                {` · ${dlPct}%`}
-              </p>
-              <div className="lora-model-banner-actions">
-                <button type="button" className="danger" onClick={() => void cancelDownload()}>
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p>Model check failed: {modelCheckError}</p>
-              <div className="lora-model-banner-actions">
-                <button type="button" onClick={() => void refreshModelStatus()} disabled={modelChecking}>
-                  {modelChecking ? 'Checking…' : 'Retry'}
-                </button>
-              </div>
-            </>
-          )}
+          <p>Model check failed: {modelCheckError}</p>
+          <div className="lora-model-banner-actions">
+            <button type="button" onClick={() => void refreshModelStatus()} disabled={modelChecking}>
+              {modelChecking ? 'Checking…' : 'Retry'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -634,8 +702,13 @@ export function LoraTrainView({
                 <div className="model-row">
                   <input
                     type="text"
-                    value={draft.model.train_name_or_path}
-                    disabled={training}
+                    value={
+                      isRoleDownloading('train')
+                        ? downloadInputLabel(dlPct, dlDone, dlTotal)
+                        : draft.model.train_name_or_path
+                    }
+                    disabled={training || isRoleDownloading('train')}
+                    readOnly={isRoleDownloading('train')}
                     onChange={(e) =>
                       patch((p) => ({
                         ...p,
@@ -650,7 +723,7 @@ export function LoraTrainView({
                   />
                   <button
                     type="button"
-                    disabled={training}
+                    disabled={training || isRoleDownloading('train')}
                     onClick={() =>
                       patch((p) => ({
                         ...p,
@@ -671,34 +744,7 @@ export function LoraTrainView({
                   >
                     {statusLabel(statusForRole('train')?.status)}
                   </span>
-                  {statusForRole('train')?.status === 'missing' &&
-                  resolveDownloadRepoId(statusForRole('train')) ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      disabled={training || isDownloading}
-                      onClick={() => downloadForRole('train')}
-                    >
-                      {dlCurrent &&
-                      dlCurrent === resolveDownloadRepoId(statusForRole('train'))
-                        ? `${dlPct}%`
-                        : 'Download'}
-                    </button>
-                  ) : null}
-                  {statusForRole('train')?.status === 'updateAvailable' &&
-                  resolveDownloadRepoId(statusForRole('train')) ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      disabled={training || isDownloading}
-                      onClick={() => downloadForRole('train')}
-                    >
-                      {dlCurrent &&
-                      dlCurrent === resolveDownloadRepoId(statusForRole('train'))
-                        ? `${dlPct}%`
-                        : 'Update'}
-                    </button>
-                  ) : null}
+                  {renderModelDlButton('train')}
                 </div>
               </Field>
               <Field
@@ -708,8 +754,13 @@ export function LoraTrainView({
                 <div className="model-row">
                   <input
                     type="text"
-                    value={draft.model.sample_name_or_path}
-                    disabled={training}
+                    value={
+                      isRoleDownloading('sample')
+                        ? downloadInputLabel(dlPct, dlDone, dlTotal)
+                        : draft.model.sample_name_or_path
+                    }
+                    disabled={training || isRoleDownloading('sample')}
+                    readOnly={isRoleDownloading('sample')}
                     onChange={(e) =>
                       patch((p) => ({
                         ...p,
@@ -719,7 +770,7 @@ export function LoraTrainView({
                   />
                   <button
                     type="button"
-                    disabled={training}
+                    disabled={training || isRoleDownloading('sample')}
                     onClick={() =>
                       patch((p) => ({
                         ...p,
@@ -735,34 +786,7 @@ export function LoraTrainView({
                   >
                     {statusLabel(statusForRole('sample')?.status)}
                   </span>
-                  {statusForRole('sample')?.status === 'missing' &&
-                  resolveDownloadRepoId(statusForRole('sample')) ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      disabled={training || isDownloading}
-                      onClick={() => downloadForRole('sample')}
-                    >
-                      {dlCurrent &&
-                      dlCurrent === resolveDownloadRepoId(statusForRole('sample'))
-                        ? `${dlPct}%`
-                        : 'Download'}
-                    </button>
-                  ) : null}
-                  {statusForRole('sample')?.status === 'updateAvailable' &&
-                  resolveDownloadRepoId(statusForRole('sample')) ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      disabled={training || isDownloading}
-                      onClick={() => downloadForRole('sample')}
-                    >
-                      {dlCurrent &&
-                      dlCurrent === resolveDownloadRepoId(statusForRole('sample'))
-                        ? `${dlPct}%`
-                        : 'Update'}
-                    </button>
-                  ) : null}
+                  {renderModelDlButton('sample')}
                 </div>
               </Field>
             </div>
@@ -817,7 +841,7 @@ export function LoraTrainView({
                     return (
                       <div
                         key={size}
-                        className={`lora-resolution-toggle${on ? ' is-on' : ''}${
+                        className={`lora-toggle lora-resolution-toggle${on ? ' is-on' : ''}${
                           training ? ' is-disabled' : ''
                         }`}
                       >
@@ -877,7 +901,7 @@ export function LoraTrainView({
                   }
                 />
               </Field>
-              <CheckboxField
+              <ToggleField
                 label="Shuffle caption tokens"
                 checked={ds0.shuffle_tokens}
                 disabled={training}
@@ -890,7 +914,7 @@ export function LoraTrainView({
                   }))
                 }
               />
-              <CheckboxField
+              <ToggleField
                 label="Cache latents to disk"
                 checked={ds0.cache_latents_to_disk}
                 disabled={training}
@@ -1017,7 +1041,7 @@ export function LoraTrainView({
                   <option value="euler">euler</option>
                 </select>
               </Field>
-              <CheckboxField
+              <ToggleField
                 label="Gradient checkpointing"
                 hint="Uses less VRAM; slightly slower"
                 checked={draft.train.gradient_checkpointing}
@@ -1087,29 +1111,31 @@ export function LoraTrainView({
           {activeSection === 'sample' && (
             <>
               <div className="lora-grid">
-                <CheckboxField
-                  label="Enable sampling during training"
-                  hint="Off by default (faster). Samples use Apply-on (Turbo) when supported."
-                  checked={!draft.train.disable_sampling}
-                  disabled={training}
-                  onChange={(v) =>
-                    patch((p) => ({
-                      ...p,
-                      train: { ...p.train, disable_sampling: !v }
-                    }))
-                  }
-                />
-                <CheckboxField
-                  label="Skip first sample"
-                  checked={draft.train.skip_first_sample}
-                  disabled={training || draft.train.disable_sampling}
-                  onChange={(v) =>
-                    patch((p) => ({
-                      ...p,
-                      train: { ...p.train, skip_first_sample: v }
-                    }))
-                  }
-                />
+                <div className="lora-field-row">
+                  <ToggleField
+                    label="Enable sampling during training"
+                    hint="Off by default (faster). Samples use Apply-on (Turbo) when supported."
+                    checked={!draft.train.disable_sampling}
+                    disabled={training}
+                    onChange={(v) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, disable_sampling: !v }
+                      }))
+                    }
+                  />
+                  <ToggleField
+                    label="Skip first sample"
+                    checked={draft.train.skip_first_sample}
+                    disabled={training || draft.train.disable_sampling}
+                    onChange={(v) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, skip_first_sample: v }
+                      }))
+                    }
+                  />
+                </div>
                 <Field label="Sample every N steps">
                   <input
                     type="number"
@@ -1123,36 +1149,6 @@ export function LoraTrainView({
                           ...p.sample,
                           sample_every: Number(e.target.value) || 1
                         }
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Width">
-                  <input
-                    type="number"
-                    min={64}
-                    step={64}
-                    value={draft.sample.width}
-                    disabled={training || draft.train.disable_sampling}
-                    onChange={(e) =>
-                      patch((p) => ({
-                        ...p,
-                        sample: { ...p.sample, width: Number(e.target.value) || 64 }
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Height">
-                  <input
-                    type="number"
-                    min={64}
-                    step={64}
-                    value={draft.sample.height}
-                    disabled={training || draft.train.disable_sampling}
-                    onChange={(e) =>
-                      patch((p) => ({
-                        ...p,
-                        sample: { ...p.sample, height: Number(e.target.value) || 64 }
                       }))
                     }
                   />
@@ -1191,48 +1187,155 @@ export function LoraTrainView({
                     }
                   />
                 </Field>
-                <Field label="Seed">
-                  <input
-                    type="number"
-                    value={draft.sample.seed}
-                    disabled={training || draft.train.disable_sampling}
-                    onChange={(e) =>
-                      patch((p) => ({
-                        ...p,
-                        sample: { ...p.sample, seed: Number(e.target.value) || 0 }
-                      }))
-                    }
-                  />
-                </Field>
-                <CheckboxField
-                  label="Walk seed"
-                  checked={draft.sample.walk_seed}
-                  disabled={training || draft.train.disable_sampling}
-                  onChange={(v) =>
-                    patch((p) => ({
-                      ...p,
-                      sample: { ...p.sample, walk_seed: v }
-                    }))
-                  }
-                />
               </div>
-              <Field label="Sample prompts" hint="One prompt per line">
-                <textarea
-                  className="prompt-textarea lora-prompts"
-                  value={draft.sample.prompts.join('\n')}
-                  disabled={training || draft.train.disable_sampling}
-                  onChange={(e) =>
-                    patch((p) => ({
-                      ...p,
-                      sample: {
-                        ...p.sample,
-                        prompts: e.target.value.split('\n')
-                      }
-                    }))
-                  }
-                  spellCheck={false}
-                />
-              </Field>
+
+              <div className="lora-prompt-groups">
+                <div className="lora-prompt-groups-header">
+                  <span>Sample prompts</span>
+                  <p className="field-hint">
+                    Each group has its own prompt, size, and seed
+                  </p>
+                </div>
+                {draft.sample.prompts.map((item, index) => (
+                  <div key={index} className="lora-prompt-group">
+                    <label className="field">
+                      <span>Prompt {index + 1}</span>
+                      <input
+                        type="text"
+                        value={item.prompt}
+                        disabled={training || draft.train.disable_sampling}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          patch((p) => ({
+                            ...p,
+                            sample: {
+                              ...p.sample,
+                              prompts: p.sample.prompts.map((pr, i) =>
+                                i === index ? { ...pr, prompt: value } : pr
+                              )
+                            }
+                          }))
+                        }}
+                        spellCheck={false}
+                      />
+                    </label>
+                    <div className="lora-prompt-meta">
+                      <label className="field">
+                        <span>Width</span>
+                        <input
+                          type="number"
+                          min={64}
+                          step={64}
+                          value={item.width}
+                          disabled={training || draft.train.disable_sampling}
+                          onChange={(e) => {
+                            const value = Number(e.target.value) || 64
+                            patch((p) => ({
+                              ...p,
+                              sample: {
+                                ...p.sample,
+                                prompts: p.sample.prompts.map((pr, i) =>
+                                  i === index ? { ...pr, width: value } : pr
+                                )
+                              }
+                            }))
+                          }}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Height</span>
+                        <input
+                          type="number"
+                          min={64}
+                          step={64}
+                          value={item.height}
+                          disabled={training || draft.train.disable_sampling}
+                          onChange={(e) => {
+                            const value = Number(e.target.value) || 64
+                            patch((p) => ({
+                              ...p,
+                              sample: {
+                                ...p.sample,
+                                prompts: p.sample.prompts.map((pr, i) =>
+                                  i === index ? { ...pr, height: value } : pr
+                                )
+                              }
+                            }))
+                          }}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Seed</span>
+                        <input
+                          type="number"
+                          value={item.seed}
+                          disabled={training || draft.train.disable_sampling}
+                          onChange={(e) => {
+                            const value = Number(e.target.value) || 0
+                            patch((p) => ({
+                              ...p,
+                              sample: {
+                                ...p.sample,
+                                prompts: p.sample.prompts.map((pr, i) =>
+                                  i === index ? { ...pr, seed: value } : pr
+                                )
+                              }
+                            }))
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="lora-prompt-remove"
+                        aria-label={`Delete prompt ${index + 1}`}
+                        title="Delete group"
+                        disabled={training || draft.train.disable_sampling}
+                        onClick={() =>
+                          patch((p) => ({
+                            ...p,
+                            sample: {
+                              ...p.sample,
+                              prompts: p.sample.prompts.filter((_, i) => i !== index)
+                            }
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="lora-prompt-add">
+                  <button
+                    type="button"
+                    aria-label="Add prompt group"
+                    title="Add prompt group"
+                    disabled={training || draft.train.disable_sampling}
+                    onClick={() =>
+                      patch((p) => {
+                        const last = p.sample.prompts[p.sample.prompts.length - 1]
+                        return {
+                          ...p,
+                          sample: {
+                            ...p.sample,
+                            prompts: [
+                              ...p.sample.prompts,
+                              {
+                                prompt: '',
+                                width: last?.width ?? p.sample.width,
+                                height: last?.height ?? p.sample.height,
+                                seed: (last?.seed ?? p.sample.seed) + 1
+                              }
+                            ]
+                          }
+                        }
+                      })
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </>
           )}
 
@@ -1285,7 +1388,7 @@ export function LoraTrainView({
                   <option value="float32">float32</option>
                 </select>
               </Field>
-              <CheckboxField
+              <ToggleField
                 label="Push to Hugging Face Hub"
                 checked={draft.save.push_to_hub}
                 disabled={training}
@@ -1293,7 +1396,7 @@ export function LoraTrainView({
                   patch((p) => ({ ...p, save: { ...p.save, push_to_hub: v } }))
                 }
               />
-              <CheckboxField
+              <ToggleField
                 label="Use EMA"
                 checked={draft.train.ema_config.use_ema}
                 disabled={training}
@@ -1329,7 +1432,7 @@ export function LoraTrainView({
                   }
                 />
               </Field>
-              <CheckboxField
+              <ToggleField
                 label="Train transformer / UNet"
                 checked={draft.train.train_unet}
                 disabled={training}
@@ -1337,7 +1440,7 @@ export function LoraTrainView({
                   patch((p) => ({ ...p, train: { ...p.train, train_unet: v } }))
                 }
               />
-              <CheckboxField
+              <ToggleField
                 label="Train text encoder"
                 hint="Usually off for Krea 2"
                 checked={draft.train.train_text_encoder}
@@ -1349,7 +1452,7 @@ export function LoraTrainView({
                   }))
                 }
               />
-              <CheckboxField
+              <ToggleField
                 label="Quantize"
                 checked={draft.model.quantize}
                 disabled={training}
@@ -1357,7 +1460,7 @@ export function LoraTrainView({
                   patch((p) => ({ ...p, model: { ...p.model, quantize: v } }))
                 }
               />
-              <CheckboxField
+              <ToggleField
                 label="Low VRAM mode"
                 checked={draft.model.low_vram}
                 disabled={training}

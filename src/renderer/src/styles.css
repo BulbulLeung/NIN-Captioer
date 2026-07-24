@@ -1329,6 +1329,14 @@ button.danger.kbd-focus {
   min-width: 0;
 }
 
+.lora-dl-btn {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  min-width: 5.75rem;
+  width: 5.75rem;
+  text-align: center;
+}
+
 .model-row select {
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -1776,8 +1784,79 @@ button.danger.kbd-focus {
   max-width: 36rem;
 }
 
+.lora-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.lora-field-row > .field {
+  margin: 0;
+  min-width: 0;
+}
+
 .lora-folder-pick {
   width: 100%;
+}
+
+.lora-prompt-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 36rem;
+  margin-top: 0.35rem;
+}
+
+.lora-prompt-groups-header span {
+  display: block;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.lora-prompt-groups-header .field-hint {
+  margin: 0.25rem 0 0;
+}
+
+.lora-prompt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel, transparent);
+}
+
+.lora-prompt-group > .field {
+  margin: 0;
+}
+
+.lora-prompt-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.lora-prompt-meta > .field {
+  margin: 0;
+  min-width: 0;
+}
+
+.lora-prompt-remove,
+.lora-prompt-add button {
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  height: 2.1rem;
+  padding: 0 0.65rem;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.lora-prompt-add {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .lora-resolution-grid {
@@ -1789,15 +1868,18 @@ button.danger.kbd-focus {
   max-width: 22rem;
 }
 
-.lora-resolution-toggle {
+.lora-toggle {
   display: flex;
   align-items: center;
   gap: 0.65rem;
   color: var(--text);
+}
+
+.lora-resolution-toggle {
   font-variant-numeric: tabular-nums;
 }
 
-.lora-resolution-toggle.is-disabled {
+.lora-toggle.is-disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -1820,11 +1902,11 @@ button.danger.kbd-focus {
   border: none;
 }
 
-.lora-resolution-toggle.is-on .lora-switch {
+.lora-toggle.is-on .lora-switch {
   background: var(--accent);
 }
 
-.lora-resolution-toggle.is-on .lora-switch:hover:not(:disabled) {
+.lora-toggle.is-on .lora-switch:hover:not(:disabled) {
   background: var(--accent-hover);
   border: none;
 }
@@ -1847,13 +1929,14 @@ button.danger.kbd-focus {
   pointer-events: none;
 }
 
-.lora-resolution-toggle.is-on .lora-switch-knob {
+.lora-toggle.is-on .lora-switch-knob {
   transform: translateX(1.1rem);
 }
 
+.lora-toggle-label,
 .lora-resolution-value {
   font-size: 0.92rem;
-  line-height: 1;
+  line-height: 1.25;
 }
 
 .lora-prompts {
@@ -1888,6 +1971,15 @@ button.danger.kbd-focus {
 @media (max-width: 900px) {
   .lora-train-body {
     grid-template-columns: 1fr;
+  }
+
+  .lora-field-row,
+  .lora-prompt-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .lora-prompt-remove {
+    width: 100%;
   }
 
   .lora-nav {

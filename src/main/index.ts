@@ -1357,18 +1357,22 @@ app.whenReady().then(async () => {
         modelDlProc = child
         modelDlCancelled = false
         let finished = false
-        emitModel('model:downloadProgress', { repoId, pct: 0 })
+        emitModel('model:downloadProgress', { repoId, pct: 0, done: 0, total: 0 })
 
         const onChunk = (chunk: Buffer) => {
           const text = chunk.toString('utf8')
           for (const raw of text.split(/\r?\n/)) {
             const line = raw.trim()
             if (!line) continue
-            const prog = line.match(/^CAPTIOER_MODEL_PROGRESS\s+repo=(\S+)\s+pct=(\d+)/)
+            const prog = line.match(
+              /^CAPTIOER_MODEL_PROGRESS\s+repo=(\S+)\s+pct=(\d+)(?:\s+done=(\d+))?(?:\s+total=(\d+))?/
+            )
             if (prog) {
               emitModel('model:downloadProgress', {
                 repoId: prog[1],
-                pct: Number(prog[2])
+                pct: Number(prog[2]),
+                done: prog[3] !== undefined ? Number(prog[3]) : undefined,
+                total: prog[4] !== undefined ? Number(prog[4]) : undefined
               })
               continue
             }
@@ -1628,7 +1632,11 @@ app.whenReady().then(async () => {
           results: { path: string; tags?: string; error?: string }[]
         }>((resolve) => {
           try {
-            const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+            const env: NodeJS.ProcessEnv = {
+              ...process.env,
+              PYTHONIOENCODING: 'utf-8',
+              PYTHONUTF8: '1'
+            }
             if (token) {
               env.HF_TOKEN = token
               env.HUGGING_FACE_HUB_TOKEN = token

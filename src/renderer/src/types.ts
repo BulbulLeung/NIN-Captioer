@@ -315,7 +315,12 @@ declare global {
       cancelModelDownload: () => Promise<{ ok: boolean }>
       modelDownloadStatus: () => Promise<{ running: boolean }>
       onModelDownloadProgress: (
-        cb: (payload: { repoId: string; pct: number }) => void
+        cb: (payload: {
+          repoId: string
+          pct: number
+          done?: number
+          total?: number
+        }) => void
       ) => () => void
       onModelDownloadDone: (
         cb: (payload: { repoId: string; path: string; revision: string }) => void
