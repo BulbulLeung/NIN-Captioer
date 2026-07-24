@@ -273,6 +273,8 @@ let saveWindowTimer: ReturnType<typeof setTimeout> | null = null
 let trainProc: ChildProcessWithoutNullStreams | null = null
 let modelDlProc: ChildProcessWithoutNullStreams | null = null
 let modelDlCancelled = false
+let wd14Proc: ChildProcessWithoutNullStreams | null = null
+let wd14Cancelled = false
 
 type ModelStatusKind =
   | 'missing'
@@ -313,6 +315,18 @@ function trainerScriptPath(): string {
 
 function modelOpsScriptPath(): string {
   return join(trainerRoot(), 'hf_model_ops.py')
+}
+
+function wd14TaggerScriptPath(): string {
+  return join(trainerRoot(), 'wd14_tagger.py')
+}
+
+function sanitizeRepoIdForDir(repoId: string): string {
+  return repoId.trim().replace(/[/\\]/g, '__')
+}
+
+function localWd14ModelDir(downloadPath: string, repoId: string): string {
+  return join(resolveModelDownloadPath(downloadPath), sanitizeRepoIdForDir(repoId))
 }
 
 function defaultModelDownloadPath(): string {
@@ -832,6 +846,17 @@ function killModelDownloadProcess(): void {
   modelDlCancelled = true
   const proc = modelDlProc
   modelDlProc = null
+  killChildProcess(proc)
+}
+
+function killWd14Process(): void {
+  if (!wd14Proc || wd14Proc.killed) {
+    wd14Proc = null
+    return
+  }
+  wd14Cancelled = true
+  const proc = wd14Proc
+  wd14Proc = null
   killChildProcess(proc)
 }
 
@@ -1411,6 +1436,346 @@ app.whenReady().then(async () => {
   ipcMain.handle('model:downloadStatus', async () => ({
     running: Boolean(modelDlProc && !modelDlProc.killed)
   }))
+
+  ipcMain.handle(
+    'wd14:ensureModel',
+    async (
+      _event,
+      opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        repoId: string
+      }
+    ) => {
+      if (wd14Proc && !wd14Proc.killed) {
+        return { ok: false, error: 'WD14 tagging is already running' }
+      }
+      const script = wd14TaggerScriptPath()
+      if (!existsSync(script)) {
+        return { ok: false, error: `WD14 tagger script not found: ${script}` }
+      }
+      const repoId = (opts.repoId || '').trim()
+      if (!repoId) {
+        return { ok: false, error: 'repoId required' }
+      }
+      const py = (opts.pythonPath && opts.pythonPath.trim()) || 'python'
+      const downloadPath = resolveModelDownloadPath(opts.downloadPath)
+      const token = (opts.token || '').trim()
+      const args = [
+        script,
+        'ensure',
+        '--download-path',
+        downloadPath,
+        '--repo-id',
+        repoId
+      ]
+      if (token) args.push('--token', token)
+
+      return await new Promise<{ ok: boolean; error?: string; modelDir?: string }>((resolve) => {
+        try {
+          const env = { ...process.env }
+          if (token) {
+            env.HF_TOKEN = token
+            env.HUGGING_FACE_HUB_TOKEN = token
+          }
+          const child = spawn(py, args, {
+            windowsHide: true,
+            cwd: trainerRoot(),
+            env
+          })
+          wd14Proc = child
+          wd14Cancelled = false
+          let fatalError: string | null = null
+          let modelDir: string | null = localWd14ModelDir(downloadPath, repoId)
+          let stdoutBuf = ''
+
+          const onChunk = (chunk: Buffer) => {
+            stdoutBuf += chunk.toString('utf8')
+            const lines = stdoutBuf.split(/\r?\n/)
+            stdoutBuf = lines.pop() ?? ''
+            for (const raw of lines) {
+              const line = raw.trim()
+              if (!line) continue
+              const errLine = line.match(/^CAPTIOER_TAG_ERROR\s+message=(.+)$/)
+              if (errLine) {
+                fatalError = errLine[1].trim()
+                continue
+              }
+              const modelLine = line.match(/^CAPTIOER_TAG_MODEL\s+path=(.+?)\s+status=(\S+)/)
+              if (modelLine) {
+                modelDir = modelLine[1].trim()
+              }
+            }
+          }
+          child.stdout.on('data', onChunk)
+          child.stderr.on('data', onChunk)
+          child.on('error', (err) => {
+            if (wd14Cancelled) {
+              wd14Cancelled = false
+              wd14Proc = null
+              resolve({ ok: false, error: 'Caption cancelled' })
+              return
+            }
+            wd14Proc = null
+            resolve({ ok: false, error: err.message })
+          })
+          child.on('close', (code) => {
+            if (wd14Proc === child) wd14Proc = null
+            if (wd14Cancelled) {
+              wd14Cancelled = false
+              resolve({ ok: false, error: 'Caption cancelled' })
+              return
+            }
+            if (fatalError) {
+              resolve({ ok: false, error: fatalError })
+              return
+            }
+            if (code !== 0 && code !== null) {
+              resolve({
+                ok: false,
+                error: `WD14 ensure exited code=${code}`
+              })
+              return
+            }
+            resolve({
+              ok: true,
+              modelDir: modelDir || localWd14ModelDir(downloadPath, repoId)
+            })
+          })
+        } catch (err) {
+          wd14Proc = null
+          resolve({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err)
+          })
+        }
+      })
+    }
+  )
+
+  ipcMain.handle(
+    'wd14:tag',
+    async (
+      _event,
+      opts: {
+        pythonPath?: string
+        modelDir: string
+        threshold: number
+        characterThreshold: number
+        imagePaths: string[]
+        ensure?: boolean
+        downloadPath?: string
+        token?: string
+        repoId?: string
+      }
+    ) => {
+      if (wd14Proc && !wd14Proc.killed) {
+        return { ok: false, error: 'WD14 tagging is already running', results: [] }
+      }
+      const script = wd14TaggerScriptPath()
+      if (!existsSync(script)) {
+        return {
+          ok: false,
+          error: `WD14 tagger script not found: ${script}`,
+          results: []
+        }
+      }
+      const imagePaths = Array.isArray(opts.imagePaths)
+        ? opts.imagePaths.filter((p) => typeof p === 'string' && p)
+        : []
+      if (imagePaths.length === 0) {
+        return { ok: false, error: 'No images provided', results: [] }
+      }
+      const modelDir = (opts.modelDir || '').trim()
+      if (!modelDir) {
+        return { ok: false, error: 'modelDir required', results: [] }
+      }
+
+      const py = (opts.pythonPath && opts.pythonPath.trim()) || 'python'
+      const token = (opts.token || '').trim()
+      let imagesFile: string | null = null
+
+      try {
+        const tmpRoot = await mkdtemp(join(tmpdir(), 'captioer-wd14-'))
+        imagesFile = join(tmpRoot, 'images.txt')
+        await writeFile(imagesFile, imagePaths.join('\n'), 'utf-8')
+
+        const args = [
+          script,
+          'tag',
+          '--model-dir',
+          modelDir,
+          '--threshold',
+          String(opts.threshold ?? 0.35),
+          '--character-threshold',
+          String(opts.characterThreshold ?? 0.85),
+          '--images-file',
+          imagesFile
+        ]
+        if (opts.ensure) {
+          args.push('--ensure')
+          const downloadPath = resolveModelDownloadPath(opts.downloadPath)
+          const repoId = (opts.repoId || '').trim()
+          if (downloadPath) args.push('--download-path', downloadPath)
+          if (repoId) args.push('--repo-id', repoId)
+          if (token) args.push('--token', token)
+        }
+
+        return await new Promise<{
+          ok: boolean
+          error?: string
+          results: { path: string; tags?: string; error?: string }[]
+        }>((resolve) => {
+          try {
+            const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+            if (token) {
+              env.HF_TOKEN = token
+              env.HUGGING_FACE_HUB_TOKEN = token
+            }
+            const child = spawn(py, args, {
+              windowsHide: true,
+              cwd: trainerRoot(),
+              env
+            })
+            wd14Proc = child
+            wd14Cancelled = false
+            let fatalError: string | null = null
+            const results: { path: string; tags?: string; error?: string }[] = []
+            let stdoutBuf = ''
+
+            const decodeB64Json = (b64: string): Record<string, unknown> | null => {
+              try {
+                const json = Buffer.from(b64.trim(), 'base64').toString('utf8')
+                return JSON.parse(json) as Record<string, unknown>
+              } catch {
+                return null
+              }
+            }
+
+            const onStdoutLine = (line: string) => {
+              if (!line) return
+              if (line.startsWith('CAPTIOER_TAG_ERROR message=')) {
+                fatalError = line.slice('CAPTIOER_TAG_ERROR message='.length).trim()
+                return
+              }
+              if (line.startsWith('CAPTIOER_TAG_ITEM_ERROR_B64 ')) {
+                const payload = decodeB64Json(line.slice('CAPTIOER_TAG_ITEM_ERROR_B64 '.length))
+                if (payload && typeof payload.path === 'string') {
+                  results.push({
+                    path: payload.path,
+                    error: typeof payload.error === 'string' ? payload.error : 'Tag failed'
+                  })
+                }
+                return
+              }
+              if (line.startsWith('CAPTIOER_TAG_B64 ')) {
+                const payload = decodeB64Json(line.slice('CAPTIOER_TAG_B64 '.length))
+                if (payload && typeof payload.path === 'string') {
+                  results.push({
+                    path: payload.path,
+                    tags: typeof payload.tags === 'string' ? payload.tags : ''
+                  })
+                }
+                return
+              }
+              // Legacy plaintext JSON (fallback)
+              if (line.startsWith('CAPTIOER_TAG_ITEM_ERROR ')) {
+                try {
+                  const payload = JSON.parse(line.slice('CAPTIOER_TAG_ITEM_ERROR '.length)) as {
+                    path?: string
+                    error?: string
+                  }
+                  if (payload.path) {
+                    results.push({ path: payload.path, error: payload.error || 'Tag failed' })
+                  }
+                } catch {
+                  /* ignore */
+                }
+                return
+              }
+              if (line.startsWith('CAPTIOER_TAG ') && !line.startsWith('CAPTIOER_TAG_')) {
+                try {
+                  const payload = JSON.parse(line.slice('CAPTIOER_TAG '.length)) as {
+                    path?: string
+                    tags?: string
+                  }
+                  if (payload.path) {
+                    results.push({ path: payload.path, tags: payload.tags || '' })
+                  }
+                } catch {
+                  /* ignore */
+                }
+              }
+            }
+
+            const onStdoutChunk = (chunk: Buffer) => {
+              stdoutBuf += chunk.toString('utf8')
+              const lines = stdoutBuf.split(/\r?\n/)
+              stdoutBuf = lines.pop() ?? ''
+              for (const raw of lines) onStdoutLine(raw.trim())
+            }
+            // Keep stderr separate so ORT / HF logs cannot corrupt protocol lines
+            child.stdout.on('data', onStdoutChunk)
+            child.stderr.on('data', () => {
+              /* discard / ignore for protocol parsing */
+            })
+            child.on('error', (err) => {
+              if (wd14Cancelled) {
+                wd14Cancelled = false
+                wd14Proc = null
+                resolve({ ok: false, error: 'Caption cancelled', results })
+                return
+              }
+              wd14Proc = null
+              resolve({ ok: false, error: err.message, results })
+            })
+            child.on('close', (code) => {
+              if (wd14Proc === child) wd14Proc = null
+              if (stdoutBuf.trim()) onStdoutLine(stdoutBuf.trim())
+              if (wd14Cancelled) {
+                wd14Cancelled = false
+                resolve({ ok: false, error: 'Caption cancelled', results })
+                return
+              }
+              if (fatalError) {
+                resolve({ ok: false, error: fatalError, results })
+                return
+              }
+              if (code !== 0 && code !== null && results.length === 0) {
+                resolve({
+                  ok: false,
+                  error: `WD14 tag exited code=${code}`,
+                  results
+                })
+                return
+              }
+              resolve({ ok: true, results })
+            })
+          } catch (err) {
+            wd14Proc = null
+            resolve({
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+              results: []
+            })
+          }
+        })
+      } catch (err) {
+        wd14Proc = null
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          results: []
+        }
+      }
+    }
+  )
+
+  ipcMain.handle('wd14:cancel', async () => {
+    killWd14Process()
+    return { ok: true }
+  })
 
   ipcMain.handle(
     'dialog:saveTextFile',

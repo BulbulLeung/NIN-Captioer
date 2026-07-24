@@ -10,16 +10,18 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { UnsavedDialog } from './components/UnsavedDialog'
 import { useBidirectionalTranslate } from './hooks/useBidirectionalTranslate'
 import { useCaptionAnalysis } from './hooks/useCaptionAnalysis'
-import { generateCaptionForImage } from './services/captioning'
+import { generateCaptionByFormat, generateWd14TagsForImages } from './services/captioning'
 import type {
   ActiveView,
   AppSettings,
+  CaptionFormatId,
   ImageItem,
   ListViewMode,
   LoraTrainAppSettings,
   LoraTrainJobConfig
 } from './types'
 import {
+  CAPTION_FORMAT_OPTIONS,
   clampRightPaneWidth,
   clampSidebarWidth,
   clampThumbnailWidth,
@@ -434,6 +436,7 @@ export default function App() {
     batchCancelRef.current = true
     captionAbortRef.current?.abort()
     captionAbortRef.current = null
+    void window.api.cancelWd14()
   }
 
   const runCaptionForPath = async (imagePath: string): Promise<void> => {
@@ -442,7 +445,7 @@ export default function App() {
     captionAbortRef.current = ac
     setCaptioningPath(imagePath)
     try {
-      const caption = await generateCaptionForImage(settingsRef.current, imagePath, ac.signal)
+      const caption = await generateCaptionByFormat(settingsRef.current, imagePath, ac.signal)
       await applyCaptionToUi(imagePath, caption)
     } finally {
       setCaptioningPath(null)
@@ -464,17 +467,57 @@ export default function App() {
     let failed = 0
 
     try {
-      for (const img of targets) {
-        if (batchCancelRef.current) break
-        setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`)
+      const format = settingsRef.current.captionFormat
+      if (format === 'wd14') {
+        captionAbortRef.current?.abort()
+        const ac = new AbortController()
+        captionAbortRef.current = ac
+        setStatus(`WD14 tagging 0/${targets.length}…`)
         try {
-          await runCaptionForPath(img.path)
-          done += 1
+          const tagMap = await generateWd14TagsForImages(
+            settingsRef.current,
+            targets.map((t) => t.path),
+            ac.signal
+          )
+          for (const img of targets) {
+            if (batchCancelRef.current) break
+            const tags = tagMap.get(img.path)
+            if (!tags) {
+              failed += 1
+              setError(`${img.name}: WD14 returned no tags`)
+              continue
+            }
+            setCaptioningPath(img.path)
+            setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`)
+            try {
+              await applyCaptionToUi(img.path, tags)
+              done += 1
+            } catch (err) {
+              failed += 1
+              setError(`${img.name}: ${err instanceof Error ? err.message : String(err)}`)
+            }
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          if (msg === 'Caption cancelled') break
-          failed += 1
-          setError(`${img.name}: ${msg}`)
+          if (msg !== 'Caption cancelled') {
+            setError(msg)
+          }
+        } finally {
+          setCaptioningPath(null)
+        }
+      } else {
+        for (const img of targets) {
+          if (batchCancelRef.current) break
+          setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`)
+          try {
+            await runCaptionForPath(img.path)
+            done += 1
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            if (msg === 'Caption cancelled') break
+            failed += 1
+            setError(`${img.name}: ${msg}`)
+          }
         }
       }
       if (batchCancelRef.current) {
@@ -813,6 +856,24 @@ export default function App() {
                   />
                 </svg>
               </button>
+              <label className="toolbar-caption-format">
+                <span className="sr-only">Caption format</span>
+                <select
+                  value={settings.captionFormat}
+                  aria-label="Caption format"
+                  title="Caption format for Auto Caption / reCaption"
+                  onChange={(e) => {
+                    const captionFormat = e.target.value as CaptionFormatId
+                    persistSettingsPatch({ captionFormat })
+                  }}
+                >
+                  {CAPTION_FORMAT_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button type="button" onClick={() => setSettingsOpen(true)}>
                 Settings
               </button>

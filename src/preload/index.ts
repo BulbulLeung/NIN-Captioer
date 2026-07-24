@@ -24,6 +24,12 @@ export interface AppSettings {
   datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
+  captionFormat?: string
+  wd14?: {
+    modelRepoId: string
+    threshold: number
+    characterThreshold: number
+  }
   sidebarWidth: number
   rightPaneWidth: number
   autoAnalysis?: boolean
@@ -173,6 +179,29 @@ const api = {
     ipcRenderer.on('model:downloadError', listener)
     return () => ipcRenderer.removeListener('model:downloadError', listener)
   },
+  ensureWd14Model: (opts: {
+    pythonPath?: string
+    downloadPath?: string
+    token?: string
+    repoId: string
+  }): Promise<{ ok: boolean; error?: string; modelDir?: string }> =>
+    ipcRenderer.invoke('wd14:ensureModel', opts),
+  tagWd14: (opts: {
+    pythonPath?: string
+    modelDir: string
+    threshold: number
+    characterThreshold: number
+    imagePaths: string[]
+    ensure?: boolean
+    downloadPath?: string
+    token?: string
+    repoId?: string
+  }): Promise<{
+    ok: boolean
+    error?: string
+    results: { path: string; tags?: string; error?: string }[]
+  }> => ipcRenderer.invoke('wd14:tag', opts),
+  cancelWd14: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('wd14:cancel'),
   toLocalUrl: (filePath: string): string => {
     const normalized = filePath.replace(/\\/g, '/')
     const encoded = normalized.split('/').map((seg) => encodeURIComponent(seg)).join('/')

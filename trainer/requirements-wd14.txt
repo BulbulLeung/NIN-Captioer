@@ -1,0 +1,9 @@
+# WD14 ONNX tagging (separate from LoRA training stack)
+# Install: pip install -r trainer/requirements-wd14.txt
+#
+# CPU: onnxruntime
+# GPU (optional): uninstall onnxruntime and install onnxruntime-gpu instead
+onnxruntime>=1.17.0
+numpy>=1.24
+Pillow>=10.0
+huggingface_hub>=0.23

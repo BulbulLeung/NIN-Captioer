@@ -59,6 +59,9 @@ const api = {
     electron.ipcRenderer.on("model:downloadError", listener);
     return () => electron.ipcRenderer.removeListener("model:downloadError", listener);
   },
+  ensureWd14Model: (opts) => electron.ipcRenderer.invoke("wd14:ensureModel", opts),
+  tagWd14: (opts) => electron.ipcRenderer.invoke("wd14:tag", opts),
+  cancelWd14: () => electron.ipcRenderer.invoke("wd14:cancel"),
   toLocalUrl: (filePath) => {
     const normalized = filePath.replace(/\\/g, "/");
     const encoded = normalized.split("/").map((seg) => encodeURIComponent(seg)).join("/");

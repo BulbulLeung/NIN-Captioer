@@ -209,3 +209,136 @@ export async function generateCaptionForImage(
     throw new Error(formatLocalAiError(err, settings))
   }
 }
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error('Caption cancelled')
+}
+
+/** Ensure WD14 ONNX assets exist under the configured download path. */
+export async function ensureWd14ModelReady(
+  settings: AppSettings,
+  signal?: AbortSignal
+): Promise<string> {
+  throwIfAborted(signal)
+  const onAbort = () => {
+    void window.api.cancelWd14()
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    const res = await window.api.ensureWd14Model({
+      pythonPath: settings.loraTrainApp.pythonPath || undefined,
+      downloadPath: settings.loraTrainApp.modelDownloadPath || undefined,
+      token: settings.loraTrainApp.huggingfaceToken || undefined,
+      repoId: settings.wd14.modelRepoId
+    })
+    throwIfAborted(signal)
+    if (!res.ok || !res.modelDir) {
+      throw new Error(res.error || 'Failed to prepare WD14 model')
+    }
+    return res.modelDir
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+/**
+ * Tag one or more images with WD14 ONNX (model loaded once for the batch).
+ * Returns a map of absolute image path → comma-separated tags.
+ */
+export async function generateWd14TagsForImages(
+  settings: AppSettings,
+  imagePaths: string[],
+  signal?: AbortSignal
+): Promise<Map<string, string>> {
+  if (imagePaths.length === 0) return new Map()
+  throwIfAborted(signal)
+
+  const onAbort = () => {
+    void window.api.cancelWd14()
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
+
+  try {
+    const modelDir = await ensureWd14ModelReady(settings, signal)
+    throwIfAborted(signal)
+
+    const res = await window.api.tagWd14({
+      pythonPath: settings.loraTrainApp.pythonPath || undefined,
+      modelDir,
+      threshold: settings.wd14.threshold,
+      characterThreshold: settings.wd14.characterThreshold,
+      imagePaths,
+      ensure: true,
+      downloadPath: settings.loraTrainApp.modelDownloadPath || undefined,
+      token: settings.loraTrainApp.huggingfaceToken || undefined,
+      repoId: settings.wd14.modelRepoId
+    })
+
+    throwIfAborted(signal)
+
+    if (!res.ok && res.results.length === 0) {
+      throw new Error(res.error || 'WD14 tagging failed')
+    }
+
+    const out = new Map<string, string>()
+    const byLower = new Map<string, string>()
+    for (const item of res.results) {
+      if (item.tags != null && item.tags !== '' && !item.error) {
+        out.set(item.path, item.tags)
+        byLower.set(item.path.replace(/\\/g, '/').toLowerCase(), item.tags)
+      }
+    }
+
+    // Normalize lookup for Windows path casing / separators
+    for (const asked of imagePaths) {
+      if (out.has(asked)) continue
+      const hit = byLower.get(asked.replace(/\\/g, '/').toLowerCase())
+      if (hit) out.set(asked, hit)
+    }
+
+    if (imagePaths.length === 1) {
+      const only = imagePaths[0]
+      const tags = out.get(only)
+      if (!tags) {
+        const itemErr = res.results.find(
+          (r) =>
+            r.path.replace(/\\/g, '/').toLowerCase() ===
+            only.replace(/\\/g, '/').toLowerCase()
+        )
+        throw new Error(itemErr?.error || res.error || 'WD14 returned empty tags')
+      }
+    }
+
+    return out
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+export async function generateWd14TagsForImage(
+  settings: AppSettings,
+  imagePath: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const map = await generateWd14TagsForImages(settings, [imagePath], signal)
+  const tags = map.get(imagePath)
+  if (!tags) {
+    // Fallback: any single result
+    const first = map.values().next().value
+    if (first) return first
+    throw new Error('WD14 returned empty tags')
+  }
+  return tags
+}
+
+/** Dispatch Auto Caption / reCaption by selected caption format. */
+export async function generateCaptionByFormat(
+  settings: AppSettings,
+  imagePath: string,
+  signal?: AbortSignal
+): Promise<string> {
+  if (settings.captionFormat === 'wd14') {
+    return generateWd14TagsForImage(settings, imagePath, signal)
+  }
+  return generateCaptionForImage(settings, imagePath, signal)
+}

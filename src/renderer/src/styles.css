@@ -304,6 +304,39 @@ button.danger.kbd-focus {
   background: #2a303a;
 }
 
+.toolbar-caption-format {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
+.toolbar-caption-format select {
+  max-width: 12.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toolbar-caption-format select:hover {
+  border-color: #4a5160;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .toolbar-icon-btn {
   display: inline-flex;
   align-items: center;

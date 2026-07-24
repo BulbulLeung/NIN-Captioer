@@ -1,5 +1,15 @@
 import { createDefaultCaptionPreset, DEFAULT_CAPTION_PRESET_ID } from './defaults/captionPresets'
 import {
+  CAPTION_FORMAT_OPTIONS,
+  DEFAULT_CAPTION_FORMAT,
+  DEFAULT_WD14_SETTINGS,
+  normalizeCaptionFormat,
+  normalizeWd14Settings,
+  type CaptionFormatId,
+  type CaptionFormatOption,
+  type Wd14Settings
+} from './defaults/captionFormats'
+import {
   DEFAULT_LORA_TRAIN_APP,
   DEFAULT_LORA_TRAIN_JOB,
   KREA2_RAW,
@@ -12,15 +22,27 @@ import {
   type LoraTrainJobConfig
 } from './defaults/loraTrain'
 
-export type { ActiveView, LoraTrainAppSettings, LoraTrainJobConfig }
+export type {
+  ActiveView,
+  CaptionFormatId,
+  CaptionFormatOption,
+  LoraTrainAppSettings,
+  LoraTrainJobConfig,
+  Wd14Settings
+}
 export {
+  CAPTION_FORMAT_OPTIONS,
+  DEFAULT_CAPTION_FORMAT,
   DEFAULT_LORA_TRAIN_APP,
   DEFAULT_LORA_TRAIN_JOB,
+  DEFAULT_WD14_SETTINGS,
   KREA2_RAW,
   KREA2_TURBO,
   normalizeActiveView,
+  normalizeCaptionFormat,
   normalizeLoraTrainApp,
-  normalizeLoraTrainJob
+  normalizeLoraTrainJob,
+  normalizeWd14Settings
 }
 
 export type TranslationProvider = 'lmstudio' | 'ollama'
@@ -70,6 +92,9 @@ export interface AppSettings {
   datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
+  /** Auto Caption / reCaption output format (Natural VLM vs WD14 ONNX tags). */
+  captionFormat: CaptionFormatId
+  wd14: Wd14Settings
   sidebarWidth: number
   rightPaneWidth: number
   /** When true, analyze captions in the background; when false, only while Analyze dialog is open. */
@@ -117,6 +142,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
+  captionFormat: DEFAULT_CAPTION_FORMAT,
+  wd14: { ...DEFAULT_WD14_SETTINGS },
   sidebarWidth: 260,
   rightPaneWidth: 380,
   autoAnalysis: true,
@@ -202,6 +229,8 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
+    captionFormat: normalizeCaptionFormat(merged.captionFormat),
+    wd14: normalizeWd14Settings(merged.wd14),
     model: merged.model ?? '',
     lastFolder,
     datasetFolders,
@@ -294,6 +323,28 @@ declare global {
       onModelDownloadError: (
         cb: (payload: { message: string; repoId: string }) => void
       ) => () => void
+      ensureWd14Model: (opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        repoId: string
+      }) => Promise<{ ok: boolean; error?: string; modelDir?: string }>
+      tagWd14: (opts: {
+        pythonPath?: string
+        modelDir: string
+        threshold: number
+        characterThreshold: number
+        imagePaths: string[]
+        ensure?: boolean
+        downloadPath?: string
+        token?: string
+        repoId?: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        results: { path: string; tags?: string; error?: string }[]
+      }>
+      cancelWd14: () => Promise<{ ok: boolean }>
       toLocalUrl: (filePath: string) => string
     }
   }

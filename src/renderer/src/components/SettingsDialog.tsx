@@ -3,6 +3,10 @@ import type { AppSettings, CaptionPreset, TranslationProvider } from '../types'
 import { DEFAULT_SETTINGS, normalizeSettings } from '../types'
 import { createDefaultCaptionPreset } from '../defaults/captionPresets'
 import { listModels, testConnection } from '../services/translation'
+import {
+  FALLBACK_WD14_MODEL_REPOS,
+  listWd14ModelReposOrFallback
+} from '../services/wd14Models'
 
 interface Props {
   open: boolean
@@ -22,11 +26,16 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
   const [models, setModels] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
+  const [wd14Repos, setWd14Repos] = useState<string[]>([...FALLBACK_WD14_MODEL_REPOS])
+  const [loadingWd14Repos, setLoadingWd14Repos] = useState(false)
+  const [wd14ReposError, setWd14ReposError] = useState<string | null>(null)
+  const [wd14ReposFromNetwork, setWd14ReposFromNetwork] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const fetchId = useRef(0)
+  const wd14FetchId = useRef(0)
   const urlDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const promptDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipUrlFetch = useRef(false)
@@ -44,6 +53,14 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       null
     )
   }, [draft.captionPresets, draft.activeCaptionPresetId])
+
+  const wd14RepoOptions = useMemo(() => {
+    const current = draft.wd14.modelRepoId.trim()
+    if (current && !wd14Repos.includes(current)) {
+      return [current, ...wd14Repos]
+    }
+    return wd14Repos
+  }, [draft.wd14.modelRepoId, wd14Repos])
 
   const fetchModels = useCallback(async (next: AppSettings) => {
     const id = ++fetchId.current
@@ -75,6 +92,24 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     }
   }, [])
 
+  const fetchWd14Repos = useCallback(async () => {
+    const id = ++wd14FetchId.current
+    setLoadingWd14Repos(true)
+    setWd14ReposError(null)
+    try {
+      const { repos, fromNetwork, error } = await listWd14ModelReposOrFallback()
+      if (id !== wd14FetchId.current) return
+      setWd14Repos(repos)
+      setWd14ReposFromNetwork(fromNetwork)
+      if (error && !fromNetwork) {
+        setWd14ReposError(`Using offline list: ${error}`)
+      }
+      // Keep the user's current selection even if Hub list changes; options merge it in.
+    } finally {
+      if (id === wd14FetchId.current) setLoadingWd14Repos(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (!open) return
     skipUrlFetch.current = true
@@ -83,8 +118,10 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     setTestResult(null)
     setTestError(null)
     setModelsError(null)
+    setWd14ReposError(null)
     void fetchModels(normalizeSettings(settings))
-  }, [open, settings, fetchModels])
+    void fetchWd14Repos()
+  }, [open, settings, fetchModels, fetchWd14Repos])
 
   useEffect(() => {
     if (!open) return
@@ -208,6 +245,8 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       datasetFolders: draft.datasetFolders,
       captionPresets: draft.captionPresets,
       activeCaptionPresetId: draft.activeCaptionPresetId,
+      captionFormat: draft.captionFormat,
+      wd14: draft.wd14,
       sidebarWidth: draft.sidebarWidth,
       rightPaneWidth: draft.rightPaneWidth,
       listViewMode: draft.listViewMode,
@@ -316,7 +355,9 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
             </button>
           </div>
           {modelsError && <p className="field-hint warn">{modelsError}</p>}
-          <p className="field-hint">Used for translation, Auto Caption, and reCaption.</p>
+          <p className="field-hint">
+            Used for translation, Natural Auto Caption / reCaption, and analysis.
+          </p>
         </div>
 
         <label className="field checkbox-field">
@@ -337,7 +378,102 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
         </label>
 
         <div className="settings-section">
+          <h3>WD14 Tagging</h3>
+          <p className="field-hint">
+            Used when Caption format is set to Danbooru Tags(SD/XL). Requires{' '}
+            <code>pip install -r trainer/requirements-wd14.txt</code>. Python path follows
+            LoRA Train settings.
+          </p>
+          <label className="field">
+            <span>Model repo</span>
+            <div className="model-row">
+              <select
+                value={draft.wd14.modelRepoId}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    wd14: { ...prev.wd14, modelRepoId: e.target.value }
+                  }))
+                }
+                disabled={loadingWd14Repos && wd14RepoOptions.length === 0}
+                aria-label="WD14 model repo"
+              >
+                {wd14RepoOptions.length === 0 ? (
+                  <option value="">
+                    {loadingWd14Repos ? 'Loading…' : 'No models available'}
+                  </option>
+                ) : (
+                  wd14RepoOptions.map((repo) => (
+                    <option key={repo} value={repo}>
+                      {repo.replace(/^SmilingWolf\//, '')}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                type="button"
+                onClick={() => void fetchWd14Repos()}
+                disabled={loadingWd14Repos}
+              >
+                {loadingWd14Repos ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+            {wd14ReposError && <p className="field-hint warn">{wd14ReposError}</p>}
+            <p className="field-hint">
+              {wd14ReposFromNetwork
+                ? 'Listed from Hugging Face (ONNX + selected_tags.csv).'
+                : 'Offline fallback list — click Refresh when online.'}{' '}
+              Full id: <code>{draft.wd14.modelRepoId || '—'}</code>
+            </p>
+          </label>
+          <div className="model-row">
+            <label className="field" style={{ flex: 1 }}>
+              <span>Threshold</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={draft.wd14.threshold}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    wd14: {
+                      ...prev.wd14,
+                      threshold: Number(e.target.value)
+                    }
+                  }))
+                }
+              />
+            </label>
+            <label className="field" style={{ flex: 1 }}>
+              <span>Character threshold</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={draft.wd14.characterThreshold}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    wd14: {
+                      ...prev.wd14,
+                      characterThreshold: Number(e.target.value)
+                    }
+                  }))
+                }
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-section">
           <h3>Auto Caption prompt</h3>
+          <p className="field-hint">
+            Used only for Natural Language(Flux/Krea2) format. Danbooru Tags ignores these
+            prompts.
+          </p>
           <div className="field">
             <span>Preset</span>
             <div className="model-row">

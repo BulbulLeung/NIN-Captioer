@@ -24,7 +24,7 @@
 - **Image browser**: list or thumbnail view on the left, preview in the center, editor on the right; thumbnail size is adjustable
 - **English caption editing**: save as a sidecar `.txt` with the same name as the image (standard LoRA / caption workflow)
 - **Bidirectional translation**: English (top) ↔ target language (bottom, Traditional Chinese by default); edits on either side stay in sync
-- **Auto Caption / reCaption**: generate captions with a local vision/LLM and custom prompts (PNG Info is appended at runtime)
+- **Auto Caption / reCaption**: generate captions with a local vision/LLM (Natural Language / Flux/Krea2) or Danbooru Tags via WD14 ONNX (SD/XL); switch format from the Dataset Edit toolbar
 - **Caption Analysis**: caption coverage, LoRA Health Score, and per-category detail distributions (pie charts)
 - **Lora Train**: native **Krea 2** LoRA trainer (train on Raw, use on Turbo) with Start/Stop, progress log, and config export
 - **Resizable layout**: drag splitters to resize panes; window position is remembered
@@ -38,9 +38,10 @@
 | OS | Windows x64 (packaged with `electron-builder --win`) |
 | Development | Node.js 18+ |
 | AI backend (optional) | [LM Studio](https://lmstudio.ai/) or [Ollama](https://ollama.com/), reachable on localhost |
+| WD14 tagging (optional) | Python + packages in `trainer/requirements-wd14.txt` (`onnxruntime`, etc.); model downloads on first use |
 | Krea 2 training (optional) | CUDA Python + packages in `trainer/requirements.txt`; recent `diffusers` with `Krea2Pipeline` |
 
-You can still edit and save captions without an AI backend. Translation, Auto Caption, and Analyze require a running model service.
+You can still edit and save captions without an AI backend. Natural Auto Caption, translation, and Analyze need a running vision/LLM service; WD14 Auto Caption needs the ONNX deps above.
 
 ---
 
