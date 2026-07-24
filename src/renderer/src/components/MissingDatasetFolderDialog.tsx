@@ -56,12 +56,17 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
   if (!open) return null
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
       <div
         className="modal"
         role="dialog"
         aria-labelledby="missing-dataset-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="missing-dataset-title">Dataset folder not found</h2>
         <p className="modal-text">

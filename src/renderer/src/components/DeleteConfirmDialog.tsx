@@ -56,12 +56,17 @@ export function DeleteConfirmDialog({ open, fileName, onConfirm, onCancel }: Pro
   if (!open) return null
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
       <div
         className="modal"
         role="dialog"
         aria-labelledby="delete-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="delete-title">Delete image</h2>
         <p className="modal-text">

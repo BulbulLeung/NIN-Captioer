@@ -2,6 +2,7 @@
 const electron = require("electron");
 const api = {
   openFolder: () => electron.ipcRenderer.invoke("dialog:openFolder"),
+  openFile: (opts) => electron.ipcRenderer.invoke("dialog:openFile", opts),
   listImages: (dir) => electron.ipcRenderer.invoke("fs:listImages", dir),
   readCaption: (imagePath) => electron.ipcRenderer.invoke("fs:readCaption", imagePath),
   writeCaption: (imagePath, text) => electron.ipcRenderer.invoke("fs:writeCaption", imagePath, text),
@@ -10,6 +11,54 @@ const api = {
   readImageBase64: (imagePath) => electron.ipcRenderer.invoke("fs:readImageBase64", imagePath),
   getSettings: () => electron.ipcRenderer.invoke("settings:get"),
   setSettings: (settings) => electron.ipcRenderer.invoke("settings:set", settings),
+  saveTextFile: (opts) => electron.ipcRenderer.invoke("dialog:saveTextFile", opts),
+  listGpuDevices: () => electron.ipcRenderer.invoke("gpu:listDevices"),
+  getResourceStats: (deviceId) => electron.ipcRenderer.invoke("system:getResourceStats", deviceId),
+  killProcess: (pid) => electron.ipcRenderer.invoke("system:killProcess", pid),
+  checkTrainEnv: (pythonPath) => electron.ipcRenderer.invoke("train:checkEnv", pythonPath),
+  startTrain: (opts) => electron.ipcRenderer.invoke("train:start", opts),
+  stopTrain: () => electron.ipcRenderer.invoke("train:stop"),
+  trainStatus: () => electron.ipcRenderer.invoke("train:status"),
+  onTrainLog: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("train:log", listener);
+    return () => electron.ipcRenderer.removeListener("train:log", listener);
+  },
+  onTrainProgress: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("train:progress", listener);
+    return () => electron.ipcRenderer.removeListener("train:progress", listener);
+  },
+  onTrainDone: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("train:done", listener);
+    return () => electron.ipcRenderer.removeListener("train:done", listener);
+  },
+  onTrainError: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("train:error", listener);
+    return () => electron.ipcRenderer.removeListener("train:error", listener);
+  },
+  defaultModelDownloadPath: () => electron.ipcRenderer.invoke("model:defaultDownloadPath"),
+  checkModelStatus: (opts) => electron.ipcRenderer.invoke("model:checkStatus", opts),
+  downloadModel: (opts) => electron.ipcRenderer.invoke("model:download", opts),
+  cancelModelDownload: () => electron.ipcRenderer.invoke("model:cancelDownload"),
+  modelDownloadStatus: () => electron.ipcRenderer.invoke("model:downloadStatus"),
+  onModelDownloadProgress: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("model:downloadProgress", listener);
+    return () => electron.ipcRenderer.removeListener("model:downloadProgress", listener);
+  },
+  onModelDownloadDone: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("model:downloadDone", listener);
+    return () => electron.ipcRenderer.removeListener("model:downloadDone", listener);
+  },
+  onModelDownloadError: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("model:downloadError", listener);
+    return () => electron.ipcRenderer.removeListener("model:downloadError", listener);
+  },
   toLocalUrl: (filePath) => {
     const normalized = filePath.replace(/\\/g, "/");
     const encoded = normalized.split("/").map((seg) => encodeURIComponent(seg)).join("/");

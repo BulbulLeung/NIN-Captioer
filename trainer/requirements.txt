@@ -1,0 +1,18 @@
+# Captioer Krea 2 LoRA trainer
+# Install CUDA torch first from https://pytorch.org, then:
+#   pip install -r requirements.txt
+#
+# Krea2Pipeline needs a recent diffusers (install from git if hub package is too old):
+#   pip install "git+https://github.com/huggingface/diffusers.git"
+
+torch>=2.1.0
+diffusers>=0.35.0
+transformers>=4.46.0
+accelerate>=0.33.0
+peft>=0.13.0
+safetensors>=0.4.0
+huggingface_hub>=0.25.0
+Pillow>=10.0.0
+sentencepiece>=0.2.0
+protobuf>=4.0.0
+bitsandbytes>=0.43.0; platform_system=="Linux" or platform_system=="Windows"

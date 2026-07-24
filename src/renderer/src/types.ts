@@ -1,6 +1,56 @@
 import { createDefaultCaptionPreset, DEFAULT_CAPTION_PRESET_ID } from './defaults/captionPresets'
+import {
+  DEFAULT_LORA_TRAIN_APP,
+  DEFAULT_LORA_TRAIN_JOB,
+  KREA2_RAW,
+  KREA2_TURBO,
+  normalizeActiveView,
+  normalizeLoraTrainApp,
+  normalizeLoraTrainJob,
+  type ActiveView,
+  type LoraTrainAppSettings,
+  type LoraTrainJobConfig
+} from './defaults/loraTrain'
+
+export type { ActiveView, LoraTrainAppSettings, LoraTrainJobConfig }
+export {
+  DEFAULT_LORA_TRAIN_APP,
+  DEFAULT_LORA_TRAIN_JOB,
+  KREA2_RAW,
+  KREA2_TURBO,
+  normalizeActiveView,
+  normalizeLoraTrainApp,
+  normalizeLoraTrainJob
+}
 
 export type TranslationProvider = 'lmstudio' | 'ollama'
+
+export interface ResourceGpuVramApp {
+  pid: number
+  name: string
+  memUsedMiB: number
+  killable: boolean
+}
+
+export interface ResourceGpuStats {
+  id: string
+  name: string
+  utilPercent: number
+  memUsedMiB: number
+  memTotalMiB: number
+  tempC: number | null
+  powerDrawW: number | null
+  powerLimitW: number | null
+  apps: ResourceGpuVramApp[]
+}
+
+export interface ResourceStats {
+  cpuName: string
+  cpuPercent: number
+  ramUsedBytes: number
+  ramTotalBytes: number
+  gpu: ResourceGpuStats | null
+}
 
 export interface CaptionPreset {
   id: string
@@ -26,6 +76,9 @@ export interface AppSettings {
   autoAnalysis: boolean
   listViewMode: ListViewMode
   thumbnailWidth: number
+  activeView: ActiveView
+  loraTrainJob: LoraTrainJobConfig
+  loraTrainApp: LoraTrainAppSettings
 }
 
 export interface ImageItem {
@@ -68,7 +121,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rightPaneWidth: 380,
   autoAnalysis: true,
   listViewMode: 'list',
-  thumbnailWidth: 96
+  thumbnailWidth: 96,
+  activeView: 'datasetEdit',
+  loraTrainJob: structuredClone(DEFAULT_LORA_TRAIN_JOB),
+  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP }
 }
 
 const SIDEBAR_MIN = 160
@@ -134,6 +190,14 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
   if (lastFolder && !datasetFolders.includes(lastFolder) && datasetFolders.length > 0) {
     lastFolder = datasetFolders[0]
   }
+  const loraTrainJob = normalizeLoraTrainJob(merged.loraTrainJob)
+  // Seed dataset folder from DatasetEdit lastFolder when empty
+  if (!loraTrainJob.datasets[0]?.folder_path && lastFolder) {
+    loraTrainJob.datasets[0] = {
+      ...loraTrainJob.datasets[0],
+      folder_path: lastFolder
+    }
+  }
   return {
     ...merged,
     captionPresets: presets,
@@ -145,7 +209,10 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
     autoAnalysis: merged.autoAnalysis !== false,
     listViewMode: normalizeListViewMode(merged.listViewMode),
-    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth)
+    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth),
+    activeView: normalizeActiveView(merged.activeView),
+    loraTrainJob,
+    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp)
   }
 }
 
@@ -153,6 +220,10 @@ declare global {
   interface Window {
     api: {
       openFolder: () => Promise<string | null>
+      openFile: (opts?: {
+        title?: string
+        filters?: { name: string; extensions: string[] }[]
+      }) => Promise<string | null>
       listImages: (dir: string) => Promise<ImageItem[]>
       readCaption: (imagePath: string) => Promise<string>
       writeCaption: (imagePath: string, text: string) => Promise<boolean>
@@ -161,6 +232,68 @@ declare global {
       readImageBase64: (imagePath: string) => Promise<{ mimeType: string; base64: string }>
       getSettings: () => Promise<AppSettings>
       setSettings: (settings: AppSettings) => Promise<boolean>
+      saveTextFile: (opts: {
+        defaultPath?: string
+        content: string
+        filters?: { name: string; extensions: string[] }[]
+      }) => Promise<string | null>
+      listGpuDevices: () => Promise<{ id: string; label: string }[]>
+      getResourceStats: (deviceId?: string) => Promise<ResourceStats>
+      killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>
+      checkTrainEnv: (pythonPath?: string) => Promise<{ ok: boolean; message: string }>
+      startTrain: (opts: {
+        pythonPath?: string
+        configJson: string
+        device?: string
+      }) => Promise<{ ok: boolean; error?: string; configPath?: string }>
+      stopTrain: () => Promise<{ ok: boolean }>
+      trainStatus: () => Promise<{ running: boolean }>
+      onTrainLog: (
+        cb: (payload: { line: string; stream: string }) => void
+      ) => () => void
+      onTrainProgress: (
+        cb: (payload: { step: number; total: number; loss: number }) => void
+      ) => () => void
+      onTrainDone: (cb: (payload: { path: string }) => void) => () => void
+      onTrainError: (cb: (payload: { message: string }) => void) => () => void
+      defaultModelDownloadPath: () => Promise<string>
+      checkModelStatus: (opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        targets: { role: string; path: string }[]
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        results: {
+          role: string
+          path: string
+          repoId: string | null
+          status: 'missing' | 'ready' | 'updateAvailable' | 'local' | 'error'
+          localPath?: string | null
+          localRevision?: string | null
+          remoteRevision?: string | null
+          message?: string | null
+        }[]
+        downloadPath?: string
+      }>
+      downloadModel: (opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        repoId: string
+      }) => Promise<{ ok: boolean; error?: string; downloadPath?: string }>
+      cancelModelDownload: () => Promise<{ ok: boolean }>
+      modelDownloadStatus: () => Promise<{ running: boolean }>
+      onModelDownloadProgress: (
+        cb: (payload: { repoId: string; pct: number }) => void
+      ) => () => void
+      onModelDownloadDone: (
+        cb: (payload: { repoId: string; path: string; revision: string }) => void
+      ) => () => void
+      onModelDownloadError: (
+        cb: (payload: { message: string; repoId: string }) => void
+      ) => () => void
       toLocalUrl: (filePath: string) => string
     }
   }

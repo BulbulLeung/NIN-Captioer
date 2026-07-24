@@ -211,17 +211,25 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       sidebarWidth: draft.sidebarWidth,
       rightPaneWidth: draft.rightPaneWidth,
       listViewMode: draft.listViewMode,
-      thumbnailWidth: draft.thumbnailWidth
+      thumbnailWidth: draft.thumbnailWidth,
+      activeView: draft.activeView,
+      loraTrainJob: draft.loraTrainJob,
+      loraTrainApp: draft.loraTrainApp
     })
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div
         className="modal modal-wide"
         role="dialog"
         aria-labelledby="settings-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="settings-title">Settings</h2>
 

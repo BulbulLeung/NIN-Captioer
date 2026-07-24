@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnalysisDialog } from './components/AnalysisDialog'
-import { CaptionEditor } from './components/CaptionEditor'
+import { DatasetEditView } from './components/DatasetEditView'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
-import { ImageList } from './components/ImageList'
-import { ImagePreview } from './components/ImagePreview'
+import { LoraTrainSettingsDialog } from './components/LoraTrainSettingsDialog'
+import { LoraTrainView } from './components/LoraTrainView'
 import { MissingDatasetFolderDialog } from './components/MissingDatasetFolderDialog'
 import { RemoveDatasetFolderDialog } from './components/RemoveDatasetFolderDialog'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -11,7 +11,14 @@ import { UnsavedDialog } from './components/UnsavedDialog'
 import { useBidirectionalTranslate } from './hooks/useBidirectionalTranslate'
 import { useCaptionAnalysis } from './hooks/useCaptionAnalysis'
 import { generateCaptionForImage } from './services/captioning'
-import type { AppSettings, ImageItem, ListViewMode } from './types'
+import type {
+  ActiveView,
+  AppSettings,
+  ImageItem,
+  ListViewMode,
+  LoraTrainAppSettings,
+  LoraTrainJobConfig
+} from './types'
 import {
   clampRightPaneWidth,
   clampSidebarWidth,
@@ -46,6 +53,7 @@ export default function App() {
   const [translated, setTranslated] = useState('')
   const [settings, setSettings] = useState<AppSettings>(() => normalizeSettings(null))
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [loraSettingsOpen, setLoraSettingsOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [unsavedOpen, setUnsavedOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -387,6 +395,41 @@ export default function App() {
     await window.api.setSettings(normalized)
   }, [])
 
+  const persistSettingsPatch = useCallback((patch: Partial<AppSettings>) => {
+    const next = normalizeSettings({ ...settingsRef.current, ...patch })
+    setSettings(next)
+    void window.api.setSettings(next)
+  }, [])
+
+  const setActiveView = (view: ActiveView) => {
+    if (settingsRef.current.activeView === view) return
+    persistSettingsPatch({ activeView: view })
+  }
+
+  const onLoraJobChange = useCallback(
+    (loraTrainJob: LoraTrainJobConfig) => {
+      persistSettingsPatch({ loraTrainJob })
+    },
+    [persistSettingsPatch]
+  )
+
+  const onSaveLoraTrainApp = async (loraTrainApp: LoraTrainAppSettings) => {
+    const next = normalizeSettings({ ...settingsRef.current, loraTrainApp })
+    await window.api.setSettings(next)
+    setSettings(next)
+  }
+
+  const onLoraStatus = useCallback((message: string, isError?: boolean) => {
+    if (isError) {
+      setError(message)
+      setStatus('')
+    } else {
+      setStatus(message)
+      setError(null)
+      window.setTimeout(() => setStatus(''), 4000)
+    }
+  }, [setError])
+
   const stopBatchCaption = () => {
     batchCancelRef.current = true
     captionAbortRef.current?.abort()
@@ -531,7 +574,8 @@ export default function App() {
 
       if (isCaptionFocused()) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen || missingDatasetOpen) return
+      if (deleteOpen || unsavedOpen || settingsOpen || loraSettingsOpen || removeDatasetOpen || missingDatasetOpen) return
+      if (settingsRef.current.activeView !== 'datasetEdit') return
 
       // Space/Enter would activate a previously focused control (e.g. list button).
       if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
@@ -593,6 +637,7 @@ export default function App() {
     deleteOpen,
     unsavedOpen,
     settingsOpen,
+    loraSettingsOpen,
     removeDatasetOpen,
     missingDatasetOpen
   ])
@@ -683,6 +728,8 @@ export default function App() {
     target.addEventListener('pointercancel', onUp)
   }
 
+  const isDatasetEdit = settings.activeView === 'datasetEdit'
+
   return (
     <div className="app">
       <header
@@ -694,231 +741,192 @@ export default function App() {
         }}
       >
         <div className="toolbar-left">
-          <div className="toolbar-dataset" ref={datasetMenuRef}>
+          {isDatasetEdit ? (
+            <>
+              <div className="toolbar-dataset" ref={datasetMenuRef}>
+                <button
+                  type="button"
+                  className="toolbar-dataset-trigger"
+                  disabled={settings.datasetFolders.length === 0}
+                  title={folder ?? 'No dataset folder'}
+                  aria-label="Dataset folder"
+                  aria-haspopup="listbox"
+                  aria-expanded={datasetMenuOpen}
+                  onClick={() => setDatasetMenuOpen((open) => !open)}
+                >
+                  <span className="toolbar-dataset-label">
+                    {folder ? folderLabel(folder) : 'No dataset folder'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <path fill="currentColor" d="M2 3.5h6L5 7.5 2 3.5z" />
+                  </svg>
+                </button>
+                {datasetMenuOpen && settings.datasetFolders.length > 0 && (
+                  <ul className="toolbar-dataset-menu" role="listbox" aria-label="Dataset folders">
+                    {settings.datasetFolders.map((dir) => (
+                      <li key={dir} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          className={
+                            dir === folder
+                              ? 'toolbar-dataset-option active'
+                              : 'toolbar-dataset-option'
+                          }
+                          aria-selected={dir === folder}
+                          title={dir}
+                          onClick={() => void switchDatasetFolder(dir)}
+                        >
+                          {folderLabel(dir)}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                className="primary toolbar-icon-btn"
+                title="Add Dataset Folder"
+                aria-label="Add Dataset Folder"
+                onClick={() => void addDatasetFolder()}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="toolbar-icon-btn danger"
+                disabled={!folder}
+                title="Remove dataset folder"
+                aria-label="Remove dataset folder"
+                onClick={requestRemoveDatasetFolder}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                  />
+                </svg>
+              </button>
+              <button type="button" onClick={() => setSettingsOpen(true)}>
+                Settings
+              </button>
+              <button
+                type="button"
+                className={analysisAnalyzing ? 'analyze-btn is-analyzing' : 'analyze-btn'}
+                disabled={!folder || images.length === 0}
+                onClick={() => setAnalysisOpen(true)}
+              >
+                <span className="analyze-btn-label">Analyze</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="toolbar-job-label" title={settings.loraTrainJob.name}>
+                {settings.loraTrainJob.name || 'LoRA Train'}
+              </span>
+              <button type="button" onClick={() => setLoraSettingsOpen(true)}>
+                Settings
+              </button>
+            </>
+          )}
+        </div>
+        <div className="toolbar-right">
+          <div
+            className="view-switch"
+            role="tablist"
+            aria-label="Main view"
+          >
             <button
               type="button"
-              className="toolbar-dataset-trigger"
-              disabled={settings.datasetFolders.length === 0}
-              title={folder ?? 'No dataset folder'}
-              aria-label="Dataset folder"
-              aria-haspopup="listbox"
-              aria-expanded={datasetMenuOpen}
-              onClick={() => setDatasetMenuOpen((open) => !open)}
+              role="tab"
+              className={`view-switch-seg${isDatasetEdit ? ' active' : ''}`}
+              aria-selected={isDatasetEdit}
+              onClick={() => setActiveView('datasetEdit')}
             >
-              <span className="toolbar-dataset-label">
-                {folder ? folderLabel(folder) : 'No dataset folder'}
-              </span>
-              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-                <path fill="currentColor" d="M2 3.5h6L5 7.5 2 3.5z" />
-              </svg>
+              DatasetEdit
             </button>
-            {datasetMenuOpen && settings.datasetFolders.length > 0 && (
-              <ul className="toolbar-dataset-menu" role="listbox" aria-label="Dataset folders">
-                {settings.datasetFolders.map((dir) => (
-                  <li key={dir} role="presentation">
-                    <button
-                      type="button"
-                      role="option"
-                      className={
-                        dir === folder
-                          ? 'toolbar-dataset-option active'
-                          : 'toolbar-dataset-option'
-                      }
-                      aria-selected={dir === folder}
-                      title={dir}
-                      onClick={() => void switchDatasetFolder(dir)}
-                    >
-                      {folderLabel(dir)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <button
+              type="button"
+              role="tab"
+              className={`view-switch-seg${!isDatasetEdit ? ' active' : ''}`}
+              aria-selected={!isDatasetEdit}
+              onClick={() => setActiveView('loraTrain')}
+            >
+              LoraTrain
+            </button>
           </div>
-          <button
-            type="button"
-            className="primary toolbar-icon-btn"
-            title="Add Dataset Folder"
-            aria-label="Add Dataset Folder"
-            onClick={() => void addDatasetFolder()}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="toolbar-icon-btn danger"
-            disabled={!folder}
-            title="Remove dataset folder"
-            aria-label="Remove dataset folder"
-            onClick={requestRemoveDatasetFolder}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
-              />
-            </svg>
-          </button>
-          <button type="button" onClick={() => setSettingsOpen(true)}>
-            Settings
-          </button>
-          <button
-            type="button"
-            className={analysisAnalyzing ? 'analyze-btn is-analyzing' : 'analyze-btn'}
-            disabled={!folder || images.length === 0}
-            onClick={() => setAnalysisOpen(true)}
-          >
-            <span className="analyze-btn-label">Analyze</span>
-          </button>
         </div>
       </header>
 
-      <div
-        className="main"
-        style={
-          {
-            '--sidebar-width': `${settings.sidebarWidth}px`,
-            '--right-pane-width': `${settings.rightPaneWidth}px`
-          } as CSSProperties
-        }
-      >
-        <aside className="sidebar">
-          <div className="list-toolbar">
-            <div className="list-toolbar-left">
-              {batchCaptioning ? (
-                <button type="button" onClick={stopBatchCaption}>
-                  Cancel Auto Caption
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void startAutoCaption()}
-                  disabled={!folder || missingCount === 0 || captionBusy}
-                  title={
-                    missingCount === 0
-                      ? 'All images already have .txt captions'
-                      : `Caption ${missingCount} image(s) without .txt`
-                  }
-                >
-                  Auto Caption{missingCount > 0 ? ` (${missingCount})` : ''}
-                </button>
-              )}
-            </div>
-            <div className="list-toolbar-right">
-              <button
-                type="button"
-                className={`list-toolbar-btn${settings.listViewMode === 'list' ? ' active' : ''}`}
-                aria-pressed={settings.listViewMode === 'list'}
-                title="List view"
-                onClick={() => setListViewMode('list')}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M1 2.5h12v1.5H1V2.5zm0 4h12V8H1V6.5zm0 4h12V12H1v-1.5z"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className={`list-toolbar-btn${settings.listViewMode === 'thumbnails' ? ' active' : ''}`}
-                aria-pressed={settings.listViewMode === 'thumbnails'}
-                title="Thumbnail view"
-                onClick={() => setListViewMode('thumbnails')}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M1 1h5v5H1V1zm7 0h5v5H8V1zM1 8h5v5H1V8zm7 0h5v5H8V8z"
-                  />
-                </svg>
-              </button>
-              <input
-                type="range"
-                className="list-toolbar-slider"
-                min={48}
-                max={160}
-                step={4}
-                value={settings.thumbnailWidth}
-                disabled={settings.listViewMode !== 'thumbnails'}
-                title="Thumbnail width"
-                aria-label="Thumbnail width"
-                onChange={(e) => onThumbnailWidthChange(Number(e.target.value))}
-                onPointerUp={(e) => {
-                  onThumbnailWidthCommit(Number(e.currentTarget.value))
-                  e.currentTarget.blur()
-                }}
-                onKeyUp={(e) => {
-                  onThumbnailWidthCommit(Number(e.currentTarget.value))
-                  e.currentTarget.blur()
-                }}
-              />
-            </div>
-          </div>
-          <div className="sidebar-list">
-            <ImageList
-              images={images}
-              selectedPath={selectedPath}
-              dirtyPaths={dirtyPaths}
-              busyPaths={busyPaths}
-              viewMode={settings.listViewMode}
-              thumbnailWidth={settings.thumbnailWidth}
-              onSelect={(path) => void selectImage(path)}
-            />
-          </div>
-        </aside>
-
-        <button
-          type="button"
-          className={`pane-resizer${draggingPane === 'sidebar' ? ' dragging' : ''}`}
-          aria-label="Resize image list"
-          title="Drag to resize"
-          onPointerDown={startPaneResize('sidebar')}
+      {isDatasetEdit ? (
+        <DatasetEditView
+          settings={settings}
+          images={images}
+          selectedPath={selectedPath}
+          dirtyPaths={dirtyPaths}
+          busyPaths={busyPaths}
+          folder={folder}
+          missingCount={missingCount}
+          batchCaptioning={batchCaptioning}
+          captionBusy={captionBusy}
+          english={english}
+          translated={translated}
+          translating={translating}
+          translatingPath={translatingPath}
+          captioningPath={captioningPath}
+          dirty={dirty}
+          imageUrl={imageUrl}
+          draggingPane={draggingPane}
+          onStopBatchCaption={stopBatchCaption}
+          onStartAutoCaption={() => void startAutoCaption()}
+          onSetListViewMode={setListViewMode}
+          onThumbnailWidthChange={onThumbnailWidthChange}
+          onThumbnailWidthCommit={onThumbnailWidthCommit}
+          onSelectImage={(path) => void selectImage(path)}
+          onStartPaneResize={startPaneResize}
+          onEnglishChange={onEnglishChange}
+          onTranslatedChange={onTranslatedChange}
+          onLanguageChange={(code) => void onLanguageChange(code)}
+          onSave={() => void saveCurrent()}
+          onRecaption={() => void reCaptionCurrent()}
         />
-
-        <section className="center-pane">
-          <ImagePreview imagePath={selectedPath} imageUrl={imageUrl} />
-        </section>
-
-        <button
-          type="button"
-          className={`pane-resizer${draggingPane === 'right' ? ' dragging' : ''}`}
-          aria-label="Resize caption pane"
-          title="Drag to resize"
-          onPointerDown={startPaneResize('right')}
+      ) : (
+        <LoraTrainView
+          job={settings.loraTrainJob}
+          appSettings={settings.loraTrainApp}
+          datasetFolders={settings.datasetFolders}
+          onChange={onLoraJobChange}
+          onStatus={onLoraStatus}
         />
-
-        <section className="right-pane">
-          <CaptionEditor
-            english={english}
-            translated={translated}
-            targetLanguage={settings.targetLanguage}
-            translating={Boolean(translating && translatingPath === selectedPath)}
-            captioning={captioningPath !== null && captioningPath === selectedPath}
-            canSave={Boolean(selectedPath) && dirty && !captionBusy}
-            canRecaption={Boolean(selectedPath) && !captionBusy}
-            onEnglishChange={onEnglishChange}
-            onTranslatedChange={onTranslatedChange}
-            onLanguageChange={(code) => void onLanguageChange(code)}
-            onSave={() => void saveCurrent()}
-            onRecaption={() => void reCaptionCurrent()}
-          />
-        </section>
-      </div>
+      )}
 
       <footer className="system-bar">
         <div className="system-bar-left">
-          {folder && (
-            <span className="folder-path" title={folder}>
-              {folder}
-            </span>
+          {isDatasetEdit ? (
+            <>
+              {folder && (
+                <span className="folder-path" title={folder}>
+                  {folder}
+                </span>
+              )}
+              {folder && <span className="image-count">{images.length} image(s)</span>}
+            </>
+          ) : (
+            <>
+              <span className="folder-path" title={settings.loraTrainJob.datasets[0]?.folder_path}>
+                {settings.loraTrainJob.datasets[0]?.folder_path || 'No train dataset'}
+              </span>
+              <span className="image-count">
+                {settings.loraTrainJob.train.steps} steps · lr {settings.loraTrainJob.train.lr}
+              </span>
+            </>
           )}
-          {folder && <span className="image-count">{images.length} image(s)</span>}
         </div>
         <div className="system-bar-right">
           {toolbarStatus && (
@@ -926,7 +934,7 @@ export default function App() {
               {toolbarStatus}
             </span>
           )}
-          {dirty && <span className="dirty-flag">Unsaved</span>}
+          {isDatasetEdit && dirty && <span className="dirty-flag">Unsaved</span>}
         </div>
       </footer>
 
@@ -936,6 +944,13 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onSave={onSaveSettings}
         onAutoSave={onAutoSaveSettings}
+      />
+
+      <LoraTrainSettingsDialog
+        open={loraSettingsOpen}
+        settings={settings.loraTrainApp}
+        onClose={() => setLoraSettingsOpen(false)}
+        onSave={onSaveLoraTrainApp}
       />
 
       <AnalysisDialog

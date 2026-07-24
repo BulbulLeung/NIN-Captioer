@@ -22,6 +22,15 @@
     "files": [
       "out/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "trainer",
+        "to": "trainer",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "asar": true,
     "icon": "build/icon.ico",
     "win": {

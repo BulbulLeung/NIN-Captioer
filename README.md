@@ -26,6 +26,7 @@
 - **Bidirectional translation**: English (top) ↔ target language (bottom, Traditional Chinese by default); edits on either side stay in sync
 - **Auto Caption / reCaption**: generate captions with a local vision/LLM and custom prompts (PNG Info is appended at runtime)
 - **Caption Analysis**: caption coverage, LoRA Health Score, and per-category detail distributions (pie charts)
+- **Lora Train**: native **Krea 2** LoRA trainer (train on Raw, use on Turbo) with Start/Stop, progress log, and config export
 - **Resizable layout**: drag splitters to resize panes; window position is remembered
 
 ---
@@ -37,6 +38,7 @@
 | OS | Windows x64 (packaged with `electron-builder --win`) |
 | Development | Node.js 18+ |
 | AI backend (optional) | [LM Studio](https://lmstudio.ai/) or [Ollama](https://ollama.com/), reachable on localhost |
+| Krea 2 training (optional) | CUDA Python + packages in `trainer/requirements.txt`; recent `diffusers` with `Krea2Pipeline` |
 
 You can still edit and save captions without an AI backend. Translation, Auto Caption, and Analyze require a running model service.
 
@@ -165,7 +167,31 @@ Use this to check dataset diversity and whether captions are skewed.
 3. **Auto Caption** to fill missing `.txt` files  
 4. Review / refine via the translation pane, then save English  
 5. **Analyze** for Health Score and category balance; **reCaption** or edit by hand as needed  
-6. Point your LoRA training script / GUI at the folder  
+6. Switch to **LoraTrain** → set dataset folder, Train base = Raw, Sample = Turbo → **Settings** (Python path) → **Start Train**
+
+---
+
+## Krea 2 LoRA training (native)
+
+Captioer ships a native trainer under `trainer/` (also packaged into `resources/trainer`).
+
+**Recommended workflow (official):** train LoRA on **Krea-2-Raw**, apply on **Krea-2-Turbo**.
+
+1. Install CUDA PyTorch, then:
+   ```bash
+   pip install -r trainer/requirements.txt
+   ```
+   If `Krea2Pipeline` is missing, install diffusers from git:
+   ```bash
+   pip install "git+https://github.com/huggingface/diffusers.git"
+   ```
+2. In the app: **LoraTrain** → **Settings** → set **Python executable** → **Verify environment**
+3. Optionally set **Model download path** (default: app `userData/models`). On entering LoRA Train, Captioer checks Raw / Turbo and prompts **Download** or **Update**.
+4. Set **Train base** to `krea/Krea-2-Raw` (or a local path), **Sample / apply on** to `krea/Krea-2-Turbo`
+5. Point **folder_path** at your captioned dataset, then **Start Train**
+6. Weights write under `{training_folder}/{name}/`
+
+VRAM: Krea 2 is large; use a high-VRAM NVIDIA GPU, `bf16`, and gradient checkpointing (defaults).
 
 ---
 
