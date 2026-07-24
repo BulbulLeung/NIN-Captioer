@@ -228,7 +228,7 @@ function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraT
   if (!o) return { ...fallback, resolution: [...fallback.resolution] }
   return {
     folder_path: asString(o.folder_path, fallback.folder_path),
-    caption_ext: asString(o.caption_ext, fallback.caption_ext),
+    caption_ext: 'txt',
     caption_dropout_rate: asNumber(o.caption_dropout_rate, fallback.caption_dropout_rate),
     shuffle_tokens: asBool(o.shuffle_tokens, fallback.shuffle_tokens),
     cache_latents_to_disk: asBool(o.cache_latents_to_disk, fallback.cache_latents_to_disk),

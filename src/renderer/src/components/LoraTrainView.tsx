@@ -37,6 +37,10 @@ function resolveDownloadRepoId(st?: ModelStatusItem | null): string | null {
   return null
 }
 
+function folderLabel(dir: string): string {
+  return dir.split(/[/\\]/).pop() ?? dir
+}
+
 const SECTIONS: { id: SectionId; label: string; hint: string }[] = [
   { id: 'basics', label: 'Basics', hint: 'Name, output, models' },
   { id: 'dataset', label: 'Dataset', hint: 'Images + captions' },
@@ -45,6 +49,8 @@ const SECTIONS: { id: SectionId; label: string; hint: string }[] = [
   { id: 'sample', label: 'Sample', hint: 'Preview during train' },
   { id: 'advanced', label: 'Advanced', hint: 'Save, EMA, VRAM' }
 ]
+
+const RESOLUTION_OPTIONS = [256, 512, 768, 1024, 1280, 1328, 1536, 2048] as const
 
 interface Props {
   job: LoraTrainJobConfig
@@ -109,9 +115,6 @@ export function LoraTrainView({
   onStatus
 }: Props) {
   const [draft, setDraft] = useState(() => normalizeLoraTrainJob(job))
-  const [resolutionText, setResolutionText] = useState(() =>
-    normalizeLoraTrainJob(job).datasets[0].resolution.join(', ')
-  )
   const [activeSection, setActiveSection] = useState<SectionId>('basics')
   const [exporting, setExporting] = useState(false)
   const [training, setTraining] = useState(false)
@@ -141,7 +144,6 @@ export function LoraTrainView({
     skipPersist.current = true
     const next = normalizeLoraTrainJob(job)
     setDraft(next)
-    setResolutionText(next.datasets[0].resolution.join(', '))
   }, [job])
 
   const patch = useCallback((updater: (prev: LoraTrainJobConfig) => LoraTrainJobConfig) => {
@@ -412,15 +414,6 @@ export function LoraTrainView({
     void refreshModelStatus()
   }
 
-  const browseDatasetFolder = async () => {
-    const dir = await window.api.openFolder()
-    if (!dir) return
-    patch((prev) => ({
-      ...prev,
-      datasets: prev.datasets.map((ds, i) => (i === 0 ? { ...ds, folder_path: dir } : ds))
-    }))
-  }
-
   const browseTrainingFolder = async () => {
     const dir = await window.api.openFolder()
     if (!dir) return
@@ -460,7 +453,7 @@ export function LoraTrainView({
     const normalized = normalizeLoraTrainJob(draftRef.current)
     if (!normalized.datasets[0]?.folder_path) {
       setActiveSection('dataset')
-      onStatus('Choose a dataset folder first', true)
+      onStatus('Choose a DatasetEdit preset first', true)
       return
     }
     if (normalized.model.arch !== 'krea2') {
@@ -542,7 +535,7 @@ export function LoraTrainView({
               </button>
             ))}
             <p className="lora-nav-note">
-              Required: dataset folder + Train base (Raw)
+              Required: DatasetEdit preset + Train base (Raw)
               {!hasDataset ? (
                 <>
                   {' '}
@@ -777,97 +770,92 @@ export function LoraTrainView({
 
           {activeSection === 'dataset' && (
             <div className="lora-grid">
-              <Field label="Dataset folder" hint="Folder of images with matching .txt captions">
-                <div className="model-row">
-                  <input
-                    type="text"
-                    value={ds0.folder_path}
-                    disabled={training}
-                    onChange={(e) =>
-                      patch((p) => ({
-                        ...p,
-                        datasets: p.datasets.map((ds, i) =>
-                          i === 0 ? { ...ds, folder_path: e.target.value } : ds
-                        )
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    disabled={training}
-                    onClick={() => void browseDatasetFolder()}
-                  >
-                    Browse
-                  </button>
-                </div>
-                {datasetFolders.length > 0 && (
-                  <select
-                    className="lora-folder-pick"
-                    aria-label="Pick from DatasetEdit folders"
-                    disabled={training}
-                    value=""
-                    onChange={(e) => {
-                      const v = e.target.value
-                      if (!v) return
-                      patch((p) => ({
-                        ...p,
-                        datasets: p.datasets.map((ds, i) =>
-                          i === 0 ? { ...ds, folder_path: v } : ds
-                        )
-                      }))
-                    }}
-                  >
-                    <option value="">Use DatasetEdit folder…</option>
-                    {datasetFolders.map((dir) => (
-                      <option key={dir} value={dir}>
-                        {dir}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Field label="Caption file extension" hint="Usually txt">
-                <input
-                  type="text"
-                  value={ds0.caption_ext}
-                  disabled={training}
-                  onChange={(e) =>
-                    patch((p) => ({
-                      ...p,
-                      datasets: p.datasets.map((ds, i) =>
-                        i === 0 ? { ...ds, caption_ext: e.target.value } : ds
-                      )
-                    }))
-                  }
-                />
-              </Field>
               <Field
-                label="Resolution"
-                hint="Comma-separated sizes, e.g. 1024 or 512, 768, 1024"
+                label="Dataset"
+                hint="Select a dataset preset from DatasetEdit (images with matching .txt captions)"
               >
-                <input
-                  type="text"
-                  value={resolutionText}
-                  disabled={training}
-                  onChange={(e) => setResolutionText(e.target.value)}
-                  onBlur={() => {
-                    const nums = resolutionText
-                      .split(/[,\s]+/)
-                      .map((s) => Number(s.trim()))
-                      .filter((n) => Number.isFinite(n) && n > 0)
-                    if (nums.length === 0) {
-                      setResolutionText(ds0.resolution.join(', '))
-                      return
-                    }
-                    setResolutionText(nums.join(', '))
+                <select
+                  className="lora-folder-pick"
+                  aria-label="DatasetEdit preset"
+                  disabled={training || (datasetFolders.length === 0 && !ds0.folder_path)}
+                  value={ds0.folder_path || ''}
+                  onChange={(e) => {
+                    const v = e.target.value
                     patch((p) => ({
                       ...p,
                       datasets: p.datasets.map((ds, i) =>
-                        i === 0 ? { ...ds, resolution: nums } : ds
+                        i === 0 ? { ...ds, folder_path: v } : ds
                       )
                     }))
                   }}
-                />
+                  title={ds0.folder_path || undefined}
+                >
+                  <option value="">
+                    {datasetFolders.length === 0
+                      ? 'No DatasetEdit presets — add one in DatasetEdit'
+                      : 'Select DatasetEdit preset…'}
+                  </option>
+                  {ds0.folder_path && !datasetFolders.includes(ds0.folder_path) ? (
+                    <option value={ds0.folder_path}>
+                      {folderLabel(ds0.folder_path)} (not in DatasetEdit)
+                    </option>
+                  ) : null}
+                  {datasetFolders.map((dir) => (
+                    <option key={dir} value={dir} title={dir}>
+                      {folderLabel(dir)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                label="Resolutions"
+                hint="Toggle one or more training sizes"
+              >
+                <div className="lora-resolution-grid" role="group" aria-label="Resolutions">
+                  {RESOLUTION_OPTIONS.map((size) => {
+                    const on = ds0.resolution.includes(size)
+                    return (
+                      <div
+                        key={size}
+                        className={`lora-resolution-toggle${on ? ' is-on' : ''}${
+                          training ? ' is-disabled' : ''
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          role="switch"
+                          className="lora-switch"
+                          aria-checked={on}
+                          aria-label={`${size}`}
+                          disabled={training}
+                          onClick={() => {
+                            patch((p) => ({
+                              ...p,
+                              datasets: p.datasets.map((ds, i) => {
+                                if (i !== 0) return ds
+                                const has = ds.resolution.includes(size)
+                                if (has) {
+                                  const next = ds.resolution.filter((r) => r !== size)
+                                  return {
+                                    ...ds,
+                                    resolution: next.length > 0 ? next : [size]
+                                  }
+                                }
+                                return {
+                                  ...ds,
+                                  resolution: [...ds.resolution, size].sort((a, b) => a - b)
+                                }
+                              })
+                            }))
+                          }}
+                        >
+                          <span className="lora-switch-knob" aria-hidden="true" />
+                        </button>
+                        <span className="lora-resolution-value">{size}</span>
+                      </div>
+                    )
+                  })}
+                </div>
               </Field>
               <Field label="Caption dropout" hint="0–1; randomly blank captions during training">
                 <input
