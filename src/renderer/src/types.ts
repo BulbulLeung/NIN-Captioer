@@ -10,16 +10,20 @@ import {
   type Wd14Settings
 } from './defaults/captionFormats'
 import {
+  createDefaultLoraTrainJobPreset,
+  createLoraTrainJobId,
   DEFAULT_LORA_TRAIN_APP,
   DEFAULT_LORA_TRAIN_JOB,
+  DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
   KREA2_RAW,
-  KREA2_TURBO,
   normalizeActiveView,
   normalizeLoraTrainApp,
   normalizeLoraTrainJob,
+  normalizeLoraTrainJobPresets,
   type ActiveView,
   type LoraTrainAppSettings,
-  type LoraTrainJobConfig
+  type LoraTrainJobConfig,
+  type LoraTrainJobPreset
 } from './defaults/loraTrain'
 
 export type {
@@ -28,6 +32,7 @@ export type {
   CaptionFormatOption,
   LoraTrainAppSettings,
   LoraTrainJobConfig,
+  LoraTrainJobPreset,
   Wd14Settings
 }
 export {
@@ -35,13 +40,16 @@ export {
   DEFAULT_CAPTION_FORMAT,
   DEFAULT_LORA_TRAIN_APP,
   DEFAULT_LORA_TRAIN_JOB,
+  DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
   DEFAULT_WD14_SETTINGS,
   KREA2_RAW,
-  KREA2_TURBO,
+  createDefaultLoraTrainJobPreset,
+  createLoraTrainJobId,
   normalizeActiveView,
   normalizeCaptionFormat,
   normalizeLoraTrainApp,
   normalizeLoraTrainJob,
+  normalizeLoraTrainJobPresets,
   normalizeWd14Settings
 }
 
@@ -102,7 +110,8 @@ export interface AppSettings {
   listViewMode: ListViewMode
   thumbnailWidth: number
   activeView: ActiveView
-  loraTrainJob: LoraTrainJobConfig
+  loraTrainJobs: LoraTrainJobPreset[]
+  activeLoraTrainJobId: string
   loraTrainApp: LoraTrainAppSettings
 }
 
@@ -150,7 +159,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   listViewMode: 'list',
   thumbnailWidth: 96,
   activeView: 'datasetEdit',
-  loraTrainJob: structuredClone(DEFAULT_LORA_TRAIN_JOB),
+  loraTrainJobs: [createDefaultLoraTrainJobPreset()],
+  activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
   loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP }
 }
 
@@ -201,6 +211,7 @@ function normalizeDatasetFolders(raw: unknown, lastFolder: string | null): strin
 
 export function normalizeSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
   const merged = { ...DEFAULT_SETTINGS, ...raw }
+  const rawRecord = (raw ?? {}) as Record<string, unknown>
   let presets = Array.isArray(merged.captionPresets) ? merged.captionPresets.filter(Boolean) : []
   if (presets.length === 0) {
     presets = [createDefaultCaptionPreset()]
@@ -217,12 +228,26 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
   if (lastFolder && !datasetFolders.includes(lastFolder) && datasetFolders.length > 0) {
     lastFolder = datasetFolders[0]
   }
-  const loraTrainJob = normalizeLoraTrainJob(merged.loraTrainJob)
+  const { jobs: loraTrainJobs, activeId: activeLoraTrainJobId } = normalizeLoraTrainJobPresets(
+    rawRecord.loraTrainJobs ?? merged.loraTrainJobs,
+    rawRecord.loraTrainJob,
+    rawRecord.activeLoraTrainJobId ?? merged.activeLoraTrainJobId
+  )
+  const activeJobIndex = Math.max(
+    0,
+    loraTrainJobs.findIndex((j) => j.id === activeLoraTrainJobId)
+  )
+  const activePreset = loraTrainJobs[activeJobIndex]
   // Seed dataset folder from DatasetEdit lastFolder when empty
-  if (!loraTrainJob.datasets[0]?.folder_path && lastFolder) {
-    loraTrainJob.datasets[0] = {
-      ...loraTrainJob.datasets[0],
-      folder_path: lastFolder
+  if (!activePreset.job.datasets[0]?.folder_path && lastFolder) {
+    loraTrainJobs[activeJobIndex] = {
+      ...activePreset,
+      job: {
+        ...activePreset.job,
+        datasets: activePreset.job.datasets.map((ds, i) =>
+          i === 0 ? { ...ds, folder_path: lastFolder } : ds
+        )
+      }
     }
   }
   return {
@@ -240,7 +265,8 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     listViewMode: normalizeListViewMode(merged.listViewMode),
     thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth),
     activeView: normalizeActiveView(merged.activeView),
-    loraTrainJob,
+    loraTrainJobs,
+    activeLoraTrainJobId,
     loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp)
   }
 }
@@ -270,6 +296,24 @@ declare global {
       getResourceStats: (deviceId?: string) => Promise<ResourceStats>
       killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>
       checkTrainEnv: (pythonPath?: string) => Promise<{ ok: boolean; message: string }>
+      defaultPythonInstallPath: () => Promise<string>
+      probePython: (pythonPath?: string) => Promise<{
+        status: 'ready' | 'missingPython' | 'missingPackages' | 'error'
+        message: string
+        pythonPath?: string
+        version?: string
+        cuda?: boolean
+        krea?: boolean
+        missing?: string[]
+      }>
+      installPython: (opts?: {
+        installPath?: string
+      }) => Promise<{ ok: boolean; pythonPath?: string; message: string }>
+      cancelPythonInstall: () => Promise<{ ok: boolean }>
+      pythonInstallStatus: () => Promise<{ running: boolean }>
+      onPythonInstallProgress: (
+        cb: (payload: { stage: string; message: string; pct: number }) => void
+      ) => () => void
       startTrain: (opts: {
         pythonPath?: string
         configJson: string

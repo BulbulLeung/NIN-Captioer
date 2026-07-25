@@ -253,7 +253,8 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       listViewMode: draft.listViewMode,
       thumbnailWidth: draft.thumbnailWidth,
       activeView: draft.activeView,
-      loraTrainJob: draft.loraTrainJob,
+      loraTrainJobs: draft.loraTrainJobs,
+      activeLoraTrainJobId: draft.activeLoraTrainJobId,
       loraTrainApp: draft.loraTrainApp
     })
   }
@@ -388,10 +389,18 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
                 loraTrainApp: { ...prev.loraTrainApp, pythonPath }
               }))
             }
+            installPath={draft.loraTrainApp.pythonInstallPath}
+            onInstallPathChange={(pythonInstallPath) =>
+              setDraft((prev) => ({
+                ...prev,
+                loraTrainApp: { ...prev.loraTrainApp, pythonInstallPath }
+              }))
+            }
+            enabled={open}
           />
           <p className="field-hint">
-            Used when Caption format is set to Danbooru Tags(SD/XL). Requires{' '}
-            <code>pip install -r trainer/requirements-wd14.txt</code> in the Python above.
+            Used when Caption format is set to Danbooru Tags(SD/XL). Download installs WD14 +
+            training packages into the install path venv.
           </p>
           <label className="field">
             <span>Model repo</span>

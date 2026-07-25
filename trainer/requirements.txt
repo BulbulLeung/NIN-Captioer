@@ -16,3 +16,6 @@ Pillow>=10.0.0
 sentencepiece>=0.2.0
 protobuf>=4.0.0
 bitsandbytes>=0.43.0; platform_system=="Linux" or platform_system=="Windows"
+# 0.9.x works with torch 2.6; 0.16+ needs torch>=2.11
+torchao>=0.9.0,<0.16.0
+

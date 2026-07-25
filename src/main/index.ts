@@ -5,6 +5,13 @@ import { readFile, writeFile, readdir, access, constants, mkdtemp } from 'fs/pro
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import { cpus, freemem, totalmem, tmpdir } from 'os'
+import {
+  cancelPythonInstall,
+  defaultPythonInstallPath,
+  installPythonEnv,
+  probePython,
+  pythonInstallRunning
+} from './pythonEnv'
 
 const execFileAsync = promisify(execFile)
 
@@ -506,13 +513,16 @@ function isProtectedGpuProcess(pid: number, name: string, exePath: string | null
   return false
 }
 
+/** Soft cap for IPC payload; UI may show fewer based on panel height (min 12). */
+const GPU_VRAM_APPS_FETCH_LIMIT = 64
+
 function finalizeGpuVramApps(
   apps: { pid: number; name: string; memUsedMiB: number; path?: string | null }[]
 ): GpuVramApp[] {
   return apps
     .filter((a) => Number.isFinite(a.memUsedMiB) && a.memUsedMiB >= 1 && a.name)
     .sort((a, b) => b.memUsedMiB - a.memUsedMiB)
-    .slice(0, 12)
+    .slice(0, GPU_VRAM_APPS_FETCH_LIMIT)
     .map((a) => ({
       pid: a.pid,
       name: a.name,
@@ -1056,6 +1066,33 @@ app.whenReady().then(async () => {
     return { ok: true }
   })
 
+  ipcMain.handle('python:defaultInstallPath', async () => defaultPythonInstallPath())
+
+  ipcMain.handle('python:probe', async (_event, pythonPath?: string) => probePython(pythonPath))
+
+  ipcMain.handle('python:installStatus', async () => ({
+    running: pythonInstallRunning()
+  }))
+
+  ipcMain.handle('python:cancelInstall', async () => cancelPythonInstall())
+
+  ipcMain.handle(
+    'python:install',
+    async (_event, opts?: { installPath?: string }) => {
+      if (pythonInstallRunning()) {
+        return { ok: false, message: 'Python install already running' }
+      }
+      const result = await installPythonEnv({
+        installPath: opts?.installPath,
+        trainerRoot: trainerRoot(),
+        onProgress: (p) => {
+          mainWindow?.webContents.send('python:installProgress', p)
+        }
+      })
+      return result
+    }
+  )
+
   ipcMain.handle('train:checkEnv', async (_event, pythonPath?: string) => {
     const py = (pythonPath && pythonPath.trim()) || 'python'
     const code = [
@@ -1167,12 +1204,20 @@ app.whenReady().then(async () => {
         })
         trainProc = child
         emitTrain('train:log', { line: `Started: ${py} ${script}`, stream: 'system' })
+        const recentLines: string[] = []
+        let structuredError: string | null = null
 
         const onChunk = (chunk: Buffer, stream: 'stdout' | 'stderr') => {
           const text = chunk.toString('utf8')
           for (const raw of text.split(/\r?\n/)) {
             const line = raw.trimEnd()
             if (!line) continue
+            // bitsandbytes spams this once per Linear per step — hide from UI log
+            if (/MatMul8bitLt:/i.test(line)) continue
+            recentLines.push(`[${stream}] ${line}`)
+            if (recentLines.length > 40) recentLines.shift()
+            const trainErr = line.match(/^CAPTIOER_TRAIN_ERROR\s+message=(.+)$/)
+            if (trainErr) structuredError = trainErr[1].trim()
             emitTrain('train:log', { line, stream })
             const m = line.match(
               /^CAPTIOER_PROGRESS\s+step=(\d+)\s+total=(\d+)\s+loss=([0-9.eE+-]+)/
@@ -1202,8 +1247,16 @@ app.whenReady().then(async () => {
           if (code === 0) {
             emitTrain('train:log', { line: 'Process exited OK', stream: 'system' })
           } else {
+            const detail =
+              structuredError ||
+              recentLines
+                .filter((l) => /ERROR:|Error|Traceback|Exception/i.test(l))
+                .slice(-3)
+                .join(' | ')
             emitTrain('train:error', {
-              message: `Process exited code=${code}${signal ? ` signal=${signal}` : ''}`
+              message: detail
+                ? `Process exited code=${code}${signal ? ` signal=${signal}` : ''}: ${detail}`
+                : `Process exited code=${code}${signal ? ` signal=${signal}` : ''}`
             })
           }
         })

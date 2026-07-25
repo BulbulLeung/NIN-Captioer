@@ -38,6 +38,8 @@ export interface LoraTrainTrainConfig {
   train_unet: boolean
   train_text_encoder: boolean
   gradient_checkpointing: boolean
+  /** Cache text encoder outputs to disk (AI-Toolkit-style; required on ~24GB). */
+  cache_text_embeddings: boolean
   noise_scheduler: string
   optimizer: string
   lr: number
@@ -51,7 +53,6 @@ export interface LoraTrainModelConfig {
   /** @deprecated prefer train_name_or_path */
   name_or_path: string
   train_name_or_path: string
-  sample_name_or_path: string
   arch: LoraTrainArch
   quantize: boolean
   low_vram: boolean
@@ -91,24 +92,26 @@ export interface LoraTrainJobConfig {
   sample: LoraTrainSampleConfig
 }
 
+export interface LoraTrainJobPreset {
+  id: string
+  job: LoraTrainJobConfig
+}
+
 /** Environment / preference settings for the LoraTrain Settings dialog. */
 export interface LoraTrainAppSettings {
   pythonPath: string
+  /** Empty = app userData/python */
+  pythonInstallPath: string
   huggingfaceToken: string
   /** Local folder for HF model downloads; empty = app userData/models */
   modelDownloadPath: string
   defaultTrainingFolder: string
   defaultDevice: string
-  exportDir: string
-  exportFileName: string
   /** @deprecated migrated to pythonPath */
   aiToolkitPath?: string
-  yamlExportDir?: string
-  yamlExportFileName?: string
 }
 
 export const KREA2_RAW = 'krea/Krea-2-Raw'
-export const KREA2_TURBO = 'krea/Krea-2-Turbo'
 
 export const DEFAULT_SAMPLE_PROMPTS: string[] = [
   'woman with red hair, playing chess at the park, bomb going off in the background',
@@ -169,6 +172,7 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     train_unet: true,
     train_text_encoder: false,
     gradient_checkpointing: true,
+    cache_text_embeddings: true,
     noise_scheduler: 'flowmatch',
     optimizer: 'adamw8bit',
     lr: 1e-4,
@@ -183,7 +187,6 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
   model: {
     name_or_path: KREA2_RAW,
     train_name_or_path: KREA2_RAW,
-    sample_name_or_path: KREA2_TURBO,
     arch: 'krea2',
     quantize: false,
     low_vram: false
@@ -204,12 +207,17 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
 
 export const DEFAULT_LORA_TRAIN_APP: LoraTrainAppSettings = {
   pythonPath: '',
+  pythonInstallPath: '',
   huggingfaceToken: '',
   modelDownloadPath: '',
   defaultTrainingFolder: 'output',
-  defaultDevice: 'cuda:0',
-  exportDir: '',
-  exportFileName: 'captioer_krea2_train.json'
+  defaultDevice: 'cuda:0'
+}
+
+export const DEFAULT_LORA_TRAIN_JOB_PRESET_ID = 'job-default'
+
+export function createLoraTrainJobId(): string {
+  return `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -319,7 +327,6 @@ export function normalizeLoraTrainJob(
 
   const legacyPath = asString(model.name_or_path, d.model.train_name_or_path)
   const trainPath = asString(model.train_name_or_path, legacyPath || d.model.train_name_or_path)
-  const samplePath = asString(model.sample_name_or_path, d.model.sample_name_or_path)
 
   return {
     name: asString(o.name, d.name),
@@ -354,6 +361,10 @@ export function normalizeLoraTrainJob(
         train.gradient_checkpointing,
         d.train.gradient_checkpointing
       ),
+      cache_text_embeddings: asBool(
+        train.cache_text_embeddings,
+        d.train.cache_text_embeddings
+      ),
       noise_scheduler: asString(train.noise_scheduler, d.train.noise_scheduler),
       optimizer: asString(train.optimizer, d.train.optimizer),
       lr: asNumber(train.lr, d.train.lr),
@@ -368,7 +379,6 @@ export function normalizeLoraTrainJob(
     model: {
       name_or_path: trainPath,
       train_name_or_path: trainPath,
-      sample_name_or_path: samplePath,
       arch: normalizeArch(model.arch),
       quantize: asBool(model.quantize, d.model.quantize),
       low_vram: asBool(model.low_vram, d.model.low_vram)
@@ -393,6 +403,44 @@ export function normalizeLoraTrainJob(
   }
 }
 
+export function createDefaultLoraTrainJobPreset(
+  job?: LoraTrainJobConfig,
+  id = DEFAULT_LORA_TRAIN_JOB_PRESET_ID
+): LoraTrainJobPreset {
+  return {
+    id,
+    job: normalizeLoraTrainJob(job ?? DEFAULT_LORA_TRAIN_JOB)
+  }
+}
+
+export function normalizeLoraTrainJobPresets(
+  rawJobs: unknown,
+  legacyJob: unknown,
+  activeIdRaw: unknown
+): { jobs: LoraTrainJobPreset[]; activeId: string } {
+  const jobs: LoraTrainJobPreset[] = []
+  if (Array.isArray(rawJobs)) {
+    for (const item of rawJobs) {
+      const o = asRecord(item)
+      if (!o) continue
+      const id = asString(o.id, '')
+      if (!id) continue
+      jobs.push({
+        id,
+        job: normalizeLoraTrainJob(o.job ?? o)
+      })
+    }
+  }
+  if (jobs.length === 0) {
+    jobs.push(createDefaultLoraTrainJobPreset(legacyJob as LoraTrainJobConfig | undefined))
+  }
+  const activeId =
+    typeof activeIdRaw === 'string' && jobs.some((j) => j.id === activeIdRaw)
+      ? activeIdRaw
+      : jobs[0].id
+  return { jobs, activeId }
+}
+
 export function normalizeLoraTrainApp(
   raw: Partial<LoraTrainAppSettings> | null | undefined
 ): LoraTrainAppSettings {
@@ -404,18 +452,11 @@ export function normalizeLoraTrainApp(
       : asString(o.pythonPath, d.pythonPath)
   return {
     pythonPath: pythonFromLegacy,
+    pythonInstallPath: asString(o.pythonInstallPath, d.pythonInstallPath),
     huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken),
     modelDownloadPath: asString(o.modelDownloadPath, d.modelDownloadPath),
     defaultTrainingFolder: asString(o.defaultTrainingFolder, d.defaultTrainingFolder),
-    defaultDevice: asString(o.defaultDevice, d.defaultDevice),
-    exportDir: asString(
-      o.exportDir ?? o.yamlExportDir,
-      d.exportDir
-    ),
-    exportFileName: asString(
-      o.exportFileName ?? o.yamlExportFileName,
-      d.exportFileName
-    )
+    defaultDevice: asString(o.defaultDevice, d.defaultDevice)
   }
 }
 

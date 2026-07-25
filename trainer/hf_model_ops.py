@@ -100,13 +100,16 @@ def dir_has_model_files(directory: Path) -> bool:
     Our downloads write `.captioer_model.json` only after success. `model_index.json`
     alone is not enough: HF often fetches it early while large weights are still
     incomplete (leaving `.lock` / `.incomplete` under `.cache`).
+
+    Trust the sidecar first: huggingface_hub may leave residual `.incomplete`
+    markers even after a successful snapshot_download.
     """
     if not directory.is_dir():
         return False
-    if download_is_incomplete(directory):
-        return False
     if (directory / SIDECAR_NAME).is_file():
         return True
+    if download_is_incomplete(directory):
+        return False
     has_index = (directory / "model_index.json").is_file()
     if not has_index:
         try:

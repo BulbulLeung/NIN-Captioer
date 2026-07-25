@@ -27,12 +27,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
 
   if (!open) return null
 
-  const browseExportDir = async () => {
-    const dir = await window.api.openFolder()
-    if (!dir) return
-    setDraft((prev) => ({ ...prev, exportDir: dir }))
-  }
-
   const browseModelDownloadPath = async () => {
     const dir = await window.api.openFolder()
     if (!dir) return
@@ -98,11 +92,16 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
         <PythonExecutableField
           value={draft.pythonPath}
           onChange={(pythonPath) => setDraft((prev) => ({ ...prev, pythonPath }))}
+          installPath={draft.pythonInstallPath}
+          onInstallPathChange={(pythonInstallPath) =>
+            setDraft((prev) => ({ ...prev, pythonInstallPath }))
+          }
+          enabled={open}
           hint={
             <>
-              Same setting as Dataset Edit Settings. CUDA-enabled Python with packages from{' '}
-              <code>trainer/requirements.txt</code> (training) and{' '}
-              <code>trainer/requirements-wd14.txt</code> (WD14 tagging).
+              Same setting as Dataset Edit Settings. Download installs CUDA torch (when possible)
+              plus packages from <code>trainer/requirements.txt</code> and{' '}
+              <code>trainer/requirements-wd14.txt</code>.
             </>
           }
         />
@@ -181,32 +180,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
             enabled={open}
             value={draft.defaultDevice}
             onChange={(defaultDevice) => setDraft((prev) => ({ ...prev, defaultDevice }))}
-          />
-        </label>
-
-        <label className="field">
-          <span>Config export directory</span>
-          <div className="model-row">
-            <input
-              type="text"
-              value={draft.exportDir}
-              onChange={(e) => setDraft((prev) => ({ ...prev, exportDir: e.target.value }))}
-              placeholder="Optional default folder for Export config"
-            />
-            <button type="button" onClick={() => void browseExportDir()}>
-              Browse
-            </button>
-          </div>
-        </label>
-
-        <label className="field">
-          <span>Config export file name</span>
-          <input
-            type="text"
-            value={draft.exportFileName}
-            onChange={(e) =>
-              setDraft((prev) => ({ ...prev, exportFileName: e.target.value }))
-            }
           />
         </label>
 

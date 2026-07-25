@@ -90,6 +90,37 @@ const api = {
     pythonPath?: string
   ): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke('train:checkEnv', pythonPath),
+  defaultPythonInstallPath: (): Promise<string> =>
+    ipcRenderer.invoke('python:defaultInstallPath'),
+  probePython: (
+    pythonPath?: string
+  ): Promise<{
+    status: 'ready' | 'missingPython' | 'missingPackages' | 'error'
+    message: string
+    pythonPath?: string
+    version?: string
+    cuda?: boolean
+    krea?: boolean
+    missing?: string[]
+  }> => ipcRenderer.invoke('python:probe', pythonPath),
+  installPython: (opts?: {
+    installPath?: string
+  }): Promise<{ ok: boolean; pythonPath?: string; message: string }> =>
+    ipcRenderer.invoke('python:install', opts),
+  cancelPythonInstall: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('python:cancelInstall'),
+  pythonInstallStatus: (): Promise<{ running: boolean }> =>
+    ipcRenderer.invoke('python:installStatus'),
+  onPythonInstallProgress: (
+    cb: (payload: { stage: string; message: string; pct: number }) => void
+  ) => {
+    const listener = (
+      _e: IpcRendererEvent,
+      payload: { stage: string; message: string; pct: number }
+    ) => cb(payload)
+    ipcRenderer.on('python:installProgress', listener)
+    return () => ipcRenderer.removeListener('python:installProgress', listener)
+  },
   startTrain: (opts: {
     pythonPath?: string
     configJson: string

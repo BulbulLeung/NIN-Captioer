@@ -6,6 +6,7 @@ import { LoraTrainSettingsDialog } from './components/LoraTrainSettingsDialog'
 import { LoraTrainView } from './components/LoraTrainView'
 import { MissingDatasetFolderDialog } from './components/MissingDatasetFolderDialog'
 import { RemoveDatasetFolderDialog } from './components/RemoveDatasetFolderDialog'
+import { RemoveLoraJobDialog } from './components/RemoveLoraJobDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { UnsavedDialog } from './components/UnsavedDialog'
 import { useBidirectionalTranslate } from './hooks/useBidirectionalTranslate'
@@ -25,6 +26,8 @@ import {
   clampRightPaneWidth,
   clampSidebarWidth,
   clampThumbnailWidth,
+  createDefaultLoraTrainJobPreset,
+  createLoraTrainJobId,
   normalizeSettings
 } from './types'
 
@@ -60,9 +63,12 @@ export default function App() {
   const [unsavedOpen, setUnsavedOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [removeDatasetOpen, setRemoveDatasetOpen] = useState(false)
+  const [removeLoraJobOpen, setRemoveLoraJobOpen] = useState(false)
   const [missingDatasetOpen, setMissingDatasetOpen] = useState(false)
   const [missingDatasetPath, setMissingDatasetPath] = useState<string | null>(null)
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false)
+  const [jobMenuOpen, setJobMenuOpen] = useState(false)
+  const [loraTraining, setLoraTraining] = useState(false)
   const [status, setStatus] = useState('')
   const [batchCaptioning, setBatchCaptioning] = useState(false)
   const [singleCaptioning, setSingleCaptioning] = useState(false)
@@ -71,7 +77,9 @@ export default function App() {
   const unsavedResolver = useRef<((action: ConfirmAction) => void) | null>(null)
   const captionAbortRef = useRef<AbortController | null>(null)
   const batchCancelRef = useRef(false)
+  const statusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const datasetMenuRef = useRef<HTMLDivElement | null>(null)
+  const jobMenuRef = useRef<HTMLDivElement | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const selectedPathRef = useRef(selectedPath)
@@ -124,7 +132,8 @@ export default function App() {
   }, [captioningPath, translating, translatingPath])
 
   const aiBusy = captionBusy || translating
-  const analysisEnabled = settings.autoAnalysis || analysisOpen
+  const analysisEnabled =
+    (settings.autoAnalysis || analysisOpen) && settings.activeView === 'datasetEdit'
   const {
     result: analysisResult,
     analyzing: analysisAnalyzing,
@@ -240,6 +249,25 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [datasetMenuOpen])
+
+  useEffect(() => {
+    if (!jobMenuOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      const root = jobMenuRef.current
+      if (!root) return
+      if (e.target instanceof Node && root.contains(e.target)) return
+      setJobMenuOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setJobMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [jobMenuOpen])
 
   const askUnsaved = useCallback((): Promise<ConfirmAction> => {
     return new Promise((resolve) => {
@@ -403,17 +431,112 @@ export default function App() {
     void window.api.setSettings(next)
   }, [])
 
+  const stopBatchCaption = () => {
+    batchCancelRef.current = true
+    captionAbortRef.current?.abort()
+    captionAbortRef.current = null
+    void window.api.cancelWd14()
+  }
+
+  const stopAllLocalAi = useCallback(() => {
+    stopBatchCaption()
+    cancelInFlight()
+    setBatchCaptioning(false)
+    setSingleCaptioning(false)
+    setCaptioningPath(null)
+  }, [cancelInFlight])
+
   const setActiveView = (view: ActiveView) => {
     if (settingsRef.current.activeView === view) return
+    if (view === 'datasetEdit' && loraTraining) {
+      setStatus('Cannot switch to DatasetEdit while training')
+      setError(null)
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current)
+        statusClearTimerRef.current = null
+      }
+      statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
+      return
+    }
+    if (view === 'loraTrain') {
+      stopAllLocalAi()
+      setStatus('Local AI stopped')
+      setError(null)
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current)
+        statusClearTimerRef.current = null
+      }
+      statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
+    }
     persistSettingsPatch({ activeView: view })
   }
 
   const onLoraJobChange = useCallback(
-    (loraTrainJob: LoraTrainJobConfig) => {
-      persistSettingsPatch({ loraTrainJob })
+    (job: LoraTrainJobConfig) => {
+      const id = settingsRef.current.activeLoraTrainJobId
+      const jobs = settingsRef.current.loraTrainJobs.map((p) =>
+        p.id === id ? { ...p, job } : p
+      )
+      persistSettingsPatch({ loraTrainJobs: jobs })
     },
     [persistSettingsPatch]
   )
+
+  const activeLoraJob =
+    settings.loraTrainJobs.find((p) => p.id === settings.activeLoraTrainJobId) ??
+    settings.loraTrainJobs[0] ??
+    createDefaultLoraTrainJobPreset()
+
+  const switchLoraJob = (id: string) => {
+    setJobMenuOpen(false)
+    if (!id || id === settingsRef.current.activeLoraTrainJobId || loraTraining) return
+    persistSettingsPatch({ activeLoraTrainJobId: id })
+  }
+
+  const addLoraJob = () => {
+    if (loraTraining) return
+    const current =
+      settingsRef.current.loraTrainJobs.find(
+        (p) => p.id === settingsRef.current.activeLoraTrainJobId
+      ) ?? settingsRef.current.loraTrainJobs[0]
+    if (!current) return
+    const n = settingsRef.current.loraTrainJobs.length + 1
+    const preset = {
+      id: createLoraTrainJobId(),
+      job: {
+        ...structuredClone(current.job),
+        name: `Job ${n}`
+      }
+    }
+    persistSettingsPatch({
+      loraTrainJobs: [...settingsRef.current.loraTrainJobs, preset],
+      activeLoraTrainJobId: preset.id
+    })
+  }
+
+  const requestRemoveLoraJob = () => {
+    if (loraTraining || !activeLoraJob) return
+    setRemoveLoraJobOpen(true)
+  }
+
+  const confirmRemoveLoraJob = () => {
+    setRemoveLoraJobOpen(false)
+    if (loraTraining) return
+    const removing = settingsRef.current.activeLoraTrainJobId
+    const remaining = settingsRef.current.loraTrainJobs.filter((p) => p.id !== removing)
+    if (remaining.length === 0) {
+      const fallback = createDefaultLoraTrainJobPreset()
+      persistSettingsPatch({
+        loraTrainJobs: [fallback],
+        activeLoraTrainJobId: fallback.id
+      })
+      return
+    }
+    persistSettingsPatch({
+      loraTrainJobs: remaining,
+      activeLoraTrainJobId: remaining[0].id
+    })
+  }
 
   const onSaveLoraTrainApp = async (loraTrainApp: LoraTrainAppSettings) => {
     const next = normalizeSettings({ ...settingsRef.current, loraTrainApp })
@@ -421,23 +544,25 @@ export default function App() {
     setSettings(next)
   }
 
-  const onLoraStatus = useCallback((message: string, isError?: boolean) => {
-    if (isError) {
-      setError(message)
-      setStatus('')
-    } else {
+  const onLoraStatus = useCallback(
+    (message: string, isError?: boolean, options?: { sticky?: boolean }) => {
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current)
+        statusClearTimerRef.current = null
+      }
+      if (isError) {
+        setError(message)
+        setStatus('')
+        return
+      }
       setStatus(message)
       setError(null)
-      window.setTimeout(() => setStatus(''), 4000)
-    }
-  }, [setError])
-
-  const stopBatchCaption = () => {
-    batchCancelRef.current = true
-    captionAbortRef.current?.abort()
-    captionAbortRef.current = null
-    void window.api.cancelWd14()
-  }
+      if (!options?.sticky) {
+        statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
+      }
+    },
+    [setError]
+  )
 
   const runCaptionForPath = async (imagePath: string): Promise<void> => {
     captionAbortRef.current?.abort()
@@ -617,7 +742,7 @@ export default function App() {
 
       if (isCaptionFocused()) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (deleteOpen || unsavedOpen || settingsOpen || loraSettingsOpen || removeDatasetOpen || missingDatasetOpen) return
+      if (deleteOpen || unsavedOpen || settingsOpen || loraSettingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return
       if (settingsRef.current.activeView !== 'datasetEdit') return
 
       // Space/Enter would activate a previously focused control (e.g. list button).
@@ -682,6 +807,7 @@ export default function App() {
     settingsOpen,
     loraSettingsOpen,
     removeDatasetOpen,
+    removeLoraJobOpen,
     missingDatasetOpen
   ])
 
@@ -888,9 +1014,78 @@ export default function App() {
             </>
           ) : (
             <>
-              <span className="toolbar-job-label" title={settings.loraTrainJob.name}>
-                {settings.loraTrainJob.name || 'LoRA Train'}
-              </span>
+              <div className="toolbar-dataset" ref={jobMenuRef}>
+                <button
+                  type="button"
+                  className="toolbar-dataset-trigger"
+                  disabled={settings.loraTrainJobs.length === 0 || loraTraining}
+                  title={activeLoraJob?.job.name || 'No job preset'}
+                  aria-label="Job preset"
+                  aria-haspopup="listbox"
+                  aria-expanded={jobMenuOpen}
+                  onClick={() => setJobMenuOpen((open) => !open)}
+                >
+                  <span className="toolbar-dataset-label">
+                    {activeLoraJob?.job.name || 'No job preset'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <path fill="currentColor" d="M2 3.5h6L5 7.5 2 3.5z" />
+                  </svg>
+                </button>
+                {jobMenuOpen && settings.loraTrainJobs.length > 0 && (
+                  <ul className="toolbar-dataset-menu" role="listbox" aria-label="Job presets">
+                    {settings.loraTrainJobs.map((preset) => (
+                      <li key={preset.id} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          className={
+                            preset.id === settings.activeLoraTrainJobId
+                              ? 'toolbar-dataset-option active'
+                              : 'toolbar-dataset-option'
+                          }
+                          aria-selected={preset.id === settings.activeLoraTrainJobId}
+                          title={preset.job.name}
+                          disabled={loraTraining}
+                          onClick={() => switchLoraJob(preset.id)}
+                        >
+                          {preset.job.name || 'Untitled job'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                className="primary toolbar-icon-btn"
+                title="Add job preset"
+                aria-label="Add job preset"
+                disabled={loraTraining}
+                onClick={addLoraJob}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="toolbar-icon-btn danger"
+                disabled={!activeLoraJob || loraTraining}
+                title="Remove job preset"
+                aria-label="Remove job preset"
+                onClick={requestRemoveLoraJob}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                  />
+                </svg>
+              </button>
               <button type="button" onClick={() => setLoraSettingsOpen(true)}>
                 Settings
               </button>
@@ -908,6 +1103,8 @@ export default function App() {
               role="tab"
               className={`view-switch-seg${isDatasetEdit ? ' active' : ''}`}
               aria-selected={isDatasetEdit}
+              disabled={loraTraining}
+              title={loraTraining ? 'Unavailable while training' : undefined}
               onClick={() => setActiveView('datasetEdit')}
             >
               DatasetEdit
@@ -959,11 +1156,12 @@ export default function App() {
         />
       ) : (
         <LoraTrainView
-          job={settings.loraTrainJob}
+          job={activeLoraJob.job}
           appSettings={settings.loraTrainApp}
           datasetFolders={settings.datasetFolders}
           onChange={onLoraJobChange}
           onStatus={onLoraStatus}
+          onTrainingChange={setLoraTraining}
         />
       )}
 
@@ -980,11 +1178,11 @@ export default function App() {
             </>
           ) : (
             <>
-              <span className="folder-path" title={settings.loraTrainJob.datasets[0]?.folder_path}>
-                {settings.loraTrainJob.datasets[0]?.folder_path || 'No train dataset'}
+              <span className="folder-path" title={activeLoraJob.job.datasets[0]?.folder_path}>
+                {activeLoraJob.job.datasets[0]?.folder_path || 'No train dataset'}
               </span>
               <span className="image-count">
-                {settings.loraTrainJob.train.steps} steps · lr {settings.loraTrainJob.train.lr}
+                {activeLoraJob.job.train.steps} steps · lr {activeLoraJob.job.train.lr}
               </span>
             </>
           )}
@@ -1043,6 +1241,13 @@ export default function App() {
         folderName={folder ? folderLabel(folder) : ''}
         onConfirm={() => void confirmRemoveDatasetFolder()}
         onCancel={() => setRemoveDatasetOpen(false)}
+      />
+
+      <RemoveLoraJobDialog
+        open={removeLoraJobOpen}
+        jobName={activeLoraJob?.job.name || 'Untitled job'}
+        onConfirm={confirmRemoveLoraJob}
+        onCancel={() => setRemoveLoraJobOpen(false)}
       />
 
       <MissingDatasetFolderDialog

@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ResourceStats } from '../types'
+
+/** Always show at least this many rows when data exists (list scrolls if needed). */
+const MIN_VRAM_APP_SLOTS = 12
+/** Fallback row height when no sample row is measurable. */
+const VRAM_APP_ROW_FALLBACK_PX = 22
 
 interface Props {
   device: string
@@ -68,6 +73,8 @@ export function ResourceMonitorPane({ device }: Props) {
   const [stats, setStats] = useState<ResourceStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [killingPid, setKillingPid] = useState<number | null>(null)
+  const [appSlots, setAppSlots] = useState(MIN_VRAM_APP_SLOTS)
+  const appListRef = useRef<HTMLUListElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -91,6 +98,31 @@ export function ResourceMonitorPane({ device }: Props) {
       window.clearInterval(id)
     }
   }, [device])
+
+  useEffect(() => {
+    const el = appListRef.current
+    if (!el) return
+
+    const updateSlots = () => {
+      const h = el.clientHeight
+      if (h <= 0) {
+        setAppSlots(MIN_VRAM_APP_SLOTS)
+        return
+      }
+      const styles = getComputedStyle(el)
+      const gap = Number.parseFloat(styles.rowGap || styles.gap) || 3.2
+      const sample = el.querySelector('.lora-monitor-app-row') as HTMLElement | null
+      const rowH = sample?.getBoundingClientRect().height || VRAM_APP_ROW_FALLBACK_PX
+      const stride = rowH + gap
+      const fit = stride > 0 ? Math.floor((h + gap) / stride) : MIN_VRAM_APP_SLOTS
+      setAppSlots(Math.max(MIN_VRAM_APP_SLOTS, Number.isFinite(fit) ? fit : MIN_VRAM_APP_SLOTS))
+    }
+
+    updateSlots()
+    const ro = new ResizeObserver(() => updateSlots())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [stats?.gpu?.apps?.length])
 
   const onKill = async (pid: number) => {
     setKillingPid(pid)
@@ -140,7 +172,8 @@ export function ResourceMonitorPane({ device }: Props) {
         : formatWatts(stats.gpu.powerDrawW)
       : '—'
 
-  const apps = stats?.gpu?.apps ?? []
+  const appsAll = stats?.gpu?.apps ?? []
+  const apps = appsAll.slice(0, appSlots)
   const cpuMeta = stats?.cpuName || '—'
   const gpuMeta = stats?.gpu?.name
     ? `${device || '—'}  ${stats.gpu.name}`
@@ -192,10 +225,10 @@ export function ResourceMonitorPane({ device }: Props) {
 
             <div className="lora-monitor-apps">
               <MonitorHeader label="VRAM apps" />
-              {apps.length === 0 ? (
+              {appsAll.length === 0 ? (
                 <p className="lora-monitor-unavailable">無佔用行程</p>
               ) : (
-                <ul className="lora-monitor-app-list">
+                <ul className="lora-monitor-app-list" ref={appListRef}>
                   {apps.map((app) => (
                     <li
                       key={app.pid}

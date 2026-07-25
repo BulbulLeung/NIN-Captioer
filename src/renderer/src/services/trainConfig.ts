@@ -11,7 +11,6 @@ export function serializeTrainConfig(
       ...job.model,
       name_or_path: job.model.train_name_or_path || job.model.name_or_path,
       train_name_or_path: job.model.train_name_or_path || job.model.name_or_path,
-      sample_name_or_path: job.model.sample_name_or_path,
       arch: job.model.arch || 'krea2'
     },
     huggingface_token: extras?.huggingface_token || undefined

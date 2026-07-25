@@ -16,6 +16,16 @@ const api = {
   getResourceStats: (deviceId) => electron.ipcRenderer.invoke("system:getResourceStats", deviceId),
   killProcess: (pid) => electron.ipcRenderer.invoke("system:killProcess", pid),
   checkTrainEnv: (pythonPath) => electron.ipcRenderer.invoke("train:checkEnv", pythonPath),
+  defaultPythonInstallPath: () => electron.ipcRenderer.invoke("python:defaultInstallPath"),
+  probePython: (pythonPath) => electron.ipcRenderer.invoke("python:probe", pythonPath),
+  installPython: (opts) => electron.ipcRenderer.invoke("python:install", opts),
+  cancelPythonInstall: () => electron.ipcRenderer.invoke("python:cancelInstall"),
+  pythonInstallStatus: () => electron.ipcRenderer.invoke("python:installStatus"),
+  onPythonInstallProgress: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("python:installProgress", listener);
+    return () => electron.ipcRenderer.removeListener("python:installProgress", listener);
+  },
   startTrain: (opts) => electron.ipcRenderer.invoke("train:start", opts),
   stopTrain: () => electron.ipcRenderer.invoke("train:stop"),
   trainStatus: () => electron.ipcRenderer.invoke("train:status"),
