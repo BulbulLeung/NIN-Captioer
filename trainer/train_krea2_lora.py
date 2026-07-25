@@ -21,14 +21,104 @@ import json
 import math
 import os
 import random
+import re
 import sys
 from pathlib import Path
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
+# Diffusers Krea2Transformer2DModel names → original krea-ai / ComfyUI names.
+# Inverse of diffusers.loaders.lora_conversion_utils._convert_non_diffusers_krea2_lora_to_diffusers.
+_KREA2_ATTN_TO_COMFY = {
+    "to_q": "wq",
+    "to_k": "wk",
+    "to_v": "wv",
+    "to_out.0": "wo",
+    "to_gate": "gate",
+}
+_KREA2_FF_TO_COMFY = {"ff.gate": "gate", "ff.up": "up", "ff.down": "down"}
+_KREA2_STANDALONE_TO_COMFY = {
+    "img_in": "first",
+    "final_layer.linear": "last.linear",
+    "time_embed.linear_1": "tmlp.0",
+    "time_embed.linear_2": "tmlp.2",
+    "time_mod_proj": "tproj.1",
+    "txt_in.linear_1": "txtmlp.1",
+    "txt_in.linear_2": "txtmlp.3",
+    "text_fusion.projector": "txtfusion.projector",
+}
+
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+def convert_diffusers_krea2_lora_to_comfy(state_dict: dict) -> dict:
+    """Map PEFT/Diffusers Krea2 LoRA keys to ComfyUI `diffusion_model.*` keys."""
+    out: dict = {}
+    skipped: list[str] = []
+
+    for key, tensor in state_dict.items():
+        k = key
+        for prefix in ("base_model.model.", "transformer.", "diffusion_model."):
+            if k.startswith(prefix):
+                k = k[len(prefix) :]
+        m = re.search(r"\.(lora_[AB])\.weight$", k)
+        if m is None:
+            # Accept already-converted Diffusers lora.down / lora.up naming.
+            m_du = re.search(r"\.lora\.(down|up)\.weight$", k)
+            if m_du is None:
+                skipped.append(key)
+                continue
+            side = "lora_A" if m_du.group(1) == "down" else "lora_B"
+            module = k[: m_du.start()]
+            suffix = f".{side}.weight"
+        else:
+            module = k[: m.start()]
+            suffix = k[m.start() :]
+
+        comfy_module: str | None = None
+        m_attn = re.match(r"transformer_blocks\.(\d+)\.attn\.(.+)$", module)
+        if m_attn and m_attn.group(2) in _KREA2_ATTN_TO_COMFY:
+            comfy_module = f"blocks.{m_attn.group(1)}.attn.{_KREA2_ATTN_TO_COMFY[m_attn.group(2)]}"
+        if comfy_module is None:
+            m_ff = re.match(r"transformer_blocks\.(\d+)\.(ff\.(?:gate|up|down))$", module)
+            if m_ff and m_ff.group(2) in _KREA2_FF_TO_COMFY:
+                comfy_module = f"blocks.{m_ff.group(1)}.mlp.{_KREA2_FF_TO_COMFY[m_ff.group(2)]}"
+        if comfy_module is None:
+            m_tf = re.match(
+                r"text_fusion\.(layerwise_blocks|refiner_blocks)\.(\d+)\.attn\.(.+)$",
+                module,
+            )
+            if m_tf and m_tf.group(3) in _KREA2_ATTN_TO_COMFY:
+                comfy_module = (
+                    f"txtfusion.{m_tf.group(1)}.{m_tf.group(2)}.attn."
+                    f"{_KREA2_ATTN_TO_COMFY[m_tf.group(3)]}"
+                )
+        if comfy_module is None:
+            m_tf_ff = re.match(
+                r"text_fusion\.(layerwise_blocks|refiner_blocks)\.(\d+)\.(ff\.(?:gate|up|down))$",
+                module,
+            )
+            if m_tf_ff and m_tf_ff.group(3) in _KREA2_FF_TO_COMFY:
+                comfy_module = (
+                    f"txtfusion.{m_tf_ff.group(1)}.{m_tf_ff.group(2)}.mlp."
+                    f"{_KREA2_FF_TO_COMFY[m_tf_ff.group(3)]}"
+                )
+        if comfy_module is None:
+            comfy_module = _KREA2_STANDALONE_TO_COMFY.get(module)
+
+        if comfy_module is None:
+            skipped.append(key)
+            continue
+        out[f"diffusion_model.{comfy_module}{suffix}"] = tensor
+
+    if skipped:
+        raise ValueError(
+            f"Could not map {len(skipped)} LoRA key(s) to ComfyUI format; "
+            f"examples: {skipped[:5]}"
+        )
+    return out
 
 
 def progress(step: int, total: int, loss: float) -> None:
@@ -841,14 +931,17 @@ def main() -> int:
         path = out_dir / f"{safe_job_name(job_name)}_{format_step(step_n)}.safetensors"
         state = get_peft_model_state_dict(transformer)
         save_dtype = torch.float16 if (save_cfg.get("dtype") or "").startswith("float16") else None
-        tensors = {}
+        peft_tensors = {}
         for k, v in state.items():
             t = v.detach().cpu()
             if save_dtype is not None and t.is_floating_point():
                 t = t.to(save_dtype)
-            tensors[k] = t
+            peft_tensors[k] = t
+        # ComfyUI / StabilityMatrix expect diffusion_model.blocks.*.attn.wq keys.
+        # Raw PEFT Diffusers keys (base_model.model.transformer_blocks.*.to_q) load as no-ops.
+        tensors = convert_diffusers_krea2_lora_to_comfy(peft_tensors)
         save_file(tensors, str(path))
-        log(f"saved LoRA -> {path}")
+        log(f"saved LoRA (ComfyUI/diffusion_model keys) -> {path} ({len(tensors)} tensors)")
         return path
 
     global_step = 0
