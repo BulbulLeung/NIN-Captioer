@@ -4,6 +4,7 @@ const api = {
   openFolder: () => electron.ipcRenderer.invoke("dialog:openFolder"),
   openFile: (opts) => electron.ipcRenderer.invoke("dialog:openFile", opts),
   listImages: (dir) => electron.ipcRenderer.invoke("fs:listImages", dir),
+  scanArBuckets: (opts) => electron.ipcRenderer.invoke("dataset:scanArBuckets", opts),
   readCaption: (imagePath) => electron.ipcRenderer.invoke("fs:readCaption", imagePath),
   writeCaption: (imagePath, text) => electron.ipcRenderer.invoke("fs:writeCaption", imagePath, text),
   deleteImage: (imagePath) => electron.ipcRenderer.invoke("fs:deleteImage", imagePath),

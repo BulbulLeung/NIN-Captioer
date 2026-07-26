@@ -434,6 +434,15 @@ export function LoraTrainView({
   const [dlPct, setDlPct] = useState(0)
   const [dlDone, setDlDone] = useState(0)
   const [dlTotal, setDlTotal] = useState(0)
+  const [bucketScanBusy, setBucketScanBusy] = useState(false)
+  const [bucketScanError, setBucketScanError] = useState<string | null>(null)
+  const [bucketCounts, setBucketCounts] = useState<{ bucket: string; count: number }[] | null>(
+    null
+  )
+  const [bucketScanMeta, setBucketScanMeta] = useState<{
+    imageCount: number
+    forcedUpscale: number
+  } | null>(null)
   const skipPersist = useRef(true)
   const draftRef = useRef(draft)
   draftRef.current = draft
@@ -868,6 +877,41 @@ export function LoraTrainView({
     patch((prev) => ({ ...prev, training_folder: dir }))
   }
 
+  const scanBuckets = async () => {
+    const ds = draftRef.current.datasets[0]
+    if (!ds?.folder_path?.trim()) {
+      setBucketScanError('Choose a dataset folder first')
+      return
+    }
+    setBucketScanBusy(true)
+    setBucketScanError(null)
+    try {
+      const resolutions = ds.resolution.length ? ds.resolution : [1024]
+      const result = await window.api.scanArBuckets({
+        folder: ds.folder_path,
+        resolutions,
+        pythonPath: appSettings.pythonPath.trim() || undefined
+      })
+      if (!result.ok) {
+        setBucketCounts(null)
+        setBucketScanMeta(null)
+        setBucketScanError(result.error || 'Scan failed')
+        return
+      }
+      setBucketCounts(result.countsOrdered || [])
+      setBucketScanMeta({
+        imageCount: result.imageCount ?? 0,
+        forcedUpscale: result.forcedUpscale ?? 0
+      })
+    } catch (err) {
+      setBucketScanError(err instanceof Error ? err.message : String(err))
+      setBucketCounts(null)
+      setBucketScanMeta(null)
+    } finally {
+      setBucketScanBusy(false)
+    }
+  }
+
   const clearTrainSessionUi = () => {
     setShowTrainSession(false)
     setTrainComplete(false)
@@ -1230,7 +1274,7 @@ export function LoraTrainView({
               </Field>
               <Field
                 label="Resolutions"
-                hint="Toggle one or more sizes; each batch mixes across selected resolutions"
+                hint="Enabled resolution tiers and pixel budget. Always AR bucket (step=64); long side picks closest tier without unnecessary upscale."
               >
                 <div className="lora-resolution-grid" role="group" aria-label="Resolutions">
                   {RESOLUTION_OPTIONS.map((size) => {
@@ -1250,6 +1294,9 @@ export function LoraTrainView({
                           aria-label={`${size}`}
                           disabled={training}
                           onClick={() => {
+                            setBucketCounts(null)
+                            setBucketScanMeta(null)
+                            setBucketScanError(null)
                             patch((p) => ({
                               ...p,
                               datasets: p.datasets.map((ds, i) => {
@@ -1278,6 +1325,35 @@ export function LoraTrainView({
                   })}
                 </div>
               </Field>
+              <div className="field">
+                <div className="model-row">
+                  <button
+                    type="button"
+                    disabled={training || bucketScanBusy || !ds0.folder_path.trim()}
+                    onClick={() => void scanBuckets()}
+                  >
+                    {bucketScanBusy ? 'Scanning…' : 'Scan buckets'}
+                  </button>
+                </div>
+                {bucketScanError ? <p className="test-err">{bucketScanError}</p> : null}
+                {bucketScanMeta ? (
+                  <p className="hint">
+                    {bucketScanMeta.imageCount} images · forced upscale{' '}
+                    {bucketScanMeta.forcedUpscale} · tiers{' '}
+                    {(ds0.resolution.length ? ds0.resolution : [1024]).join(', ')}
+                  </p>
+                ) : null}
+                {bucketCounts && bucketCounts.length > 0 ? (
+                  <div className="lora-bucket-stats" role="table" aria-label="Bucket counts">
+                    {bucketCounts.map((row) => (
+                      <div key={row.bucket} className="lora-bucket-stats-row" role="row">
+                        <span className="lora-bucket-stats-size">{row.bucket}</span>
+                        <span className="lora-bucket-stats-count">{row.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <Field label="Caption dropout" hint="0–1; randomly blank captions during training">
                 <NumberField
                   min={0}

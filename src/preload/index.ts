@@ -47,6 +47,17 @@ const api = {
     filters?: { name: string; extensions: string[] }[]
   }): Promise<string | null> => ipcRenderer.invoke('dialog:openFile', opts),
   listImages: (dir: string): Promise<ImageItem[]> => ipcRenderer.invoke('fs:listImages', dir),
+  scanArBuckets: (opts: {
+    folder: string
+    resolutions: number[]
+    pythonPath?: string
+  }): Promise<{
+    ok: boolean
+    error?: string
+    imageCount?: number
+    forcedUpscale?: number
+    countsOrdered?: { bucket: string; count: number }[]
+  }> => ipcRenderer.invoke('dataset:scanArBuckets', opts),
   readCaption: (imagePath: string): Promise<string> =>
     ipcRenderer.invoke('fs:readCaption', imagePath),
   writeCaption: (imagePath: string, text: string): Promise<boolean> =>

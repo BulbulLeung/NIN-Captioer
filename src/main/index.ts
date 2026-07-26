@@ -1878,6 +1878,76 @@ app.whenReady().then(async () => {
     return images
   })
 
+  ipcMain.handle(
+    'dataset:scanArBuckets',
+    async (
+      _event,
+      opts: {
+        folder: string
+        resolutions: number[]
+        pythonPath?: string
+      }
+    ) => {
+      const script = join(trainerRoot(), 'scan_ar_buckets.py')
+      if (!existsSync(script)) {
+        return { ok: false, error: `Missing ${script}` }
+      }
+      const py = (opts.pythonPath && opts.pythonPath.trim()) || 'python'
+      const resList = (Array.isArray(opts.resolutions) ? opts.resolutions : [])
+        .map((n) => Math.round(Number(n)))
+        .filter((n) => Number.isFinite(n) && n > 0)
+      const resolutionsArg = (resList.length ? resList : [1024]).join(',')
+      const args = [
+        script,
+        '--folder',
+        opts.folder,
+        '--resolutions',
+        resolutionsArg
+      ]
+      try {
+        const { stdout, stderr } = await execFileAsync(py, args, {
+          cwd: trainerRoot(),
+          timeout: 300000,
+          windowsHide: true,
+          encoding: 'utf8',
+          maxBuffer: 8 * 1024 * 1024
+        })
+        const text = `${stdout || ''}\n${stderr || ''}`
+        const line = text
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .reverse()
+          .find((l) => l.startsWith('{'))
+        if (!line) {
+          return { ok: false, error: 'No JSON from scan_ar_buckets.py' }
+        }
+        const parsed = JSON.parse(line) as {
+          ok?: boolean
+          error?: string
+          image_count?: number
+          forced_upscale?: number
+          counts_ordered?: { bucket: string; count: number }[]
+        }
+        if (!parsed.ok) {
+          return { ok: false, error: parsed.error || 'Scan failed' }
+        }
+        return {
+          ok: true,
+          imageCount: parsed.image_count ?? 0,
+          forcedUpscale: parsed.forced_upscale ?? 0,
+          countsOrdered: parsed.counts_ordered ?? []
+        }
+      } catch (err) {
+        const e = err as { message?: string; stderr?: string }
+        return {
+          ok: false,
+          error: e.stderr || e.message || String(err)
+        }
+      }
+    }
+  )
+
   ipcMain.handle('fs:readCaption', async (_event, imagePath: string) => {
     const txtPath = captionPathForImage(imagePath)
     try {

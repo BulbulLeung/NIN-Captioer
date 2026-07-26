@@ -15,6 +15,7 @@ export interface LoraTrainDatasetConfig {
   caption_dropout_rate: number
   shuffle_tokens: boolean
   cache_latents_to_disk: boolean
+  /** Enabled resolution tiers; AR bucketing uses min as floor and long-side closest tier. */
   resolution: number[]
 }
 
@@ -255,7 +256,12 @@ function asNumberArray(value: unknown, fallback: number[]): number[] {
 
 function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraTrainDatasetConfig {
   const o = asRecord(raw)
-  if (!o) return { ...fallback, resolution: [...fallback.resolution] }
+  if (!o) {
+    return {
+      ...fallback,
+      resolution: [...fallback.resolution]
+    }
+  }
   return {
     folder_path: asString(o.folder_path, fallback.folder_path),
     caption_ext: 'txt',

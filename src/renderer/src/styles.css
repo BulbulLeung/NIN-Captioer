@@ -2116,6 +2116,32 @@ button.danger.kbd-focus {
   font-variant-numeric: tabular-nums;
 }
 
+.lora-bucket-stats {
+  margin-top: 0.65rem;
+  max-height: 12rem;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 6px;
+  padding: 0.35rem 0.55rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.lora-bucket-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+}
+
+.lora-bucket-stats-size {
+  opacity: 0.9;
+}
+
+.lora-bucket-stats-count {
+  font-weight: 600;
+}
+
 .lora-toggle.is-disabled {
   opacity: 0.45;
   cursor: not-allowed;

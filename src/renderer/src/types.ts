@@ -280,6 +280,17 @@ declare global {
         filters?: { name: string; extensions: string[] }[]
       }) => Promise<string | null>
       listImages: (dir: string) => Promise<ImageItem[]>
+      scanArBuckets: (opts: {
+        folder: string
+        resolutions: number[]
+        pythonPath?: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        imageCount?: number
+        forcedUpscale?: number
+        countsOrdered?: { bucket: string; count: number }[]
+      }>
       readCaption: (imagePath: string) => Promise<string>
       writeCaption: (imagePath: string, text: string) => Promise<boolean>
       deleteImage: (imagePath: string) => Promise<{ ok: boolean }>

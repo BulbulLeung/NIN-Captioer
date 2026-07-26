@@ -315,19 +315,6 @@ class AdapterEma:
         self._backup = {}
 
 
-def make_image_transform(res: int):
-    from torchvision import transforms
-
-    return transforms.Compose(
-        [
-            transforms.Resize(res, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(res),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
-        ]
-    )
-
-
 def flush() -> None:
     gc.collect()
     try:
@@ -1352,6 +1339,12 @@ def main() -> int:
     dropout = float(ds0.get("caption_dropout_rate") or 0.0)
     shuffle_tokens = bool(ds0.get("shuffle_tokens", False))
     resolutions = parse_resolutions(ds0.get("resolution"))
+    from ar_buckets import BUCKET_STEP, buckets_fingerprint, normalize_resolutions
+
+    resolutions = normalize_resolutions(resolutions)
+    bucket_step = BUCKET_STEP
+    bucket_min_res = min(resolutions)
+    max_res = max(resolutions)
 
     cache_latents = bool(ds0.get("cache_latents_to_disk", True))
     cache_text = bool(train_cfg.get("cache_text_embeddings", True))
@@ -1387,10 +1380,17 @@ def main() -> int:
     legacy_mode = str(model_cfg.get("layer_offload_mode") or "").lower()
     if legacy_mode == "auto":
         layer_offload_percent_cfg = 0.0
-    max_res = max(resolutions) if resolutions else 1024
     grad_ckpt = bool(train_cfg.get("gradient_checkpointing", True)) or low_vram
     use_ema = bool(ema_cfg.get("use_ema", False))
     ema_decay = float(ema_cfg.get("ema_decay") or 0.99)
+
+    # Always-on AR buckets under enabled resolution tiers.
+    ar_assign: list[tuple[int, int]] = []
+    ar_counts: dict[tuple[int, int], int] = {}
+    ar_tier_counts: dict[int, int] = {}
+    ar_allow_up: list[bool] = []
+    ar_forced_up = 0
+    ar_fp = buckets_fingerprint(resolutions, bucket_step)
 
     prompts_raw = sample_cfg.get("prompts") or []
     sample_prompts = normalize_sample_prompts(
@@ -1420,6 +1420,7 @@ def main() -> int:
         f"steps={steps} batch={batch_size} lr={lr} rank={rank} alpha={alpha} "
         f"network={network_type} scheduler={noise_scheduler} optimizer={optimizer_name} "
         f"resolutions={resolutions} shuffle_tokens={shuffle_tokens} "
+        f"ar_bucketing=always step={bucket_step} min_res={bucket_min_res} "
         f"cache_latents={cache_latents} cache_text={cache_text} "
         f"quantize={use_quant} low_vram={low_vram} "
         f"layer_offload={layer_offload} "
@@ -1453,6 +1454,70 @@ def main() -> int:
 
     samples = collect_samples(folder, caption_ext, trigger)
     log(f"loaded {len(samples)} image/caption pairs")
+    if not samples:
+        log("ERROR: no training images found")
+        return 3
+
+    # Assign AR buckets after we know image list (need PIL sizes).
+    bucket_indices: dict[tuple[int, int], list[int]] = {}
+    from ar_buckets import assign_with_resolution_tiers, format_bucket_counts
+    from PIL import Image as _PILImage
+
+    sizes: list[tuple[int, int]] = []
+    for path, _cap in samples:
+        try:
+            with _PILImage.open(path) as im:
+                sizes.append(im.size)
+        except Exception as e:
+            log(f"WARNING: cannot read size for {path.name}: {e}; using 1024x1024")
+            sizes.append((1024, 1024))
+    (
+        ar_assign,
+        ar_counts,
+        ar_tier_counts,
+        ar_forced_up,
+        ar_allow_up,
+    ) = assign_with_resolution_tiers(sizes, resolutions, step=bucket_step)
+    for i, b in enumerate(ar_assign):
+        bucket_indices.setdefault(b, []).append(i)
+    log(
+        f"AR bucketing: resolutions={resolutions} min_res={bucket_min_res} "
+        f"step={bucket_step} used_buckets={sum(1 for n in ar_counts.values() if n)} "
+        f"forced_upscale={ar_forced_up} fingerprint={ar_fp}"
+    )
+    for t in sorted(ar_tier_counts):
+        log(f"  tier {t}: {ar_tier_counts[t]}")
+    for label, n in format_bucket_counts({b: c for b, c in ar_counts.items() if c}):
+        log(f"  bucket {label}: {n}")
+    try:
+        stats_path = out_dir / "_bucket_stats.json"
+        import json as _json
+
+        stats_path.write_text(
+            _json.dumps(
+                {
+                    "ok": True,
+                    "resolutions": resolutions,
+                    "min_res": bucket_min_res,
+                    "step": bucket_step,
+                    "fingerprint": ar_fp,
+                    "image_count": len(samples),
+                    "forced_upscale": ar_forced_up,
+                    "tier_counts": {str(k): v for k, v in ar_tier_counts.items()},
+                    "counts": {
+                        f"{w}x{h}": n for (w, h), n in ar_counts.items() if n
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        log(f"WARNING: failed to write _bucket_stats.json: {e}")
+    # VRAM reserve uses longest side among used buckets
+    used_sides = [max(w, h) for (w, h), n in ar_counts.items() if n > 0]
+    if used_sides:
+        max_res = max(used_sides)
 
     if dtype_name in ("bf16", "bfloat16"):
         weight_dtype = torch.bfloat16
@@ -1506,11 +1571,32 @@ def main() -> int:
             raise RuntimeError("Krea2 encode_prompt must return (embeds, mask)")
         return out[0], out[1]
 
-    def encode_image_latents(path: Path, res: int) -> torch.Tensor:
-        """Encode one image; caller must already have VAE on the right device."""
-        tf_img = make_image_transform(res)
+    def encode_image_latents_wh(
+        path: Path,
+        tw: int,
+        th: int,
+        *,
+        no_upscale: bool = True,
+        random_crop: bool = False,
+    ) -> torch.Tensor:
+        """Encode one image to exact (tw, th) via AR cover+crop."""
+        from ar_buckets import prepare_image_for_bucket
+        from torchvision import transforms as _T
+
         img = Image.open(path).convert("RGB")
-        pixel = tf_img(img).unsqueeze(0).to(device, dtype=weight_dtype)
+        prepared = prepare_image_for_bucket(
+            img,
+            tw,
+            th,
+            no_upscale=no_upscale,
+            random_crop=random_crop,
+        )
+        pixel = _T.Compose(
+            [
+                _T.ToTensor(),
+                _T.Normalize([0.5], [0.5]),
+            ]
+        )(prepared).unsqueeze(0).to(device, dtype=weight_dtype)
         if pixel.ndim == 4:
             pixel = pixel.unsqueeze(2)
         lat = vae.encode(pixel).latent_dist.sample()
@@ -1551,12 +1637,14 @@ def main() -> int:
         return pe, pm
 
     # ------------------------------------------------------------------
-    # Phase A: optional latent cache for each resolution
+    # Phase A: optional latent cache (always AR buckets)
     # ------------------------------------------------------------------
-    # latent_by_res[res][i] = Tensor or None (path-only when not caching)
-    latent_by_res: dict[int, list] = {r: [None] * len(samples) for r in resolutions}
+    latent_by_index: list = [None] * len(samples)
     if cache_latents:
-        log(f"Caching latents to disk for resolutions {resolutions}...")
+        log(
+            f"Caching AR latents to disk (fingerprint={ar_fp}, "
+            f"{len(bucket_indices)} used buckets)..."
+        )
         log(vram_log("pre_latent_cache"))
         vae_bytes = estimate_module_bytes(vae)
         if device.type == "cuda" and not can_place_on_gpu(vae_bytes):
@@ -1571,25 +1659,33 @@ def main() -> int:
             if hasattr(vae, "enable_tiling"):
                 vae.enable_tiling()
             with torch.no_grad():
-                for ri, res in enumerate(resolutions):
-                    for i, (path, _cap) in enumerate(samples):
-                        try:
-                            mtime = path.stat().st_mtime_ns
-                        except OSError:
-                            mtime = 0
-                        key = cache_key(str(path.resolve()), res, mtime, "lat_v1")
-                        out_file = latent_cache_dir / f"{key}.safetensors"
-                        if not out_file.is_file():
-                            lat = encode_image_latents(path, res)
-                            save_file({"latents": lat.contiguous()}, str(out_file))
-                        else:
-                            lat = load_file(str(out_file))["latents"]
-                        latent_by_res[res][i] = lat
-                        if (i + 1) % 10 == 0 or i + 1 == len(samples):
-                            log(
-                                f"  latent cache res={res} {i + 1}/{len(samples)} "
-                                f"(res {ri + 1}/{len(resolutions)})"
-                            )
+                for i, (path, _cap) in enumerate(samples):
+                    tw, th = ar_assign[i]
+                    try:
+                        mtime = path.stat().st_mtime_ns
+                    except OSError:
+                        mtime = 0
+                    key = cache_key(
+                        str(path.resolve()), tw, th, mtime, ar_fp, "lat_ar_v2"
+                    )
+                    out_file = latent_cache_dir / f"{key}.safetensors"
+                    if not out_file.is_file():
+                        lat = encode_image_latents_wh(
+                            path,
+                            tw,
+                            th,
+                            no_upscale=not ar_allow_up[i],
+                            random_crop=False,
+                        )
+                        save_file({"latents": lat.contiguous()}, str(out_file))
+                    else:
+                        lat = load_file(str(out_file))["latents"]
+                    latent_by_index[i] = lat
+                    if (i + 1) % 10 == 0 or i + 1 == len(samples):
+                        log(
+                            f"  AR latent cache {i + 1}/{len(samples)} "
+                            f"last={tw}x{th}"
+                        )
 
         run_with_encoder_on_gpu(
             vae,
@@ -2071,17 +2167,28 @@ def main() -> int:
         )
         return result["pe"], result["pm"]
 
-    def sample_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Pick one resolution for the whole batch; return latents, embeds, mask."""
-        res = random.choice(resolutions)
+    def sample_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int]:
+        """Return latents, embeds, mask, latent_h, latent_w (pre-pack spatial)."""
         n = min(batch_size, len(samples))
-        idxs = [random.randrange(len(samples)) for _ in range(n)]
+
+        eligible = [
+            (b, idxs) for b, idxs in bucket_indices.items() if len(idxs) >= n
+        ]
+        if not eligible:
+            raise RuntimeError(
+                f"AR bucketing: no bucket has >= batch_size ({n}) images. "
+                f"Lower batch size or add more images."
+            )
+        weights = [len(idxs) for _b, idxs in eligible]
+        pick_i = random.choices(range(len(eligible)), weights=weights, k=1)[0]
+        (tw, th), pool = eligible[pick_i]
+        idxs = random.sample(pool, n) if n < len(pool) else list(pool[:n])
 
         lats = []
         embeds_list = []
         masks_list = []
 
-        def _encode_latents_for_idxs():
+        def _encode_ar():
             if hasattr(vae, "enable_slicing"):
                 vae.enable_slicing()
             if hasattr(vae, "enable_tiling"):
@@ -2089,22 +2196,30 @@ def main() -> int:
             out = []
             for i in idxs:
                 path, _raw_cap = samples[i]
-                out.append(encode_image_latents(path, res))
+                out.append(
+                    encode_image_latents_wh(
+                        path,
+                        tw,
+                        th,
+                        no_upscale=not ar_allow_up[i],
+                        random_crop=True,
+                    )
+                )
             return out
 
         with torch.no_grad():
             if cache_latents:
                 for i in idxs:
-                    lats.append(latent_by_res[res][i])
+                    lats.append(latent_by_index[i])
             else:
                 batch_lats = run_with_encoder_on_gpu(
                     vae,
                     dit=dit_for_encode,
                     device=device,
                     weight_dtype=weight_dtype,
-                    fn=_encode_latents_for_idxs,
+                    fn=_encode_ar,
                     force_stage=auto_stage and dit_for_encode is not None,
-                    label="vae_live",
+                    label="vae_live_ar",
                 )
                 lats.extend(batch_lats)
 
@@ -2116,9 +2231,11 @@ def main() -> int:
                 masks_list.append(pm)
 
         latents = torch.stack(lats, dim=0)
+        lat0 = latents[0]
+        lh, lw = int(lat0.shape[-2]), int(lat0.shape[-1])
         prompt_embeds = torch.stack(embeds_list, dim=0)
         prompt_embeds_mask = torch.stack(masks_list, dim=0)
-        return latents, prompt_embeds, prompt_embeds_mask
+        return latents, prompt_embeds, prompt_embeds_mask, lh, lw
 
     def save_adapter(step: int | None = None) -> Path:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -2226,7 +2343,7 @@ def main() -> int:
             flush()
 
         try:
-            latents, prompt_embeds, prompt_embeds_mask = sample_batch()
+            latents, prompt_embeds, prompt_embeds_mask, lat_h, lat_w = sample_batch()
             latents = latents.to(device=device, dtype=weight_dtype)
             if latents.ndim == 4:
                 latents = latents.unsqueeze(2)
@@ -2234,11 +2351,14 @@ def main() -> int:
             prompt_embeds_mask = prompt_embeds_mask.to(device=device)
 
             latents = pack_latents(latents)
+            patch = int(getattr(pipe, "patch_size", None) or 2)
+            grid_h = int(lat_h) // patch
+            grid_w = int(lat_w) // patch
             image_seq = latents.shape[1]
-            grid = int(math.isqrt(image_seq))
-            if grid * grid != image_seq:
+            if grid_h * grid_w != image_seq:
                 raise RuntimeError(
-                    f"Non-square packed seq_len={image_seq}; expected square crop"
+                    f"Packed seq_len={image_seq} != grid {grid_h}x{grid_w} "
+                    f"(latent {lat_h}x{lat_w}, patch={patch})"
                 )
 
             # batch=1: trim text padding BEFORE position_ids so rotary/seq lengths match.
@@ -2256,9 +2376,8 @@ def main() -> int:
                     attn_mask = None
 
             position_ids = pipe.prepare_position_ids(
-                int(prompt_embeds.shape[1]), grid, grid, device
+                int(prompt_embeds.shape[1]), grid_h, grid_w, device
             )
-
             noisy, timesteps, target = build_noise_pair(
                 latents, noise_scheduler, device, weight_dtype
             )
