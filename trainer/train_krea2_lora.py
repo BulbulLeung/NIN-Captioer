@@ -190,6 +190,53 @@ def format_step(step: int) -> str:
     return f"{int(step):06d}"
 
 
+def list_step_lora_saves(out_dir: Path, job_name: str) -> list[Path]:
+    """Step checkpoints named `{job}_{NNNNNN}.safetensors` (newest last)."""
+    prefix = f"{safe_job_name(job_name)}_"
+    suffix = ".safetensors"
+    found: list[tuple[int, float, Path]] = []
+    if not out_dir.is_dir():
+        return []
+    for p in out_dir.iterdir():
+        if not p.is_file():
+            continue
+        name = p.name
+        if not (name.startswith(prefix) and name.endswith(suffix)):
+            continue
+        step_part = name[len(prefix) : -len(suffix)]
+        if not re.fullmatch(r"\d{6}", step_part):
+            continue
+        try:
+            mtime = p.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        found.append((int(step_part), mtime, p))
+    found.sort(key=lambda t: (t[0], t[1]))
+    return [t[2] for t in found]
+
+
+def cleanup_old_step_saves(out_dir: Path, job_name: str, max_keep: int) -> list[Path]:
+    """
+    Keep only the newest `max_keep` step LoRA checkpoints under out_dir.
+    Returns paths that were removed. max_keep <= 0 disables cleanup.
+    """
+    if max_keep <= 0:
+        return []
+    saves = list_step_lora_saves(out_dir, job_name)
+    if len(saves) <= max_keep:
+        return []
+    to_remove = saves[:-max_keep]
+    removed: list[Path] = []
+    for path in to_remove:
+        try:
+            path.unlink()
+            removed.append(path)
+            log(f"removed old checkpoint -> {path}")
+        except OSError as e:
+            log(f"WARN: failed to remove old checkpoint {path}: {e}")
+    return removed
+
+
 def cache_key(*parts: object) -> str:
     h = hashlib.sha1()
     for p in parts:
@@ -535,6 +582,7 @@ def main() -> int:
     sample_every = int(sample_cfg.get("sample_every") or 0)
     sample_start_step = int(sample_cfg.get("sample_start_step") or 0)
     save_every = int(save_cfg.get("save_every") or 250)
+    max_step_saves_to_keep = int(save_cfg.get("max_step_saves_to_keep") or 4)
     rank = int(net_cfg.get("linear") or 16)
     alpha = int(net_cfg.get("linear_alpha") or rank)
     low_vram = bool(model_cfg.get("low_vram", True))
@@ -569,7 +617,8 @@ def main() -> int:
         f"steps={steps} batch={batch_size} lr={lr} rank={rank} alpha={alpha} "
         f"cache_latents={cache_latents} cache_text={cache_text} "
         f"low_vram={low_vram} offload={'staged' if low_vram else 'dit_resident'} "
-        f"checkpoint={grad_ckpt}"
+        f"checkpoint={grad_ckpt} save_every={save_every} "
+        f"max_step_saves_to_keep={max_step_saves_to_keep}"
     )
 
     try:
@@ -942,6 +991,7 @@ def main() -> int:
         tensors = convert_diffusers_krea2_lora_to_comfy(peft_tensors)
         save_file(tensors, str(path))
         log(f"saved LoRA (ComfyUI/diffusion_model keys) -> {path} ({len(tensors)} tensors)")
+        cleanup_old_step_saves(out_dir, job_name, max_step_saves_to_keep)
         return path
 
     global_step = 0

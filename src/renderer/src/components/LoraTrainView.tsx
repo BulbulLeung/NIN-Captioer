@@ -408,6 +408,9 @@ export function LoraTrainView({
   const [draft, setDraft] = useState(() => normalizeLoraTrainJob(job))
   const [activeSection, setActiveSection] = useState<SectionId>('basics')
   const [training, setTraining] = useState(false)
+  /** Results UI (status / loss / log) from Start until Back or Stop/error. */
+  const [showTrainSession, setShowTrainSession] = useState(false)
+  const [trainComplete, setTrainComplete] = useState(false)
   const [progress, setProgress] = useState<{
     step: number
     total: number
@@ -418,9 +421,11 @@ export function LoraTrainView({
   const [showLossCurve, setShowLossCurve] = useState(true)
   const [showAvgLossCurve, setShowAvgLossCurve] = useState(true)
   const [trainStartedAt, setTrainStartedAt] = useState<number | null>(null)
+  const [finalElapsedMs, setFinalElapsedMs] = useState<number | null>(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [secPerStepAvg, setSecPerStepAvg] = useState<number | null>(null)
   const stepTimingRef = useRef<{ step: number; at: number }[]>([])
+  const trainStartedAtRef = useRef<number | null>(null)
   const logEndRef = useRef<HTMLSpanElement | null>(null)
   const [modelStatuses, setModelStatuses] = useState<ModelStatusItem[]>([])
   const [modelChecking, setModelChecking] = useState(false)
@@ -639,17 +644,26 @@ export function LoraTrainView({
       })
     })
     const offDone = window.api.onTrainDone(({ path }) => {
-      setTraining(false)
+      const started = trainStartedAtRef.current
+      const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0
+      setFinalElapsedMs(elapsed)
       setTrainStartedAt(null)
-      resetStepTiming()
-      setLossHistory([])
+      trainStartedAtRef.current = null
+      setTraining(false)
+      setTrainComplete(true)
       onStatus(`Training done: ${path}`)
     })
     const offErr = window.api.onTrainError(({ message }) => {
       setTraining(false)
+      setShowTrainSession(false)
+      setTrainComplete(false)
+      setFinalElapsedMs(null)
       setTrainStartedAt(null)
+      trainStartedAtRef.current = null
       resetStepTiming()
       setLossHistory([])
+      setTrainLogs([])
+      setProgress(null)
       onStatus(message, true)
     })
     const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
@@ -854,6 +868,18 @@ export function LoraTrainView({
     patch((prev) => ({ ...prev, training_folder: dir }))
   }
 
+  const clearTrainSessionUi = () => {
+    setShowTrainSession(false)
+    setTrainComplete(false)
+    setFinalElapsedMs(null)
+    setTrainStartedAt(null)
+    trainStartedAtRef.current = null
+    resetStepTiming()
+    setLossHistory([])
+    setTrainLogs([])
+    setProgress(null)
+  }
+
   const startTrain = async () => {
     const normalized = normalizeLoraTrainJob(draftRef.current)
     if (!normalized.datasets[0]?.folder_path) {
@@ -870,8 +896,13 @@ export function LoraTrainView({
     setTrainLogs([])
     setLossHistory([])
     resetStepTiming()
-    setTrainStartedAt(Date.now())
-    setNowTick(Date.now())
+    const started = Date.now()
+    setTrainStartedAt(started)
+    trainStartedAtRef.current = started
+    setFinalElapsedMs(null)
+    setTrainComplete(false)
+    setNowTick(started)
+    setShowTrainSession(true)
     setTraining(true)
     onStatus('Training started…', false, { sticky: true })
     const configJson = serializeTrainConfig(normalized, {
@@ -884,9 +915,7 @@ export function LoraTrainView({
     })
     if (!result.ok) {
       setTraining(false)
-      setTrainStartedAt(null)
-      resetStepTiming()
-      setLossHistory([])
+      clearTrainSessionUi()
       onStatus(result.error || 'Failed to start training', true)
     }
   }
@@ -894,15 +923,23 @@ export function LoraTrainView({
   const stopTrain = async () => {
     await window.api.stopTrain()
     setTraining(false)
-    setTrainStartedAt(null)
-    resetStepTiming()
-    setLossHistory([])
+    clearTrainSessionUi()
     onStatus('Training stopped')
   }
 
-  const elapsedMs = trainStartedAt !== null ? Math.max(0, nowTick - trainStartedAt) : 0
-  const etaMs =
-    progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0
+  const backFromTrainSession = () => {
+    clearTrainSessionUi()
+  }
+
+  const elapsedMs =
+    finalElapsedMs !== null
+      ? finalElapsedMs
+      : trainStartedAt !== null
+        ? Math.max(0, nowTick - trainStartedAt)
+        : 0
+  const etaMs = trainComplete
+    ? 0
+    : progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0
       ? ((progress.total - progress.step) * elapsedMs) / progress.step
       : null
   const stepsLabel = progress
@@ -926,9 +963,11 @@ export function LoraTrainView({
 
       <div className="lora-train-body">
         <nav className="lora-nav" aria-label="Training settings sections">
-          {training ? (
+          {showTrainSession ? (
             <div className="lora-train-status">
-              <p className="lora-train-status-title">Training...</p>
+              <p className="lora-train-status-title">
+                {trainComplete ? 'Training done' : 'Training...'}
+              </p>
               <div className="lora-train-status-steps-block">
                 <p className="lora-train-status-steps">{stepsLabel} Steps</p>
                 <p className="lora-train-status-avg">
@@ -979,6 +1018,10 @@ export function LoraTrainView({
               <button type="button" className="danger" onClick={() => void stopTrain()}>
                 Stop
               </button>
+            ) : showTrainSession && trainComplete ? (
+              <button type="button" className="primary" onClick={backFromTrainSession}>
+                Back
+              </button>
             ) : (
               <button type="button" className="primary" onClick={() => void startTrain()}>
                 Start Train
@@ -987,7 +1030,7 @@ export function LoraTrainView({
           </div>
         </nav>
 
-        {training ? (
+        {showTrainSession ? (
           <div className="lora-train-mid">
             <div className="lora-train-loss-panel">
               <div className="lora-train-loss-header">
