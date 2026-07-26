@@ -98,10 +98,6 @@ const api = {
   }> => ipcRenderer.invoke('system:getResourceStats', deviceId),
   killProcess: (pid: number): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('system:killProcess', pid),
-  checkTrainEnv: (
-    pythonPath?: string
-  ): Promise<{ ok: boolean; message: string }> =>
-    ipcRenderer.invoke('train:checkEnv', pythonPath),
   defaultPythonInstallPath: (): Promise<string> =>
     ipcRenderer.invoke('python:defaultInstallPath'),
   probePython: (

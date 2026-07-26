@@ -186,7 +186,7 @@ Captioer ships a native trainer under `trainer/` (also packaged into `resources/
    ```bash
    pip install "git+https://github.com/huggingface/diffusers.git"
    ```
-2. In the app: **LoraTrain** → **Settings** → set **Python executable** → **Verify environment**
+2. In the app: **LoraTrain** → **Settings** → set **Python executable** (auto-probes packages; use **Download** if missing)
 3. Optionally set **Model download path** (default: app `userData/models`). On entering LoRA Train, Captioer checks Raw / Turbo and prompts **Download** or **Update**.
 4. Set **Train base** to `krea/Krea-2-Raw` (or a local path), **Sample / apply on** to `krea/Krea-2-Turbo`
 5. Point **folder_path** at your captioned dataset, then **Start Train**

@@ -310,7 +310,6 @@ declare global {
       listGpuDevices: () => Promise<{ id: string; label: string }[]>
       getResourceStats: (deviceId?: string) => Promise<ResourceStats>
       killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>
-      checkTrainEnv: (pythonPath?: string) => Promise<{ ok: boolean; message: string }>
       defaultPythonInstallPath: () => Promise<string>
       probePython: (pythonPath?: string) => Promise<{
         status: 'ready' | 'missingPython' | 'missingPackages' | 'error'

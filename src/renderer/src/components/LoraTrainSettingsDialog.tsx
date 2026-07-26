@@ -13,15 +13,10 @@ interface Props {
 export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Props) {
   const [draft, setDraft] = useState(() => normalizeLoraTrainApp(settings))
   const [saving, setSaving] = useState(false)
-  const [checking, setChecking] = useState(false)
-  const [checkMsg, setCheckMsg] = useState<string | null>(null)
-  const [checkErr, setCheckErr] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     setDraft(normalizeLoraTrainApp(settings))
-    setCheckMsg(null)
-    setCheckErr(null)
   }, [open, settings])
 
   if (!open) return null
@@ -35,24 +30,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
   const useDefaultModelPath = async () => {
     const path = await window.api.defaultModelDownloadPath()
     setDraft((prev) => ({ ...prev, modelDownloadPath: path }))
-  }
-
-  const verifyEnv = async () => {
-    setChecking(true)
-    setCheckMsg(null)
-    setCheckErr(null)
-    try {
-      const result = await window.api.checkTrainEnv(draft.pythonPath.trim() || undefined)
-      if (result.ok) {
-        setCheckMsg(result.message || 'Environment OK')
-      } else {
-        setCheckErr(result.message || 'Environment check failed')
-      }
-    } catch (err) {
-      setCheckErr(err instanceof Error ? err.message : String(err))
-    } finally {
-      setChecking(false)
-    }
   }
 
   const handleSave = async () => {
@@ -105,16 +82,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
             </>
           }
         />
-
-        <div className="field">
-          <div className="model-row">
-            <button type="button" onClick={() => void verifyEnv()} disabled={checking}>
-              {checking ? 'Checking…' : 'Verify environment'}
-            </button>
-          </div>
-          {checkMsg && <p className="test-ok">{checkMsg}</p>}
-          {checkErr && <p className="test-err">{checkErr}</p>}
-        </div>
 
         <label className="field">
           <span>Hugging Face token (for gated Krea models)</span>
