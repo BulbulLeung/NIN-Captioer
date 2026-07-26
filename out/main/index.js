@@ -152,7 +152,14 @@ async function probePython(pythonPath) {
     'print("VER:" + ver)',
     'print("MISSING:" + ",".join(missing))',
     'print("CUDA:" + ("1" if cuda else "0"))',
-    'print("KREA:" + ("1" if ok_krea else "0"))'
+    'print("KREA:" + ("1" if ok_krea else "0"))',
+    "ok_triton = False",
+    "try:",
+    "  import triton  # noqa: F401",
+    "  ok_triton = True",
+    "except Exception:",
+    "  pass",
+    'print("TRITON:" + ("1" if ok_triton else "0"))'
   ].join("\n");
   try {
     const { stdout, stderr } = await execFileAsync$1(py, ["-c", code], {
@@ -168,10 +175,11 @@ ${stderr}`;
     const missing = (missLine?.slice("MISSING:".length) || "").split(",").map((s) => s.trim()).filter(Boolean);
     const cuda = /CUDA:1/.test(out);
     const krea = /KREA:1/.test(out);
+    const triton = /TRITON:1/.test(out);
     if (missing.length === 0) {
       return {
         status: "ready",
-        message: `OK (${py} ${ver})${cuda ? " · CUDA" : " · no CUDA"}${krea ? " · Krea2" : ""}`,
+        message: `OK (${py} ${ver})${cuda ? " · CUDA" : " · no CUDA"}${krea ? " · Krea2" : ""}${triton ? " · Triton" : process.platform === "win32" ? " · no Triton" : ""}`,
         pythonPath: py,
         version: ver,
         cuda,
@@ -243,9 +251,222 @@ async function writeRequirementsNoTorch(src, dest) {
   const filtered = text.split(/\r?\n/).filter((line) => {
     const t = line.trim();
     if (!t || t.startsWith("#")) return true;
-    return !/^torch\b/i.test(t);
+    return !/^torch\b/i.test(t) && !/^flash-attn\b/i.test(t) && !/^flash_attn\b/i.test(t);
   }).join("\n");
   await promises.writeFile(dest, filtered + "\n", "utf8");
+}
+function tritonWindowsSpecForTorch(torchVersion) {
+  const m = torchVersion.match(/(\d+)\.(\d+)/);
+  const major = m ? Number(m[1]) : 2;
+  const minor = m ? Number(m[2]) : 9;
+  if (major === 2 && minor <= 5) return "triton-windows>=3.1,<3.2";
+  if (major === 2 && minor === 6) return "triton-windows>=3.2,<3.3";
+  if (major === 2 && minor === 7) return "triton-windows>=3.3,<3.4";
+  if (major === 2 && minor === 8) return "triton-windows>=3.4,<3.5";
+  if (major === 2 && minor === 9) return "triton-windows>=3.5,<3.6";
+  if (major === 2 && minor <= 11) return "triton-windows>=3.6,<3.7";
+  return "triton-windows>=3.7,<3.8";
+}
+function torchaoSpecForTorch(torchVersion) {
+  const m = torchVersion.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+  const major = m ? Number(m[1]) : 2;
+  const minor = m ? Number(m[2]) : 9;
+  const patch = m && m[3] != null ? Number(m[3]) : 0;
+  if (major === 2 && minor === 6) return "torchao>=0.9.0,<0.10.0";
+  if (major === 2 && minor === 9 && patch >= 1) return "torchao==0.15.0";
+  if (major === 2 && minor === 9) return "torchao==0.14.1";
+  if (major === 2 && minor === 10) return "torchao==0.16.0";
+  return "torchao>=0.15.0,<0.17.0";
+}
+async function readTorchVersion(py) {
+  try {
+    const { stdout } = await execFileAsync$1(
+      py,
+      ["-c", "import torch; print(torch.__version__)"],
+      { timeout: 6e4, windowsHide: true, encoding: "utf8" }
+    );
+    return (stdout || "").trim();
+  } catch {
+    return "";
+  }
+}
+async function readTorchCuda(py) {
+  try {
+    const { stdout } = await execFileAsync$1(
+      py,
+      ["-c", 'import torch; print(torch.version.cuda or "")'],
+      { timeout: 6e4, windowsHide: true, encoding: "utf8" }
+    );
+    return (stdout || "").trim();
+  } catch {
+    return "";
+  }
+}
+async function installTritonWindows(opts) {
+  const { uv, py, installRoot, onProgress } = opts;
+  onProgress({
+    stage: "triton",
+    message: "Installing triton-windows (GPU kernels)…",
+    pct: 82
+  });
+  await runSpawn(uv, ["pip", "uninstall", "-y", "--python", py, "triton"], {
+    cwd: installRoot
+  });
+  let r = await runSpawn(
+    uv,
+    [
+      "pip",
+      "install",
+      "--python",
+      py,
+      "setuptools",
+      "wheel",
+      "nvidia-cuda-nvcc-cu12",
+      "nvidia-cuda-runtime-cu12"
+    ],
+    { cwd: installRoot }
+  );
+  if (r.code !== 0) {
+    return {
+      ok: false,
+      message: `triton Windows deps (setuptools/CUDA) failed: ${r.stderr || r.stdout}`
+    };
+  }
+  const torchVer = await readTorchVersion(py);
+  const spec = tritonWindowsSpecForTorch(torchVer || "2.9");
+  onProgress({
+    stage: "triton",
+    message: `Installing ${spec} (torch ${torchVer || "unknown"})…`,
+    pct: 85
+  });
+  r = await runSpawn(uv, ["pip", "install", "--python", py, "-U", spec], {
+    cwd: installRoot
+  });
+  if (r.code !== 0) {
+    return {
+      ok: false,
+      message: `triton-windows install failed: ${r.stderr || r.stdout}`
+    };
+  }
+  try {
+    await execFileAsync$1(py, ["-c", "import triton; print(triton.__version__)"], {
+      timeout: 6e4,
+      windowsHide: true,
+      encoding: "utf8"
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `triton import failed after install: ${detail}` };
+  }
+  return { ok: true, message: `triton-windows OK (${spec})` };
+}
+function flashAttnWindowsWheelUrl(torchVersion, cudaVersion, pythonVersion) {
+  const tm = torchVersion.match(/(\d+)\.(\d+)/);
+  const cm = cudaVersion.match(/(\d+)\.(\d+)/);
+  const pm = pythonVersion.match(/(\d+)\.(\d+)/);
+  if (!tm || !pm) return null;
+  const tMinor = Number(tm[2]);
+  const pyTag = `cp${pm[1]}${pm[2]}`;
+  const cuMajor = cm ? Number(cm[1]) : 12;
+  const cuMinor = cm ? Number(cm[2]) : 8;
+  let cuTag = "cu128";
+  if (cuMajor === 13) cuTag = "cu130";
+  else if (cuMinor <= 6) cuTag = "cu126";
+  else if (cuMinor === 9) cuTag = "cu129";
+  else cuTag = "cu128";
+  if (tMinor !== 9) {
+    return null;
+  }
+  const name = `flash_attn-2.8.3+${cuTag}torch2.9-${pyTag}-${pyTag}-win_amd64.whl`;
+  const encoded = name.replace(/\+/g, "%2B");
+  return `https://github.com/PozzettiAndrea/cuda-wheels/releases/download/flash_attn-latest/${encoded}`;
+}
+async function readPythonVersion(py) {
+  try {
+    const { stdout } = await execFileAsync$1(
+      py,
+      ["-c", 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],
+      { timeout: 3e4, windowsHide: true, encoding: "utf8" }
+    );
+    return (stdout || "").trim();
+  } catch {
+    return "";
+  }
+}
+async function installFlashAttn(opts) {
+  const { uv, py, installRoot, onProgress } = opts;
+  onProgress({
+    stage: "flash",
+    message: "Installing flash-attn (FA2 wheel)…",
+    pct: 86
+  });
+  await runSpawn(uv, ["pip", "install", "--python", py, "einops", "packaging", "ninja"], {
+    cwd: installRoot
+  });
+  if (process.platform === "win32") {
+    const torchVer = await readTorchVersion(py);
+    const cudaVer = await readTorchCuda(py);
+    const pyVer = await readPythonVersion(py);
+    const wheelUrl = flashAttnWindowsWheelUrl(torchVer, cudaVer, pyVer || "3.11");
+    if (!wheelUrl) {
+      return {
+        ok: false,
+        message: `no flash-attn Windows wheel for torch ${torchVer || "?"} cuda ${cudaVer || "?"} py ${pyVer || "?"}`
+      };
+    }
+    onProgress({
+      stage: "flash",
+      message: `Downloading flash-attn wheel (torch ${torchVer})…`,
+      pct: 86
+    });
+    const wheelName = decodeURIComponent(wheelUrl.split("/").pop() || "flash_attn.whl");
+    const wheelPath = path.join(installRoot, wheelName);
+    try {
+      await downloadFile(wheelUrl, wheelPath);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return { ok: false, message: `flash-attn wheel download failed: ${detail}` };
+    }
+    const r = await runSpawn(
+      uv,
+      ["pip", "install", "--python", py, "--force-reinstall", "--no-deps", wheelPath],
+      { cwd: installRoot }
+    );
+    await promises.rm(wheelPath, { force: true }).catch(() => void 0);
+    if (r.code !== 0) {
+      return {
+        ok: false,
+        message: `flash-attn wheel install failed: ${r.stderr || r.stdout}`
+      };
+    }
+  } else {
+    const r = await runSpawn(
+      uv,
+      ["pip", "install", "--python", py, "flash-attn", "--no-build-isolation"],
+      { cwd: installRoot }
+    );
+    if (r.code !== 0) {
+      return {
+        ok: false,
+        message: `flash-attn install failed: ${r.stderr || r.stdout}`
+      };
+    }
+  }
+  try {
+    const { stdout } = await execFileAsync$1(
+      py,
+      [
+        "-c",
+        'from flash_attn import flash_attn_func; import flash_attn; print(getattr(flash_attn, "__version__", "ok"))'
+      ],
+      { timeout: 12e4, windowsHide: true, encoding: "utf8" }
+    );
+    const ver = (stdout || "").trim() || "ok";
+    return { ok: true, message: `flash-attn ${ver} OK` };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `flash-attn import failed: ${detail}` };
+  }
 }
 async function installPythonEnv(opts) {
   installCancelled = false;
@@ -269,7 +490,7 @@ async function installPythonEnv(opts) {
     if (!fs.existsSync(py)) {
       throw new Error(`venv python missing: ${py}`);
     }
-    onProgress({ stage: "torch", message: "Installing CUDA torch…", pct: 40 });
+    onProgress({ stage: "torch", message: "Installing CUDA torch 2.9.1 (cu128)…", pct: 40 });
     r = await runSpawn(
       uv,
       [
@@ -277,23 +498,34 @@ async function installPythonEnv(opts) {
         "install",
         "--python",
         py,
-        "torch",
-        "torchvision",
+        "torch==2.9.1",
+        "torchvision==0.24.1",
         "--index-url",
-        "https://download.pytorch.org/whl/cu124"
+        "https://download.pytorch.org/whl/cu128"
       ],
       { cwd: installRoot }
     );
-    let torchMode = "CUDA cu124";
+    let torchMode = "CUDA cu128 (torch 2.9.1)";
     if (r.code !== 0) {
       onProgress({ stage: "torch", message: "CUDA torch failed; installing CPU torch…", pct: 45 });
-      r = await runSpawn(uv, ["pip", "install", "--python", py, "torch", "torchvision"], {
-        cwd: installRoot
-      });
+      r = await runSpawn(
+        uv,
+        [
+          "pip",
+          "install",
+          "--python",
+          py,
+          "torch==2.9.1",
+          "torchvision==0.24.1",
+          "--index-url",
+          "https://download.pytorch.org/whl/cpu"
+        ],
+        { cwd: installRoot }
+      );
       if (r.code !== 0) {
         throw new Error(`torch install failed: ${r.stderr || r.stdout}`);
       }
-      torchMode = "CPU";
+      torchMode = "CPU (torch 2.9.1)";
     }
     const reqTrain = path.join(opts.trainerRoot, "requirements.txt");
     const reqWd14 = path.join(opts.trainerRoot, "requirements-wd14.txt");
@@ -307,6 +539,19 @@ async function installPythonEnv(opts) {
     if (r.code !== 0) {
       throw new Error(`requirements.txt install failed: ${r.stderr || r.stdout}`);
     }
+    const torchVer = await readTorchVersion(py);
+    const torchaoSpec = torchaoSpecForTorch(torchVer || "2.9.1");
+    onProgress({
+      stage: "torchao",
+      message: `Pinning ${torchaoSpec} for torch ${torchVer || "unknown"}…`,
+      pct: 72
+    });
+    r = await runSpawn(uv, ["pip", "install", "--python", py, torchaoSpec], {
+      cwd: installRoot
+    });
+    if (r.code !== 0) {
+      throw new Error(`torchao pin failed: ${r.stderr || r.stdout}`);
+    }
     if (fs.existsSync(reqWd14)) {
       onProgress({ stage: "wd14", message: "Installing WD14 requirements…", pct: 75 });
       r = await runSpawn(uv, ["pip", "install", "--python", py, "-r", reqWd14], {
@@ -314,6 +559,41 @@ async function installPythonEnv(opts) {
       });
       if (r.code !== 0) {
         throw new Error(`requirements-wd14.txt install failed: ${r.stderr || r.stdout}`);
+      }
+    }
+    let tritonNote = "";
+    let flashNote = "";
+    if (process.platform === "win32" && torchMode.startsWith("CUDA")) {
+      const tritonResult = await installTritonWindows({ uv, py, installRoot, onProgress });
+      if (!tritonResult.ok) {
+        tritonNote = ` Triton warning: ${tritonResult.message}`;
+        onProgress({
+          stage: "triton",
+          message: `triton-windows skipped: ${tritonResult.message}`,
+          pct: 86
+        });
+      } else {
+        tritonNote = ` ${tritonResult.message}.`;
+      }
+      const flashResult = await installFlashAttn({ uv, py, installRoot, onProgress });
+      if (!flashResult.ok) {
+        flashNote = ` flash-attn warning: ${flashResult.message}`;
+        onProgress({
+          stage: "flash",
+          message: `flash-attn skipped: ${flashResult.message}`,
+          pct: 86
+        });
+      } else {
+        flashNote = ` ${flashResult.message}.`;
+      }
+    } else if (process.platform === "win32") {
+      tritonNote = " Triton skipped (CPU torch).";
+    } else if (torchMode.startsWith("CUDA")) {
+      const flashResult = await installFlashAttn({ uv, py, installRoot, onProgress });
+      if (!flashResult.ok) {
+        flashNote = ` flash-attn warning: ${flashResult.message}`;
+      } else {
+        flashNote = ` ${flashResult.message}.`;
       }
     }
     onProgress({ stage: "krea", message: "Checking Krea2Pipeline…", pct: 88 });
@@ -334,7 +614,7 @@ async function installPythonEnv(opts) {
     return {
       ok: finalProbe.status === "ready" || finalProbe.status === "missingPackages",
       pythonPath: py,
-      message: finalProbe.status === "ready" ? `Installed (${torchMode}). ${finalProbe.message}` : `Installed (${torchMode}) with warnings: ${finalProbe.message}`
+      message: finalProbe.status === "ready" ? `Installed (${torchMode}).${tritonNote}${flashNote} ${finalProbe.message}` : `Installed (${torchMode}) with warnings:${tritonNote}${flashNote} ${finalProbe.message}`
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

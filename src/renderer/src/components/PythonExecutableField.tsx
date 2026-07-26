@@ -177,7 +177,7 @@ export function PythonExecutableField({
         </div>
         <p className="field-hint">
           Used by Download to install Python, create a venv, and install requirements (CUDA torch
-          preferred).
+          preferred; on Windows also triton-windows).
         </p>
       </label>
 

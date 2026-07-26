@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { LoraTrainAppSettings } from '../types'
 import { DEFAULT_LORA_TRAIN_APP, normalizeLoraTrainApp } from '../types'
-import { GpuDeviceSelect } from './GpuDeviceSelect'
 import { PythonExecutableField } from './PythonExecutableField'
 
 interface Props {
@@ -99,9 +98,10 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
           enabled={open}
           hint={
             <>
-              Same setting as Dataset Edit Settings. Download installs CUDA torch (when possible)
-              plus packages from <code>trainer/requirements.txt</code> and{' '}
-              <code>trainer/requirements-wd14.txt</code>.
+              Same setting as Dataset Edit Settings. Download installs CUDA torch 2.9.1
+              (cu128), packages from <code>trainer/requirements.txt</code> and{' '}
+              <code>trainer/requirements-wd14.txt</code>, and on Windows{' '}
+              <code>triton-windows</code> and <code>flash-attn</code> (FA2 wheel).
             </>
           }
         />
@@ -161,26 +161,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
           <p className="field-hint">
             Raw / Turbo snapshots are stored here. LoRA Train checks this folder on enter.
           </p>
-        </label>
-
-        <label className="field">
-          <span>Default training folder</span>
-          <input
-            type="text"
-            value={draft.defaultTrainingFolder}
-            onChange={(e) =>
-              setDraft((prev) => ({ ...prev, defaultTrainingFolder: e.target.value }))
-            }
-          />
-        </label>
-
-        <label className="field">
-          <span>Default device</span>
-          <GpuDeviceSelect
-            enabled={open}
-            value={draft.defaultDevice}
-            onChange={(defaultDevice) => setDraft((prev) => ({ ...prev, defaultDevice }))}
-          />
         </label>
 
         <div className="modal-actions">

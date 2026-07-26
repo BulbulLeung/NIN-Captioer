@@ -56,6 +56,16 @@ export interface LoraTrainModelConfig {
   arch: LoraTrainArch
   quantize: boolean
   low_vram: boolean
+  /**
+   * Stream DiT transformer blocks CPU↔GPU (independent of low_vram).
+   * Saves VRAM; slower than full GPU residency.
+   */
+  layer_offload: boolean
+  /**
+   * 0 = auto (trainer picks % from free VRAM);
+   * 1–100 = manual fraction of transformer blocks streamed off GPU.
+   */
+  layer_offload_percent: number
 }
 
 export interface LoraTrainSamplePrompt {
@@ -105,8 +115,6 @@ export interface LoraTrainAppSettings {
   huggingfaceToken: string
   /** Local folder for HF model downloads; empty = app userData/models */
   modelDownloadPath: string
-  defaultTrainingFolder: string
-  defaultDevice: string
   /** @deprecated migrated to pythonPath */
   aiToolkitPath?: string
 }
@@ -150,7 +158,7 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     linear_alpha: 16
   },
   save: {
-    dtype: 'float16',
+    dtype: 'fp16',
     save_every: 250,
     max_step_saves_to_keep: 4,
     push_to_hub: false
@@ -189,7 +197,9 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     train_name_or_path: KREA2_RAW,
     arch: 'krea2',
     quantize: false,
-    low_vram: false
+    low_vram: false,
+    layer_offload: false,
+    layer_offload_percent: 0
   },
   sample: {
     sampler: 'flowmatch',
@@ -200,8 +210,8 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     prompts: buildDefaultSamplePrompts(),
     neg: '',
     seed: DEFAULT_SAMPLE_SEED,
-    guidance_scale: 0,
-    sample_steps: 8
+    guidance_scale: 3.5,
+    sample_steps: 20
   }
 }
 
@@ -209,9 +219,7 @@ export const DEFAULT_LORA_TRAIN_APP: LoraTrainAppSettings = {
   pythonPath: '',
   pythonInstallPath: '',
   huggingfaceToken: '',
-  modelDownloadPath: '',
-  defaultTrainingFolder: 'output',
-  defaultDevice: 'cuda:0'
+  modelDownloadPath: ''
 }
 
 export const DEFAULT_LORA_TRAIN_JOB_PRESET_ID = 'job-default'
@@ -256,6 +264,20 @@ function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraT
     cache_latents_to_disk: asBool(o.cache_latents_to_disk, fallback.cache_latents_to_disk),
     resolution: asNumberArray(o.resolution, fallback.resolution)
   }
+}
+
+function normalizeSaveDtype(value: unknown, fallback: string): string {
+  const raw = asString(value, fallback).toLowerCase()
+  if (raw === 'float16' || raw === 'fp16') return 'fp16'
+  if (raw === 'bfloat16' || raw === 'bf16') return 'bf16'
+  if (raw === 'float32' || raw === 'fp32') return 'fp32'
+  return fallback === 'float16' ? 'fp16' : fallback
+}
+
+function normalizeNetworkType(value: unknown, fallback: string): string {
+  const raw = asString(value, fallback).toLowerCase()
+  if (raw === 'lora' || raw === 'locon' || raw === 'lokr') return raw
+  return 'lora'
 }
 
 function normalizeArch(value: unknown): LoraTrainArch {
@@ -334,18 +356,18 @@ export function normalizeLoraTrainJob(
     device: asString(o.device, d.device),
     trigger_word: asString(o.trigger_word, d.trigger_word),
     network: {
-      type: asString(network.type, d.network.type),
+      type: normalizeNetworkType(network.type, d.network.type),
       linear: asNumber(network.linear, d.network.linear),
       linear_alpha: asNumber(network.linear_alpha, d.network.linear_alpha)
     },
     save: {
-      dtype: asString(save.dtype, d.save.dtype),
+      dtype: normalizeSaveDtype(save.dtype, d.save.dtype),
       save_every: asNumber(save.save_every, d.save.save_every),
       max_step_saves_to_keep: asNumber(
         save.max_step_saves_to_keep,
         d.save.max_step_saves_to_keep
       ),
-      push_to_hub: asBool(save.push_to_hub, d.save.push_to_hub)
+      push_to_hub: false
     },
     datasets,
     train: {
@@ -355,8 +377,8 @@ export function normalizeLoraTrainJob(
         train.gradient_accumulation_steps,
         d.train.gradient_accumulation_steps
       ),
-      train_unet: asBool(train.train_unet, d.train.train_unet),
-      train_text_encoder: asBool(train.train_text_encoder, d.train.train_text_encoder),
+      train_unet: true,
+      train_text_encoder: false,
       gradient_checkpointing: asBool(
         train.gradient_checkpointing,
         d.train.gradient_checkpointing
@@ -381,7 +403,14 @@ export function normalizeLoraTrainJob(
       train_name_or_path: trainPath,
       arch: normalizeArch(model.arch),
       quantize: asBool(model.quantize, d.model.quantize),
-      low_vram: asBool(model.low_vram, d.model.low_vram)
+      low_vram: asBool(model.low_vram, d.model.low_vram),
+      layer_offload: asBool(model.layer_offload, d.model.layer_offload),
+      layer_offload_percent: (() => {
+        // Legacy layer_offload_mode=auto → 0 (Auto). Otherwise clamp percent.
+        if (asString(model.layer_offload_mode, '') === 'auto') return 0
+        const raw = asNumber(model.layer_offload_percent, d.model.layer_offload_percent)
+        return Math.min(100, Math.max(0, Math.round(raw)))
+      })()
     },
     sample: {
       sampler: asString(sample.sampler, d.sample.sampler),
@@ -454,9 +483,7 @@ export function normalizeLoraTrainApp(
     pythonPath: pythonFromLegacy,
     pythonInstallPath: asString(o.pythonInstallPath, d.pythonInstallPath),
     huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken),
-    modelDownloadPath: asString(o.modelDownloadPath, d.modelDownloadPath),
-    defaultTrainingFolder: asString(o.defaultTrainingFolder, d.defaultTrainingFolder),
-    defaultDevice: asString(o.defaultDevice, d.defaultDevice)
+    modelDownloadPath: asString(o.modelDownloadPath, d.modelDownloadPath)
   }
 }
 

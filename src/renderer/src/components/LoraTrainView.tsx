@@ -1230,7 +1230,7 @@ export function LoraTrainView({
               </Field>
               <Field
                 label="Resolutions"
-                hint="Toggle one or more training sizes"
+                hint="Toggle one or more sizes; each batch mixes across selected resolutions"
               >
                 <div className="lora-resolution-grid" role="group" aria-label="Resolutions">
                   {RESOLUTION_OPTIONS.map((size) => {
@@ -1311,7 +1311,7 @@ export function LoraTrainView({
               />
               <ToggleField
                 label="Cache latents to disk"
-                hint="Encode images once with VAE; required on ~24GB GPUs"
+                hint="Encode images once with VAE. Off = encode every step (high VRAM, ~40GB+)"
                 checked={ds0.cache_latents_to_disk}
                 disabled={training}
                 onChange={(v) =>
@@ -1325,7 +1325,7 @@ export function LoraTrainView({
               />
               <ToggleField
                 label="Cache text embeddings to disk"
-                hint="Encode captions once with text encoder; required on ~24GB GPUs"
+                hint="Encode captions once. Off = encode every step (more VRAM)"
                 checked={draft.train.cache_text_embeddings}
                 disabled={training}
                 onChange={(v) =>
@@ -1466,7 +1466,7 @@ export function LoraTrainView({
 
           {activeSection === 'lora' && (
             <div className="lora-grid">
-              <Field label="Network type">
+              <Field label="Network type" hint="locon uses PEFT LoHa (LyCORIS)">
                 <select
                   value={draft.network.type}
                   disabled={training}
@@ -1789,19 +1789,11 @@ export function LoraTrainView({
                     }))
                   }
                 >
-                  <option value="float16">float16</option>
                   <option value="bf16">bf16</option>
-                  <option value="float32">float32</option>
+                  <option value="fp16">fp16</option>
+                  <option value="fp32">fp32</option>
                 </select>
               </Field>
-              <ToggleField
-                label="Push to Hugging Face Hub"
-                checked={draft.save.push_to_hub}
-                disabled={training}
-                onChange={(v) =>
-                  patch((p) => ({ ...p, save: { ...p.save, push_to_hub: v } }))
-                }
-              />
               <ToggleField
                 label="Use EMA"
                 checked={draft.train.ema_config.use_ema}
@@ -1839,26 +1831,6 @@ export function LoraTrainView({
                 />
               </Field>
               <ToggleField
-                label="Train transformer / UNet"
-                checked={draft.train.train_unet}
-                disabled={training}
-                onChange={(v) =>
-                  patch((p) => ({ ...p, train: { ...p.train, train_unet: v } }))
-                }
-              />
-              <ToggleField
-                label="Train text encoder"
-                hint="Usually off for Krea 2"
-                checked={draft.train.train_text_encoder}
-                disabled={training}
-                onChange={(v) =>
-                  patch((p) => ({
-                    ...p,
-                    train: { ...p.train, train_text_encoder: v }
-                  }))
-                }
-              />
-              <ToggleField
                 label="Quantize"
                 checked={draft.model.quantize}
                 disabled={training}
@@ -1868,13 +1840,54 @@ export function LoraTrainView({
               />
               <ToggleField
                 label="Low VRAM mode"
-                hint="On: stage TE/VAE/DiT offload + force gradient checkpointing (saves VRAM, slower samples). Off: keep DiT on GPU during sample (needs more VRAM)."
+                hint="On: stage TE/VAE off GPU when DiT is busy + force gradient checkpointing. Does not control DiT layer offload."
                 checked={draft.model.low_vram}
                 disabled={training}
                 onChange={(v) =>
                   patch((p) => ({ ...p, model: { ...p.model, low_vram: v } }))
                 }
               />
+              <ToggleField
+                label="Layer offload"
+                hint="Stream DiT transformer blocks CPU↔GPU to free VRAM (slower). Independent of Low VRAM. Only applies when you enable it."
+                checked={draft.model.layer_offload}
+                disabled={training}
+                onChange={(v) =>
+                  patch((p) => ({ ...p, model: { ...p.model, layer_offload: v } }))
+                }
+              />
+              <Field
+                label="Offload %"
+                hint="0 = Auto (suggest % from free VRAM when Layer offload is on). 1–100 = exact manual %; never auto-raised."
+              >
+                <div className="lora-offload-pct">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={draft.model.layer_offload_percent}
+                    disabled={training || !draft.model.layer_offload}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        model: {
+                          ...p.model,
+                          layer_offload_percent: Number(e.target.value)
+                        }
+                      }))
+                    }
+                  />
+                  <span
+                    className="lora-offload-pct-value"
+                    aria-label="Offload percent"
+                  >
+                    {draft.model.layer_offload_percent <= 0
+                      ? 'Auto'
+                      : `${draft.model.layer_offload_percent}%`}
+                  </span>
+                </div>
+              </Field>
             </div>
           )}
         </div>
