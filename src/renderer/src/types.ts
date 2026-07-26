@@ -109,6 +109,8 @@ export interface AppSettings {
   autoAnalysis: boolean
   listViewMode: ListViewMode
   thumbnailWidth: number
+  /** DatasetEdit: show AR bucket crop overlay on image preview. */
+  bucketPreview: boolean
   activeView: ActiveView
   loraTrainJobs: LoraTrainJobPreset[]
   activeLoraTrainJobId: string
@@ -158,6 +160,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoAnalysis: true,
   listViewMode: 'list',
   thumbnailWidth: 96,
+  bucketPreview: true,
   activeView: 'datasetEdit',
   loraTrainJobs: [createDefaultLoraTrainJobPreset()],
   activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
@@ -264,6 +267,7 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     autoAnalysis: merged.autoAnalysis !== false,
     listViewMode: normalizeListViewMode(merged.listViewMode),
     thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth),
+    bucketPreview: merged.bucketPreview !== false,
     activeView: normalizeActiveView(merged.activeView),
     loraTrainJobs,
     activeLoraTrainJobId,

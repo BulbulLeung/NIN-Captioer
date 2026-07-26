@@ -252,6 +252,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       rightPaneWidth: draft.rightPaneWidth,
       listViewMode: draft.listViewMode,
       thumbnailWidth: draft.thumbnailWidth,
+      bucketPreview: draft.bucketPreview,
       activeView: draft.activeView,
       loraTrainJobs: draft.loraTrainJobs,
       activeLoraTrainJobId: draft.activeLoraTrainJobId,

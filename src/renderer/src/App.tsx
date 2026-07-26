@@ -831,7 +831,7 @@ export default function App() {
   }, [])
 
   const persistListView = useCallback(
-    (patch: Partial<Pick<AppSettings, 'listViewMode' | 'thumbnailWidth'>>) => {
+    (patch: Partial<Pick<AppSettings, 'listViewMode' | 'thumbnailWidth' | 'bucketPreview'>>) => {
       const next = normalizeSettings({ ...settingsRef.current, ...patch })
       setSettings(next)
       void window.api.setSettings(next)
@@ -842,6 +842,11 @@ export default function App() {
   const setListViewMode = (mode: ListViewMode) => {
     if (settings.listViewMode === mode) return
     persistListView({ listViewMode: mode })
+  }
+
+  const setBucketPreview = (value: boolean) => {
+    if (settings.bucketPreview === value) return
+    persistListView({ bucketPreview: value })
   }
 
   const onThumbnailWidthChange = (value: number) => {
@@ -1140,12 +1145,18 @@ export default function App() {
           captioningPath={captioningPath}
           dirty={dirty}
           imageUrl={imageUrl}
+          trainResolutions={
+            activeLoraJob.job.datasets[0]?.resolution?.length
+              ? activeLoraJob.job.datasets[0].resolution
+              : [1024]
+          }
           draggingPane={draggingPane}
           onStopBatchCaption={stopBatchCaption}
           onStartAutoCaption={() => void startAutoCaption()}
           onSetListViewMode={setListViewMode}
           onThumbnailWidthChange={onThumbnailWidthChange}
           onThumbnailWidthCommit={onThumbnailWidthCommit}
+          onBucketPreviewChange={setBucketPreview}
           onSelectImage={(path) => void selectImage(path)}
           onStartPaneResize={startPaneResize}
           onEnglishChange={onEnglishChange}

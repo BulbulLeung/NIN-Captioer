@@ -35,6 +35,7 @@ export interface AppSettings {
   autoAnalysis?: boolean
   listViewMode?: string
   thumbnailWidth?: number
+  bucketPreview?: boolean
   activeView?: string
   loraTrainJob?: unknown
   loraTrainApp?: unknown

@@ -532,6 +532,81 @@ button.danger.kbd-focus {
   flex-direction: column;
 }
 
+.preview-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  background: #14171c;
+  min-height: 2.1rem;
+}
+
+.preview-toolbar-left,
+.preview-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.preview-toolbar-left {
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.preview-size-label {
+  color: var(--text);
+}
+
+.preview-size-arrow {
+  color: var(--text-muted);
+  margin: 0 0.1rem;
+}
+
+.preview-size-bucket {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.preview-size-bucket.is-upscale {
+  color: var(--danger);
+}
+
+.preview-size-muted {
+  color: var(--text-muted);
+}
+
+.preview-toolbar-toggle {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.preview-toolbar-toggle:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.preview-toolbar-toggle.active {
+  background: #243247;
+  border-color: #3a5278;
+  color: var(--accent);
+}
+
+.preview-toolbar-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .right-pane {
   min-width: 0;
   min-height: 0;
@@ -715,6 +790,7 @@ button.danger.kbd-focus {
 }
 
 .image-preview {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -736,9 +812,49 @@ button.danger.kbd-focus {
 }
 
 .image-preview img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  max-width: none;
+  max-height: none;
+}
+
+.bucket-preview-overlay {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(120, 190, 255, 0.95);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.48);
+  z-index: 1;
+}
+
+.bucket-preview-grid-h,
+.bucket-preview-grid-v {
+  position: absolute;
+  background: rgba(120, 190, 255, 0.35);
+  pointer-events: none;
+}
+
+.bucket-preview-grid-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+  top: 33.333%;
+}
+
+.bucket-preview-grid-h.mid {
+  top: 66.666%;
+}
+
+.bucket-preview-grid-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  left: 33.333%;
+}
+
+.bucket-preview-grid-v.mid {
+  left: 66.666%;
 }
 
 .caption-editor {

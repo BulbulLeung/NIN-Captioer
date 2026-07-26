@@ -1,7 +1,9 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CaptionEditor } from './CaptionEditor'
 import { ImageList } from './ImageList'
 import { ImagePreview } from './ImagePreview'
+import { assignBucket } from '../utils/arBuckets'
 import type { AppSettings, ImageItem, ListViewMode } from '../types'
 
 export interface DatasetEditViewProps {
@@ -21,12 +23,15 @@ export interface DatasetEditViewProps {
   captioningPath: string | null
   dirty: boolean
   imageUrl: string | null
+  /** Active LoraTrain job resolution tiers for AR bucket preview. */
+  trainResolutions: number[]
   draggingPane: 'sidebar' | 'right' | null
   onStopBatchCaption: () => void
   onStartAutoCaption: () => void
   onSetListViewMode: (mode: ListViewMode) => void
   onThumbnailWidthChange: (value: number) => void
   onThumbnailWidthCommit: (value: number) => void
+  onBucketPreviewChange: (value: boolean) => void
   onSelectImage: (path: string) => void
   onStartPaneResize: (
     which: 'sidebar' | 'right'
@@ -55,12 +60,14 @@ export function DatasetEditView({
   captioningPath,
   dirty,
   imageUrl,
+  trainResolutions,
   draggingPane,
   onStopBatchCaption,
   onStartAutoCaption,
   onSetListViewMode,
   onThumbnailWidthChange,
   onThumbnailWidthCommit,
+  onBucketPreviewChange,
   onSelectImage,
   onStartPaneResize,
   onEnglishChange,
@@ -69,6 +76,19 @@ export function DatasetEditView({
   onSave,
   onRecaption
 }: DatasetEditViewProps) {
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null)
+
+  const onNaturalSize = useCallback((size: { w: number; h: number } | null) => {
+    setNaturalSize(size)
+  }, [])
+
+  const bucket = useMemo(() => {
+    if (!naturalSize) return null
+    return assignBucket(naturalSize.w, naturalSize.h, trainResolutions)
+  }, [naturalSize, trainResolutions])
+
+  const bucketPreview = settings.bucketPreview
+
   return (
     <div
       className="main"
@@ -176,7 +196,59 @@ export function DatasetEditView({
       />
 
       <section className="center-pane">
-        <ImagePreview imagePath={selectedPath} imageUrl={imageUrl} />
+        <div className="preview-toolbar">
+          <div className="preview-toolbar-left" aria-live="polite">
+            {naturalSize ? (
+              <>
+                <span className="preview-size-label" title="Original image size">
+                  {naturalSize.w}×{naturalSize.h}
+                </span>
+                <span className="preview-size-arrow" aria-hidden="true">
+                  →
+                </span>
+                <span
+                  className={`preview-size-bucket${
+                    bucket && (bucket.w > naturalSize.w || bucket.h > naturalSize.h)
+                      ? ' is-upscale'
+                      : ''
+                  }`}
+                  title={
+                    bucket
+                      ? `AR bucket (tier ${bucket.tier}${
+                          bucket.w > naturalSize.w || bucket.h > naturalSize.h
+                            ? ', upscale'
+                            : ''
+                        })`
+                      : 'Bucket'
+                  }
+                >
+                  {bucket ? `${bucket.w}×${bucket.h}` : '—'}
+                </span>
+              </>
+            ) : (
+              <span className="preview-size-muted">—</span>
+            )}
+          </div>
+          <div className="preview-toolbar-right">
+            <button
+              type="button"
+              className={`preview-toolbar-toggle${bucketPreview ? ' active' : ''}`}
+              aria-pressed={bucketPreview}
+              disabled={!naturalSize || !bucket}
+              title="Show bucket crop region on preview"
+              onClick={() => onBucketPreviewChange(!bucketPreview)}
+            >
+              Bucket preview
+            </button>
+          </div>
+        </div>
+        <ImagePreview
+          imagePath={selectedPath}
+          imageUrl={imageUrl}
+          bucketPreview={bucketPreview}
+          bucket={bucket}
+          onNaturalSize={onNaturalSize}
+        />
       </section>
 
       <button
