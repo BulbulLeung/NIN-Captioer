@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LoraTrainAppSettings, LoraTrainJobConfig } from '../types'
-import { KREA2_RAW, normalizeLoraTrainJob } from '../types'
+import { KREA2_RAW, modelDownloadPathFromDownloadFolder, normalizeLoraTrainJob } from '../types'
 import { serializeTrainConfig } from '../services/trainConfig'
 import { GpuDeviceSelect } from './GpuDeviceSelect'
 import { RestartTrainWarningDialog } from './RestartTrainWarningDialog'
@@ -568,7 +568,7 @@ export function LoraTrainView({
       const settings = appSettingsRef.current
       const result = await window.api.checkModelStatus({
         pythonPath: settings.pythonPath.trim() || undefined,
-        downloadPath: settings.modelDownloadPath.trim() || undefined,
+        downloadPath: modelDownloadPathFromDownloadFolder(settings.downloadFolder),
         token: settings.huggingfaceToken.trim() || undefined,
         targets: [{ role: 'train', path: d.model.train_name_or_path }]
       })
@@ -652,7 +652,7 @@ export function LoraTrainView({
     const settings = appSettingsRef.current
     const result = await window.api.downloadModel({
       pythonPath: settings.pythonPath.trim() || undefined,
-      downloadPath: settings.modelDownloadPath.trim() || undefined,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.downloadFolder),
       token: settings.huggingfaceToken.trim() || undefined,
       repoId: next
     })
@@ -817,7 +817,7 @@ export function LoraTrainView({
     return () => clearTimeout(timer)
   }, [
     draft.model.train_name_or_path,
-    appSettings.modelDownloadPath,
+    appSettings.downloadFolder,
     appSettings.huggingfaceToken,
     appSettings.pythonPath,
     refreshModelStatus

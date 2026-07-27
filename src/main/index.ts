@@ -7,7 +7,6 @@ import { promisify } from 'util'
 import { cpus, freemem, totalmem, tmpdir } from 'os'
 import {
   cancelPythonInstall,
-  defaultPythonInstallPath,
   installPythonEnv,
   probePython,
   pythonInstallRunning
@@ -1153,7 +1152,7 @@ app.whenReady().then(async () => {
     return { ok: true }
   })
 
-  ipcMain.handle('python:defaultInstallPath', async () => defaultPythonInstallPath())
+  ipcMain.handle('download:defaultFolder', async () => app.getPath('userData'))
 
   ipcMain.handle('python:probe', async (_event, pythonPath?: string) => probePython(pythonPath))
 
@@ -1276,8 +1275,6 @@ app.whenReady().then(async () => {
       }
     }
   )
-
-  ipcMain.handle('model:defaultDownloadPath', async () => defaultModelDownloadPath())
 
   ipcMain.handle(
     'model:checkStatus',

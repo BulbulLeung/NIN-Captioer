@@ -93,8 +93,8 @@ const api = {
   }> => ipcRenderer.invoke('system:getResourceStats', deviceId),
   killProcess: (pid: number): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('system:killProcess', pid),
-  defaultPythonInstallPath: (): Promise<string> =>
-    ipcRenderer.invoke('python:defaultInstallPath'),
+  defaultDownloadFolder: (): Promise<string> =>
+    ipcRenderer.invoke('download:defaultFolder'),
   probePython: (
     pythonPath?: string
   ): Promise<{
@@ -164,8 +164,6 @@ const api = {
     ipcRenderer.on('train:error', listener)
     return () => ipcRenderer.removeListener('train:error', listener)
   },
-  defaultModelDownloadPath: (): Promise<string> =>
-    ipcRenderer.invoke('model:defaultDownloadPath'),
   checkModelStatus: (opts: {
     pythonPath?: string
     downloadPath?: string

@@ -15,7 +15,7 @@ const api = {
   listGpuDevices: () => electron.ipcRenderer.invoke("gpu:listDevices"),
   getResourceStats: (deviceId) => electron.ipcRenderer.invoke("system:getResourceStats", deviceId),
   killProcess: (pid) => electron.ipcRenderer.invoke("system:killProcess", pid),
-  defaultPythonInstallPath: () => electron.ipcRenderer.invoke("python:defaultInstallPath"),
+  defaultDownloadFolder: () => electron.ipcRenderer.invoke("download:defaultFolder"),
   probePython: (pythonPath) => electron.ipcRenderer.invoke("python:probe", pythonPath),
   installPython: (opts) => electron.ipcRenderer.invoke("python:install", opts),
   cancelPythonInstall: () => electron.ipcRenderer.invoke("python:cancelInstall"),
@@ -48,7 +48,6 @@ const api = {
     electron.ipcRenderer.on("train:error", listener);
     return () => electron.ipcRenderer.removeListener("train:error", listener);
   },
-  defaultModelDownloadPath: () => electron.ipcRenderer.invoke("model:defaultDownloadPath"),
   checkModelStatus: (opts) => electron.ipcRenderer.invoke("model:checkStatus", opts),
   downloadModel: (opts) => electron.ipcRenderer.invoke("model:download", opts),
   cancelModelDownload: () => electron.ipcRenderer.invoke("model:cancelDownload"),

@@ -7,6 +7,7 @@ import {
   FALLBACK_WD14_MODEL_REPOS,
   listWd14ModelReposOrFallback
 } from '../services/wd14Models'
+import { DownloadFolderField } from './DownloadFolderField'
 import { PythonExecutableField } from './PythonExecutableField'
 
 interface Props {
@@ -382,6 +383,15 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
 
         <div className="settings-section">
           <h3>WD14 Tagging</h3>
+          <DownloadFolderField
+            value={draft.loraTrainApp.downloadFolder}
+            onChange={(downloadFolder) =>
+              setDraft((prev) => ({
+                ...prev,
+                loraTrainApp: { ...prev.loraTrainApp, downloadFolder }
+              }))
+            }
+          />
           <PythonExecutableField
             value={draft.loraTrainApp.pythonPath}
             onChange={(pythonPath) =>
@@ -390,18 +400,12 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
                 loraTrainApp: { ...prev.loraTrainApp, pythonPath }
               }))
             }
-            installPath={draft.loraTrainApp.pythonInstallPath}
-            onInstallPathChange={(pythonInstallPath) =>
-              setDraft((prev) => ({
-                ...prev,
-                loraTrainApp: { ...prev.loraTrainApp, pythonInstallPath }
-              }))
-            }
+            downloadFolder={draft.loraTrainApp.downloadFolder}
             enabled={open}
           />
           <p className="field-hint">
             Used when Caption format is set to Danbooru Tags(SD/XL). Download installs WD14 +
-            training packages into the install path venv.
+            training packages into the download folder&apos;s python venv.
           </p>
           <label className="field">
             <span>Model repo</span>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { LoraTrainAppSettings } from '../types'
 import { DEFAULT_LORA_TRAIN_APP, normalizeLoraTrainApp } from '../types'
+import { DownloadFolderField } from './DownloadFolderField'
 import { PythonExecutableField } from './PythonExecutableField'
 
 interface Props {
@@ -20,17 +21,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
   }, [open, settings])
 
   if (!open) return null
-
-  const browseModelDownloadPath = async () => {
-    const dir = await window.api.openFolder()
-    if (!dir) return
-    setDraft((prev) => ({ ...prev, modelDownloadPath: dir }))
-  }
-
-  const useDefaultModelPath = async () => {
-    const path = await window.api.defaultModelDownloadPath()
-    setDraft((prev) => ({ ...prev, modelDownloadPath: path }))
-  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -65,13 +55,15 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
           panel. Train on Raw, use LoRA on Turbo.
         </p>
 
+        <DownloadFolderField
+          value={draft.downloadFolder}
+          onChange={(downloadFolder) => setDraft((prev) => ({ ...prev, downloadFolder }))}
+        />
+
         <PythonExecutableField
           value={draft.pythonPath}
           onChange={(pythonPath) => setDraft((prev) => ({ ...prev, pythonPath }))}
-          installPath={draft.pythonInstallPath}
-          onInstallPathChange={(pythonInstallPath) =>
-            setDraft((prev) => ({ ...prev, pythonInstallPath }))
-          }
+          downloadFolder={draft.downloadFolder}
           enabled={open}
           hint={
             <>
@@ -104,29 +96,6 @@ export function LoraTrainSettingsDialog({ open, settings, onClose, onSave }: Pro
               krea/Krea-2-Raw
             </a>{' '}
             (and Turbo) while logged in and click Agree — token alone is not enough.
-          </p>
-        </label>
-
-        <label className="field">
-          <span>Model download path</span>
-          <div className="model-row">
-            <input
-              type="text"
-              value={draft.modelDownloadPath}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, modelDownloadPath: e.target.value }))
-              }
-              placeholder="Empty = app userData/models"
-            />
-            <button type="button" onClick={() => void browseModelDownloadPath()}>
-              Browse
-            </button>
-            <button type="button" onClick={() => void useDefaultModelPath()}>
-              Default
-            </button>
-          </div>
-          <p className="field-hint">
-            Raw / Turbo snapshots are stored here. LoRA Train checks this folder on enter.
           </p>
         </label>
 

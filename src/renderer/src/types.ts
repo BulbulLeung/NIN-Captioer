@@ -20,6 +20,8 @@ import {
   normalizeLoraTrainApp,
   normalizeLoraTrainJob,
   normalizeLoraTrainJobPresets,
+  modelDownloadPathFromDownloadFolder,
+  pythonInstallPathFromDownloadFolder,
   type ActiveView,
   type LoraTrainAppSettings,
   type LoraTrainJobConfig,
@@ -45,12 +47,14 @@ export {
   KREA2_RAW,
   createDefaultLoraTrainJobPreset,
   createLoraTrainJobId,
+  modelDownloadPathFromDownloadFolder,
   normalizeActiveView,
   normalizeCaptionFormat,
   normalizeLoraTrainApp,
   normalizeLoraTrainJob,
   normalizeLoraTrainJobPresets,
-  normalizeWd14Settings
+  normalizeWd14Settings,
+  pythonInstallPathFromDownloadFolder
 }
 
 export type TranslationProvider = 'lmstudio' | 'ollama'
@@ -305,7 +309,7 @@ declare global {
       listGpuDevices: () => Promise<{ id: string; label: string }[]>
       getResourceStats: (deviceId?: string) => Promise<ResourceStats>
       killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>
-      defaultPythonInstallPath: () => Promise<string>
+      defaultDownloadFolder: () => Promise<string>
       probePython: (pythonPath?: string) => Promise<{
         status: 'ready' | 'missingPython' | 'missingPackages' | 'error'
         message: string
@@ -345,7 +349,6 @@ declare global {
       ) => () => void
       onTrainDone: (cb: (payload: { path: string }) => void) => () => void
       onTrainError: (cb: (payload: { message: string }) => void) => () => void
-      defaultModelDownloadPath: () => Promise<string>
       checkModelStatus: (opts: {
         pythonPath?: string
         downloadPath?: string

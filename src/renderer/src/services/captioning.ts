@@ -1,4 +1,5 @@
 import type { AppSettings } from '../types'
+import { modelDownloadPathFromDownloadFolder } from '../types'
 import { formatLocalAiError } from './localAiError'
 
 const CAPTION_TIMEOUT_MS = 300_000
@@ -227,7 +228,7 @@ export async function ensureWd14ModelReady(
   try {
     const res = await window.api.ensureWd14Model({
       pythonPath: settings.loraTrainApp.pythonPath || undefined,
-      downloadPath: settings.loraTrainApp.modelDownloadPath || undefined,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.loraTrainApp.downloadFolder),
       token: settings.loraTrainApp.huggingfaceToken || undefined,
       repoId: settings.wd14.modelRepoId
     })
@@ -269,7 +270,7 @@ export async function generateWd14TagsForImages(
       characterThreshold: settings.wd14.characterThreshold,
       imagePaths,
       ensure: true,
-      downloadPath: settings.loraTrainApp.modelDownloadPath || undefined,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.loraTrainApp.downloadFolder),
       token: settings.loraTrainApp.huggingfaceToken || undefined,
       repoId: settings.wd14.modelRepoId
     })

@@ -1,5 +1,7 @@
 /** Defaults for Captioer native Krea 2 LoRA trainer (train on Raw, sample on Turbo). */
 
+import { join } from '../utils/pathJoin'
+
 export type ActiveView = 'datasetEdit' | 'loraTrain'
 
 export type LoraTrainArch = 'krea2'
@@ -111,11 +113,12 @@ export interface LoraTrainJobPreset {
 /** Environment / preference settings for the LoraTrain Settings dialog. */
 export interface LoraTrainAppSettings {
   pythonPath: string
-  /** Empty = app userData/python */
-  pythonInstallPath: string
+  /**
+   * Shared root for Python install + model downloads.
+   * Empty = AppData/Roaming/Captioer (userData); uses `{root}/python` and `{root}/models`.
+   */
+  downloadFolder: string
   huggingfaceToken: string
-  /** Local folder for HF model downloads; empty = app userData/models */
-  modelDownloadPath: string
 }
 
 export const KREA2_RAW = 'krea/Krea-2-Raw'
@@ -216,9 +219,8 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
 
 export const DEFAULT_LORA_TRAIN_APP: LoraTrainAppSettings = {
   pythonPath: '',
-  pythonInstallPath: '',
-  huggingfaceToken: '',
-  modelDownloadPath: ''
+  downloadFolder: '',
+  huggingfaceToken: ''
 }
 
 export const DEFAULT_LORA_TRAIN_JOB_PRESET_ID = 'job-default'
@@ -481,10 +483,25 @@ export function normalizeLoraTrainApp(
   const o = asRecord(raw) ?? {}
   return {
     pythonPath: asString(o.pythonPath, d.pythonPath),
-    pythonInstallPath: asString(o.pythonInstallPath, d.pythonInstallPath),
-    huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken),
-    modelDownloadPath: asString(o.modelDownloadPath, d.modelDownloadPath)
+    downloadFolder: asString(o.downloadFolder, d.downloadFolder),
+    huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken)
   }
+}
+
+/** Resolved Python install path from downloadFolder; undefined = main default (userData/python). */
+export function pythonInstallPathFromDownloadFolder(
+  downloadFolder: string
+): string | undefined {
+  const trimmed = downloadFolder.trim()
+  return trimmed ? join(trimmed, 'python') : undefined
+}
+
+/** Resolved model download path from downloadFolder; undefined = main default (userData/models). */
+export function modelDownloadPathFromDownloadFolder(
+  downloadFolder: string
+): string | undefined {
+  const trimmed = downloadFolder.trim()
+  return trimmed ? join(trimmed, 'models') : undefined
 }
 
 export function normalizeActiveView(value: unknown): ActiveView {

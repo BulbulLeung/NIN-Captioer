@@ -1520,7 +1520,7 @@ electron.app.whenReady().then(async () => {
     emitTrain("train:log", { line: "Training stopped by user", stream: "system" });
     return { ok: true };
   });
-  electron.ipcMain.handle("python:defaultInstallPath", async () => defaultPythonInstallPath());
+  electron.ipcMain.handle("download:defaultFolder", async () => electron.app.getPath("userData"));
   electron.ipcMain.handle("python:probe", async (_event, pythonPath) => probePython(pythonPath));
   electron.ipcMain.handle("python:cancelInstall", async () => cancelPythonInstall());
   electron.ipcMain.handle(
@@ -1621,7 +1621,6 @@ electron.app.whenReady().then(async () => {
       }
     }
   );
-  electron.ipcMain.handle("model:defaultDownloadPath", async () => defaultModelDownloadPath());
   electron.ipcMain.handle(
     "model:checkStatus",
     async (_event, opts) => {

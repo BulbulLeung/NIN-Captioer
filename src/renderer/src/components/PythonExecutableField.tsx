@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { pythonInstallPathFromDownloadFolder } from '../types'
 
 interface Props {
   value: string
   onChange: (value: string) => void
-  installPath: string
-  onInstallPathChange: (value: string) => void
+  /** Shared download folder root; Python installs under `{folder}/python`. */
+  downloadFolder: string
   /** When false, skip auto-probe (dialog closed). */
   enabled?: boolean
   /** Optional hint under the field; default explains shared WD14 + LoRA use. */
@@ -23,8 +24,7 @@ type ProbeStatus = 'ready' | 'missingPython' | 'missingPackages' | 'error' | 'ch
 export function PythonExecutableField({
   value,
   onChange,
-  installPath,
-  onInstallPathChange,
+  downloadFolder,
   enabled = true,
   hint = DEFAULT_HINT
 }: Props) {
@@ -79,17 +79,6 @@ export function PythonExecutableField({
     onChange(file)
   }
 
-  const browseInstallPath = async () => {
-    const dir = await window.api.openFolder()
-    if (!dir) return
-    onInstallPathChange(dir)
-  }
-
-  const useDefaultInstallPath = async () => {
-    const path = await window.api.defaultPythonInstallPath()
-    onInstallPathChange(path)
-  }
-
   const startInstall = async () => {
     if (installing) return
     setInstalling(true)
@@ -102,21 +91,20 @@ export function PythonExecutableField({
     })
     try {
       const result = await window.api.installPython({
-        installPath: installPath.trim() || undefined
+        installPath: pythonInstallPathFromDownloadFolder(downloadFolder)
       })
       if (result.ok && result.pythonPath) {
+        // Clear install banner; onChange re-triggers probe for the single status line.
+        setInstallMsg(null)
         onChange(result.pythonPath)
-        setInstallMsg(result.message)
-        setProbeStatus('ready')
-        setProbeMsg(result.message)
       } else {
-        setInstallMsg(result.message || 'Install failed')
+        setInstallMsg(null)
         setProbeStatus('error')
         setProbeMsg(result.message || 'Install failed')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setInstallMsg(msg)
+      setInstallMsg(null)
       setProbeStatus('error')
       setProbeMsg(msg)
     } finally {
@@ -129,7 +117,9 @@ export function PythonExecutableField({
   const cancelInstall = async () => {
     await window.api.cancelPythonInstall()
     setInstalling(false)
-    setInstallMsg('Cancelled')
+    setInstallMsg(null)
+    setProbeMsg('Cancelled')
+    setProbeStatus('error')
   }
 
   const showDownload =
@@ -157,37 +147,18 @@ export function PythonExecutableField({
         </div>
       </label>
 
-      <label className="field">
-        <span>Python install path</span>
-        <div className="model-row">
-          <input
-            type="text"
-            value={installPath}
-            onChange={(e) => onInstallPathChange(e.target.value)}
-            placeholder="Empty = app userData/python"
-            spellCheck={false}
-            disabled={installing}
-          />
-          <button type="button" onClick={() => void browseInstallPath()} disabled={installing}>
-            Browse
-          </button>
-          <button type="button" onClick={() => void useDefaultInstallPath()} disabled={installing}>
-            Default
-          </button>
-        </div>
-        <p className="field-hint">
-          Used by Download to install Python, create a venv, and install requirements (CUDA torch
-          preferred; on Windows also triton-windows).
-        </p>
-      </label>
-
       <div className="field">
         <div className="model-row python-probe-row">
-          {probeStatus === 'checking' && <p className="field-hint">Checking Python…</p>}
-          {probeStatus === 'ready' && probeMsg && <p className="test-ok">{probeMsg}</p>}
-          {(probeStatus === 'missingPython' ||
-            probeStatus === 'missingPackages' ||
-            probeStatus === 'error') &&
+          {probeStatus === 'checking' && !installing && (
+            <p className="field-hint">Checking Python…</p>
+          )}
+          {!installing && probeStatus === 'ready' && probeMsg && (
+            <p className="test-ok">{probeMsg}</p>
+          )}
+          {!installing &&
+            (probeStatus === 'missingPython' ||
+              probeStatus === 'missingPackages' ||
+              probeStatus === 'error') &&
             probeMsg && <p className="test-err">{probeMsg}</p>}
           {showDownload && (
             <button type="button" className="primary" onClick={() => void startInstall()}>
@@ -204,9 +175,6 @@ export function PythonExecutableField({
                 Cancel
               </button>
             </>
-          )}
-          {!installing && installMsg && probeStatus === 'ready' && (
-            <p className="test-ok">{installMsg}</p>
           )}
         </div>
       </div>
