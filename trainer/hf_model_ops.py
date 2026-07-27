@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -313,13 +314,24 @@ def cmd_download(args: argparse.Namespace) -> int:
     except Exception:
         repo_total = 0
 
-    # Track multi-file snapshot progress across parallel byte bars.
-    # Non-TTY spawns create bars with disable=True (self.n never advances); files
-    # also download in parallel, so aggregate via active dict + nArg fallback.
+    def dir_byte_size(root: Path) -> int:
+        """On-disk bytes under local_dir (final files + .cache/.incomplete)."""
+        total = 0
+        try:
+            for p in root.rglob("*"):
+                if not p.is_file():
+                    continue
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    continue
+        except OSError:
+            return total
+        return total
+
+    # Progress from on-disk size (not tqdm byte sums — those over-count on
+    # retries / parallel bars and diverge from Explorer folder size).
     prog_state: dict[str, Any] = {
-        "completed": 0,
-        "active": {},  # tqdm id -> bytes so far
-        "finished": set(),
         "last_key": None,
         "last_emit_at": 0.0,
     }
@@ -332,6 +344,30 @@ def cmd_download(args: argparse.Namespace) -> int:
             parts.append(f"total={total}")
         print(" ".join(parts), flush=True)
 
+    def emit_disk_progress(*, force: bool = False) -> None:
+        now = time.monotonic()
+        if (
+            not force
+            and prog_state["last_key"] is not None
+            and now - float(prog_state["last_emit_at"]) < 0.5
+        ):
+            return
+        disk_done = dir_byte_size(local_dir)
+        display_total = repo_total if repo_total > 0 else 0
+        # Never show done > total when Hub metadata is available.
+        if display_total > 0:
+            display_done = min(disk_done, display_total)
+            pct = int(min(99, max(0, (100 * display_done) // display_total)))
+        else:
+            display_done = disk_done
+            pct = 0
+        key = (pct, display_done, display_total)
+        if not force and key == prog_state["last_key"]:
+            return
+        prog_state["last_key"] = key
+        prog_state["last_emit_at"] = now
+        emit_progress(display_done, display_total, pct)
+
     class ProgressTqdm(hf_tqdm):  # type: ignore[misc, valid-type]
         def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[no-untyped-def]
             # Non-TTY spawns set disable=True; disabled bars do not advance self.n.
@@ -340,61 +376,17 @@ def cmd_download(args: argparse.Namespace) -> int:
 
         def update(self, n: float | int = 1) -> None | bool:  # type: ignore[override]
             result = super().update(n)
-            total = int(getattr(self, "total", None) or 0)
-            n_inc = int(n or 0)
-            n_done = int(getattr(self, "n", 0) or 0)
             unit = getattr(self, "unit", None)
-            tid = id(self)
-
             # Outer "Fetching N files" counter is not byte progress.
             is_file_counter = unit == "it" or (
                 isinstance(getattr(self, "desc", None), str)
                 and str(self.desc).lower().startswith("fetching")
             )
-            if is_file_counter:
-                return result
-
-            active: dict[int, int] = prog_state["active"]
-            finished: set[int] = prog_state["finished"]
-
-            # If disable still ate self.n, accumulate nArg manually.
-            if n_inc > 0 and n_done == 0:
-                n_done = int(active.get(tid, 0)) + n_inc
-            elif n_done == 0 and n_inc == 0:
-                n_done = int(active.get(tid, 0))
-
-            if tid in finished:
-                display_done = int(prog_state["completed"]) + sum(active.values())
-            elif total > 0 and n_done >= total:
-                active.pop(tid, None)
-                if tid not in finished:
-                    finished.add(tid)
-                    prog_state["completed"] = int(prog_state["completed"]) + total
-                display_done = int(prog_state["completed"]) + sum(active.values())
-            else:
-                active[tid] = n_done
-                display_done = int(prog_state["completed"]) + sum(active.values())
-
-            display_total = repo_total if repo_total > 0 else total
-            if display_total > 0:
-                pct = int(min(99, max(0, (100 * display_done) // display_total)))
-            elif total > 0:
-                pct = int(min(99, max(0, (100 * n_done) // total)))
-            else:
-                pct = 0
-
-            key = (pct, display_done, display_total)
-            now = __import__("time").monotonic()
-            # Throttle emits: on pct/done change, or at least every 0.5s while moving.
-            if key != prog_state["last_key"] or (
-                display_done > 0 and now - float(prog_state["last_emit_at"]) >= 0.5
-            ):
-                prog_state["last_key"] = key
-                prog_state["last_emit_at"] = now
-                emit_progress(display_done, display_total, pct)
+            if not is_file_counter:
+                emit_disk_progress()
             return result
 
-    emit_progress(0, repo_total, 0)
+    emit_disk_progress(force=True)
     try:
         if not token:
             print(
