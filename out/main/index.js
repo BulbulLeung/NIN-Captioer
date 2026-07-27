@@ -626,6 +626,27 @@ async function installPythonEnv(opts) {
 }
 const execFileAsync = util.promisify(child_process.execFile);
 const IMAGE_EXTS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"]);
+electron.app.commandLine.appendSwitch("disable-http-cache");
+electron.app.commandLine.appendSwitch("disk-cache-size", "0");
+electron.app.commandLine.appendSwitch("enable-logging");
+electron.app.commandLine.appendSwitch(
+  "log-file",
+  path.join(electron.app.getPath("userData"), "chromium-debug.log")
+);
+(() => {
+  try {
+    const userData = electron.app.getPath("userData");
+    const cacheDir = path.join(userData, "Cache");
+    if (fs.existsSync(cacheDir)) {
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+    const chromiumLog = path.join(userData, "chromium-debug.log");
+    if (fs.existsSync(chromiumLog)) {
+      fs.rmSync(chromiumLog, { force: true });
+    }
+  } catch {
+  }
+})();
 const FALLBACK_GPU = [{ id: "cuda:0", label: "cuda:0 (not detected)" }];
 async function listCudaDevices() {
   try {
@@ -1407,15 +1428,104 @@ electron.protocol.registerSchemesAsPrivileged([
     }
   }
 ]);
+function agentLog(hypothesisId, location, message, data = {}) {
+  fetch("http://127.0.0.1:7819/ingest/9d950fdb-90b0-4a73-af48-47d48fe3217a", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "e86472"
+    },
+    body: JSON.stringify({
+      sessionId: "e86472",
+      runId: typeof data.runId === "string" ? data.runId : "post-fix4",
+      hypothesisId,
+      location,
+      message,
+      data: {
+        ...data,
+        hasDisableHttpCache: electron.app.commandLine.hasSwitch("disable-http-cache"),
+        hasDiskCacheSize0: electron.app.commandLine.hasSwitch("disk-cache-size")
+      },
+      timestamp: Date.now()
+    })
+  }).catch(() => {
+  });
+}
+function inspectDiskCache() {
+  const cacheRoot = path.join(electron.app.getPath("userData"), "Cache");
+  const cacheData = path.join(cacheRoot, "Cache_Data");
+  const out = {
+    cacheRoot,
+    cacheRootExists: fs.existsSync(cacheRoot),
+    cacheDataExists: fs.existsSync(cacheData)
+  };
+  try {
+    if (fs.existsSync(cacheData)) {
+      const files = fs.readdirSync(cacheData);
+      const external = files.filter((f) => f.startsWith("f_"));
+      const indexExists = files.includes("index");
+      let indexSize = 0;
+      if (indexExists) indexSize = fs.statSync(path.join(cacheData, "index")).size;
+      out.fileCount = files.length;
+      out.externalFileCount = external.length;
+      out.indexExists = indexExists;
+      out.indexSize = indexSize;
+      out.sampleFiles = files.slice(0, 12);
+    }
+  } catch (e) {
+    out.inspectError = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}
 electron.app.whenReady().then(async () => {
+  agentLog("H", "main/index.ts:whenReady", "startup cache inspect after early wipe", {
+    runId: "post-fix4",
+    pid: process.pid,
+    userData: electron.app.getPath("userData"),
+    ...inspectDiskCache()
+  });
+  void electron.session.defaultSession.getCacheSize().then((size) => {
+    agentLog("H", "main/index.ts:whenReady", "session cache size at startup", {
+      runId: "post-fix4",
+      cacheSizeBytes: size
+    });
+  });
+  let localFileReqCount = 0;
+  let localFileWindowStart = Date.now();
+  let localFileWindowCount = 0;
   electron.protocol.handle("local-file", async (request) => {
+    localFileReqCount += 1;
+    localFileWindowCount += 1;
+    const now = Date.now();
+    if (now - localFileWindowStart >= 1e3) {
+      agentLog("H", "main/index.ts:local-file", "local-file request rate", {
+        runId: "post-fix4",
+        perSecond: localFileWindowCount,
+        total: localFileReqCount
+      });
+      if (localFileWindowCount >= 20) {
+        agentLog("H", "main/index.ts:local-file", "burst + cache after early wipe", {
+          runId: "post-fix4",
+          perSecond: localFileWindowCount,
+          total: localFileReqCount,
+          cacheAfterBurst: inspectDiskCache()
+        });
+      }
+      localFileWindowStart = now;
+      localFileWindowCount = 0;
+    }
     const parsed = new URL(request.url);
     let filePath = decodeURIComponent(parsed.pathname);
     if (filePath.startsWith("/")) filePath = filePath.slice(1);
     try {
       const buf = await promises.readFile(filePath);
       const mime = mimeForExt(path.extname(filePath));
-      return new Response(buf, { headers: { "Content-Type": mime } });
+      return new Response(buf, {
+        headers: {
+          "Content-Type": mime,
+          "Cache-Control": "no-store"
+        }
+      });
     } catch {
       return new Response("Not Found", { status: 404 });
     }

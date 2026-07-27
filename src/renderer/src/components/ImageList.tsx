@@ -131,7 +131,7 @@ export function ImageList({
           } as CSSProperties
         }
         totalCount={images.length}
-        overscan={200}
+        overscan={80}
         listClassName="image-list thumbnails"
         itemClassName="image-list-grid-item"
         itemContent={renderItem}

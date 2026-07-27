@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, screen, Menu, shell } from 'electron'
 import { join, dirname, basename, extname } from 'path'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
 import { readFile, writeFile, readdir, access, constants, mkdtemp } from 'fs/promises'
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
@@ -16,6 +16,19 @@ import {
 const execFileAsync = promisify(execFile)
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
+
+// Avoid Chromium HTTP disk-cache corruption (Critical error -8) when loading many
+// local-file:// dataset thumbnails. Wipe any leftover Cache before NetworkService starts.
+app.commandLine.appendSwitch('disable-http-cache')
+app.commandLine.appendSwitch('disk-cache-size', '0')
+try {
+  const cacheDir = join(app.getPath('userData'), 'Cache')
+  if (existsSync(cacheDir)) {
+    rmSync(cacheDir, { recursive: true, force: true })
+  }
+} catch {
+  /* best-effort */
+}
 
 interface GpuDevice {
   id: string
@@ -1016,7 +1029,12 @@ app.whenReady().then(async () => {
     try {
       const buf = await readFile(filePath)
       const mime = mimeForExt(extname(filePath))
-      return new Response(buf, { headers: { 'Content-Type': mime } })
+      return new Response(buf, {
+        headers: {
+          'Content-Type': mime,
+          'Cache-Control': 'no-store'
+        }
+      })
     } catch {
       return new Response('Not Found', { status: 404 })
     }
