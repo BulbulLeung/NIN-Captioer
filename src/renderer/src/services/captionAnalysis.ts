@@ -246,20 +246,3 @@ export function aggregateCategoryDetails(
     categoryDetails
   }
 }
-
-/** @deprecated Prefer buildCaptionAnalysisResult from loraHealthScore */
-export function aggregateClassifications(
-  captions: string[],
-  classifications: CaptionClassification[]
-): CaptionAnalysisResult {
-  const base = aggregateCategoryDetails(captions, classifications)
-  return {
-    ...base,
-    fitnessScore: 0,
-    fitnessLevel: 'red',
-    healthBreakdown: [],
-    strengths: [],
-    improvements: [],
-    summary: ''
-  }
-}

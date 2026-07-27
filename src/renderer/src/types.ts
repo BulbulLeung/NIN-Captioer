@@ -302,11 +302,6 @@ declare global {
       readImageBase64: (imagePath: string) => Promise<{ mimeType: string; base64: string }>
       getSettings: () => Promise<AppSettings>
       setSettings: (settings: AppSettings) => Promise<boolean>
-      saveTextFile: (opts: {
-        defaultPath?: string
-        content: string
-        filters?: { name: string; extensions: string[] }[]
-      }) => Promise<string | null>
       listGpuDevices: () => Promise<{ id: string; label: string }[]>
       getResourceStats: (deviceId?: string) => Promise<ResourceStats>
       killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>
@@ -324,7 +319,6 @@ declare global {
         installPath?: string
       }) => Promise<{ ok: boolean; pythonPath?: string; message: string }>
       cancelPythonInstall: () => Promise<{ ok: boolean }>
-      pythonInstallStatus: () => Promise<{ running: boolean }>
       onPythonInstallProgress: (
         cb: (payload: { stage: string; message: string; pct: number }) => void
       ) => () => void
@@ -371,7 +365,6 @@ declare global {
         repoId: string
       }) => Promise<{ ok: boolean; error?: string; downloadPath?: string }>
       cancelModelDownload: () => Promise<{ ok: boolean }>
-      modelDownloadStatus: () => Promise<{ running: boolean }>
       onModelDownloadProgress: (
         cb: (payload: {
           repoId: string

@@ -12,7 +12,6 @@ const api = {
   readImageBase64: (imagePath) => electron.ipcRenderer.invoke("fs:readImageBase64", imagePath),
   getSettings: () => electron.ipcRenderer.invoke("settings:get"),
   setSettings: (settings) => electron.ipcRenderer.invoke("settings:set", settings),
-  saveTextFile: (opts) => electron.ipcRenderer.invoke("dialog:saveTextFile", opts),
   listGpuDevices: () => electron.ipcRenderer.invoke("gpu:listDevices"),
   getResourceStats: (deviceId) => electron.ipcRenderer.invoke("system:getResourceStats", deviceId),
   killProcess: (pid) => electron.ipcRenderer.invoke("system:killProcess", pid),
@@ -20,7 +19,6 @@ const api = {
   probePython: (pythonPath) => electron.ipcRenderer.invoke("python:probe", pythonPath),
   installPython: (opts) => electron.ipcRenderer.invoke("python:install", opts),
   cancelPythonInstall: () => electron.ipcRenderer.invoke("python:cancelInstall"),
-  pythonInstallStatus: () => electron.ipcRenderer.invoke("python:installStatus"),
   onPythonInstallProgress: (cb) => {
     const listener = (_e, payload) => cb(payload);
     electron.ipcRenderer.on("python:installProgress", listener);
@@ -53,7 +51,6 @@ const api = {
   checkModelStatus: (opts) => electron.ipcRenderer.invoke("model:checkStatus", opts),
   downloadModel: (opts) => electron.ipcRenderer.invoke("model:download", opts),
   cancelModelDownload: () => electron.ipcRenderer.invoke("model:cancelDownload"),
-  modelDownloadStatus: () => electron.ipcRenderer.invoke("model:downloadStatus"),
   onModelDownloadProgress: (cb) => {
     const listener = (_e, payload) => cb(payload);
     electron.ipcRenderer.on("model:downloadProgress", listener);

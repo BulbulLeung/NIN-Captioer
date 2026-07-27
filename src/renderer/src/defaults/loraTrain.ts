@@ -116,8 +116,6 @@ export interface LoraTrainAppSettings {
   huggingfaceToken: string
   /** Local folder for HF model downloads; empty = app userData/models */
   modelDownloadPath: string
-  /** @deprecated migrated to pythonPath */
-  aiToolkitPath?: string
 }
 
 export const KREA2_RAW = 'krea/Krea-2-Raw'
@@ -481,12 +479,8 @@ export function normalizeLoraTrainApp(
 ): LoraTrainAppSettings {
   const d = DEFAULT_LORA_TRAIN_APP
   const o = asRecord(raw) ?? {}
-  const pythonFromLegacy =
-    typeof o.aiToolkitPath === 'string' && o.aiToolkitPath && !o.pythonPath
-      ? ''
-      : asString(o.pythonPath, d.pythonPath)
   return {
-    pythonPath: pythonFromLegacy,
+    pythonPath: asString(o.pythonPath, d.pythonPath),
     pythonInstallPath: asString(o.pythonInstallPath, d.pythonInstallPath),
     huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken),
     modelDownloadPath: asString(o.modelDownloadPath, d.modelDownloadPath)

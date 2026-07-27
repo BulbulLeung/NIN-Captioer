@@ -72,11 +72,6 @@ const api = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
   setSettings: (settings: AppSettings): Promise<boolean> =>
     ipcRenderer.invoke('settings:set', settings),
-  saveTextFile: (opts: {
-    defaultPath?: string
-    content: string
-    filters?: { name: string; extensions: string[] }[]
-  }): Promise<string | null> => ipcRenderer.invoke('dialog:saveTextFile', opts),
   listGpuDevices: (): Promise<{ id: string; label: string }[]> =>
     ipcRenderer.invoke('gpu:listDevices'),
   getResourceStats: (deviceId?: string): Promise<{
@@ -117,8 +112,6 @@ const api = {
     ipcRenderer.invoke('python:install', opts),
   cancelPythonInstall: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('python:cancelInstall'),
-  pythonInstallStatus: (): Promise<{ running: boolean }> =>
-    ipcRenderer.invoke('python:installStatus'),
   onPythonInstallProgress: (
     cb: (payload: { stage: string; message: string; pct: number }) => void
   ) => {
@@ -194,8 +187,6 @@ const api = {
     ipcRenderer.invoke('model:download', opts),
   cancelModelDownload: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('model:cancelDownload'),
-  modelDownloadStatus: (): Promise<{ running: boolean }> =>
-    ipcRenderer.invoke('model:downloadStatus'),
   onModelDownloadProgress: (cb: (payload: {
     repoId: string
     pct: number

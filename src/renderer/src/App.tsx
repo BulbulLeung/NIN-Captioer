@@ -38,15 +38,17 @@ function folderLabel(dir: string): string {
 }
 
 function getThumbnailColumns(): number {
-  const items = document.querySelectorAll('.image-list.thumbnails > li')
-  if (items.length === 0) return 1
-  const firstTop = (items[0] as HTMLElement).offsetTop
-  let cols = 0
-  for (const el of items) {
-    if ((el as HTMLElement).offsetTop !== firstTop) break
-    cols++
-  }
-  return Math.max(1, cols)
+  const list = document.querySelector('.sidebar-list .image-list.thumbnails') as HTMLElement | null
+  if (!list) return 1
+  const cs = getComputedStyle(list)
+  const thumbW = parseFloat(cs.getPropertyValue('--thumb-w')) || 96
+  const gap = parseFloat(cs.columnGap || cs.gap) || 0
+  const padL = parseFloat(cs.paddingLeft) || 0
+  const padR = parseFloat(cs.paddingRight) || 0
+  const inner = list.clientWidth - padL - padR
+  if (inner <= 0 || thumbW <= 0) return 1
+  // Matches CSS: repeat(auto-fill, minmax(var(--thumb-w), 1fr))
+  return Math.max(1, Math.floor((inner + gap) / (thumbW + gap)))
 }
 
 export default function App() {

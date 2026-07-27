@@ -1071,10 +1071,6 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('python:probe', async (_event, pythonPath?: string) => probePython(pythonPath))
 
-  ipcMain.handle('python:installStatus', async () => ({
-    running: pythonInstallRunning()
-  }))
-
   ipcMain.handle('python:cancelInstall', async () => cancelPythonInstall())
 
   ipcMain.handle(
@@ -1413,10 +1409,6 @@ app.whenReady().then(async () => {
     killModelDownloadProcess()
     return { ok: true }
   })
-
-  ipcMain.handle('model:downloadStatus', async () => ({
-    running: Boolean(modelDlProc && !modelDlProc.killed)
-  }))
 
   ipcMain.handle(
     'wd14:ensureModel',
@@ -1762,41 +1754,26 @@ app.whenReady().then(async () => {
     return { ok: true }
   })
 
-  ipcMain.handle(
-    'dialog:saveTextFile',
-    async (
-      _event,
-      opts: {
-        defaultPath?: string
-        content: string
-        filters?: { name: string; extensions: string[] }[]
-      }
-    ) => {
-      const result = await dialog.showSaveDialog(mainWindow!, {
-        defaultPath: opts.defaultPath || 'train_lora_config.yaml',
-        filters: opts.filters ?? [
-          { name: 'YAML', extensions: ['yaml', 'yml'] },
-          { name: 'All Files', extensions: ['*'] }
-        ]
-      })
-      if (result.canceled || !result.filePath) return null
-      await writeFile(result.filePath, opts.content ?? '', 'utf-8')
-      return result.filePath
-    }
-  )
-
   ipcMain.handle('fs:listImages', async (_event, dir: string) => {
     const entries = await readdir(dir, { withFileTypes: true })
-    const images: { path: string; name: string; hasCaption: boolean }[] = []
+    const captionStems = new Set<string>()
+    const imageEntries: { name: string; path: string }[] = []
 
     for (const entry of entries) {
       if (!entry.isFile()) continue
       const ext = extname(entry.name).toLowerCase()
+      if (ext === '.txt') {
+        captionStems.add(basename(entry.name, extname(entry.name)).toLowerCase())
+        continue
+      }
       if (!IMAGE_EXTS.has(ext)) continue
-      const imagePath = join(dir, entry.name)
-      const hasCaption = await fileExists(captionPathForImage(imagePath))
-      images.push({ path: imagePath, name: entry.name, hasCaption })
+      imageEntries.push({ name: entry.name, path: join(dir, entry.name) })
     }
+
+    const images = imageEntries.map(({ name, path: imagePath }) => {
+      const stem = basename(name, extname(name)).toLowerCase()
+      return { path: imagePath, name, hasCaption: captionStems.has(stem) }
+    })
 
     images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
     return images

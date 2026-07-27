@@ -728,14 +728,6 @@ function captionPathForImage(imagePath) {
   const stem = path.basename(imagePath, path.extname(imagePath));
   return path.join(dir, `${stem}.txt`);
 }
-async function fileExists(path2) {
-  try {
-    await promises.access(path2, promises.constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
 function mimeForExt(ext) {
   switch (ext.toLowerCase()) {
     case ".jpg":
@@ -1463,9 +1455,6 @@ electron.app.whenReady().then(async () => {
   });
   electron.ipcMain.handle("python:defaultInstallPath", async () => defaultPythonInstallPath());
   electron.ipcMain.handle("python:probe", async (_event, pythonPath) => probePython(pythonPath));
-  electron.ipcMain.handle("python:installStatus", async () => ({
-    running: pythonInstallRunning()
-  }));
   electron.ipcMain.handle("python:cancelInstall", async () => cancelPythonInstall());
   electron.ipcMain.handle(
     "python:install",
@@ -1745,9 +1734,6 @@ ${e.stderr || ""}`;
     killModelDownloadProcess();
     return { ok: true };
   });
-  electron.ipcMain.handle("model:downloadStatus", async () => ({
-    running: Boolean(modelDlProc && !modelDlProc.killed)
-  }));
   electron.ipcMain.handle(
     "wd14:ensureModel",
     async (_event, opts) => {
@@ -2042,32 +2028,24 @@ ${e.stderr || ""}`;
     killWd14Process();
     return { ok: true };
   });
-  electron.ipcMain.handle(
-    "dialog:saveTextFile",
-    async (_event, opts) => {
-      const result = await electron.dialog.showSaveDialog(mainWindow, {
-        defaultPath: opts.defaultPath || "train_lora_config.yaml",
-        filters: opts.filters ?? [
-          { name: "YAML", extensions: ["yaml", "yml"] },
-          { name: "All Files", extensions: ["*"] }
-        ]
-      });
-      if (result.canceled || !result.filePath) return null;
-      await promises.writeFile(result.filePath, opts.content ?? "", "utf-8");
-      return result.filePath;
-    }
-  );
   electron.ipcMain.handle("fs:listImages", async (_event, dir) => {
     const entries = await promises.readdir(dir, { withFileTypes: true });
-    const images = [];
+    const captionStems = /* @__PURE__ */ new Set();
+    const imageEntries = [];
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       const ext = path.extname(entry.name).toLowerCase();
+      if (ext === ".txt") {
+        captionStems.add(path.basename(entry.name, path.extname(entry.name)).toLowerCase());
+        continue;
+      }
       if (!IMAGE_EXTS.has(ext)) continue;
-      const imagePath = path.join(dir, entry.name);
-      const hasCaption = await fileExists(captionPathForImage(imagePath));
-      images.push({ path: imagePath, name: entry.name, hasCaption });
+      imageEntries.push({ name: entry.name, path: path.join(dir, entry.name) });
     }
+    const images = imageEntries.map(({ name, path: imagePath }) => {
+      const stem = path.basename(name, path.extname(name)).toLowerCase();
+      return { path: imagePath, name, hasCaption: captionStems.has(stem) };
+    });
     images.sort((a, b) => a.name.localeCompare(b.name, void 0, { numeric: true }));
     return images;
   });

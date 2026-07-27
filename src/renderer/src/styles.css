@@ -496,7 +496,11 @@ button.danger.kbd-focus {
 .sidebar-list {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.sidebar-list .image-list {
+  height: 100%;
 }
 
 .pane-resizer {
@@ -628,13 +632,17 @@ button.danger.kbd-focus {
 }
 
 .image-list.thumbnails {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-w, 96px), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   align-content: start;
 }
 
+.image-list.thumbnails > .image-list-grid-item,
 .image-list.thumbnails > li {
+  flex: 1 0 var(--thumb-w, 96px);
+  max-width: 100%;
+  box-sizing: border-box;
   min-width: 0;
 }
 
