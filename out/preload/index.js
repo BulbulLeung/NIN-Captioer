@@ -16,7 +16,6 @@ const api = {
   listGpuDevices: () => electron.ipcRenderer.invoke("gpu:listDevices"),
   getResourceStats: (deviceId) => electron.ipcRenderer.invoke("system:getResourceStats", deviceId),
   killProcess: (pid) => electron.ipcRenderer.invoke("system:killProcess", pid),
-  checkTrainEnv: (pythonPath) => electron.ipcRenderer.invoke("train:checkEnv", pythonPath),
   defaultPythonInstallPath: () => electron.ipcRenderer.invoke("python:defaultInstallPath"),
   probePython: (pythonPath) => electron.ipcRenderer.invoke("python:probe", pythonPath),
   installPython: (opts) => electron.ipcRenderer.invoke("python:install", opts),

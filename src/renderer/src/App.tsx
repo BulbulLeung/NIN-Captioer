@@ -121,7 +121,7 @@ export default function App() {
       setEnglishSnapshot(value)
     },
     setTranslated,
-    enabled: Boolean(selectedPath)
+    enabled: settings.activeView === 'datasetEdit' && Boolean(selectedPath)
   })
 
   const busyPaths = useMemo(() => {
@@ -154,7 +154,9 @@ export default function App() {
         setSavedEnglish(caption)
         setEnglishSnapshot(caption)
         setTranslated('')
-        if (caption.trim()) translateEnglishToTargetNow(caption, imagePath)
+        if (caption.trim() && settingsRef.current.activeView === 'datasetEdit') {
+          translateEnglishToTargetNow(caption, imagePath)
+        }
       }
     },
     [invalidateAnalysis, setEnglishSnapshot, translateEnglishToTargetNow]
@@ -171,7 +173,7 @@ export default function App() {
       setTranslated('')
       setEnglishSnapshot(caption)
       setError(null)
-      if (caption.trim()) {
+      if (caption.trim() && settingsRef.current.activeView === 'datasetEdit') {
         translateEnglishToTargetNow(caption, imagePath)
       }
     },
@@ -219,13 +221,28 @@ export default function App() {
   useEffect(() => {
     void window.api.getSettings().then(async (s) => {
       const next = normalizeSettings(s)
+      settingsRef.current = next
       setSettings(next)
+      // LoraTrain startup: skip folder load / Local AI (translation, analysis).
+      if (next.activeView === 'loraTrain') return
       if (next.lastFolder) {
         await loadFolder(next.lastFolder, false)
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, [])
+
+  const prevActiveViewRef = useRef(settings.activeView)
+  useEffect(() => {
+    const prev = prevActiveViewRef.current
+    prevActiveViewRef.current = settings.activeView
+    if (prev === settings.activeView) return
+    if (settings.activeView !== 'datasetEdit') return
+    // Resume translation after leaving LoraTrain (folder already loaded).
+    if (folder && selectedPath && english.trim()) {
+      translateEnglishToTargetNow(english, selectedPath)
+    }
+  }, [settings.activeView, folder, selectedPath, english, translateEnglishToTargetNow])
 
   useEffect(() => {
     setEnglishSnapshot(english)
@@ -421,12 +438,14 @@ export default function App() {
 
   const onAutoSaveSettings = useCallback(async (next: AppSettings) => {
     const normalized = normalizeSettings(next)
+    settingsRef.current = normalized
     setSettings(normalized)
     await window.api.setSettings(normalized)
   }, [])
 
   const persistSettingsPatch = useCallback((patch: Partial<AppSettings>) => {
     const next = normalizeSettings({ ...settingsRef.current, ...patch })
+    settingsRef.current = next
     setSettings(next)
     void window.api.setSettings(next)
   }, [])
@@ -469,6 +488,12 @@ export default function App() {
       statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
     }
     persistSettingsPatch({ activeView: view })
+    if (view === 'datasetEdit') {
+      const last = settingsRef.current.lastFolder
+      if (last && !folder) {
+        void loadFolder(last, false)
+      }
+    }
   }
 
   const onLoraJobChange = useCallback(
