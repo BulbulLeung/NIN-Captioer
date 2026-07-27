@@ -329,6 +329,14 @@ declare global {
       }) => Promise<{ ok: boolean; error?: string; configPath?: string }>
       stopTrain: () => Promise<{ ok: boolean }>
       trainStatus: () => Promise<{ running: boolean }>
+      listTrainCheckpoints: (opts: {
+        trainingFolder: string
+        jobName: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        checkpoints: { step: number; path: string }[]
+      }>
       onTrainLog: (
         cb: (payload: { line: string; stream: string }) => void
       ) => () => void

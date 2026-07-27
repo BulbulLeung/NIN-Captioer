@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, screen, Menu, shell } from 'electron'
 import { join, dirname, basename, extname } from 'path'
 import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
-import { readFile, writeFile, readdir, access, constants, mkdtemp } from 'fs/promises'
+import { readFile, writeFile, readdir, access, constants, mkdtemp, stat } from 'fs/promises'
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import { cpus, freemem, totalmem, tmpdir } from 'os'
@@ -16,6 +16,46 @@ import {
 const execFileAsync = promisify(execFile)
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
+
+/** Mirror trainer `safe_job_name` for checkpoint filename matching. */
+function safeJobName(name: string): string {
+  const cleaned =
+    (name || 'job').trim().replace(/[<>:"/\\|?*\x00-\x1f]+/g, '_') || 'job'
+  return cleaned.replace(/[ .]+$/g, '')
+}
+
+async function listStepLoraCheckpoints(
+  trainingFolder: string,
+  jobName: string
+): Promise<{ step: number; path: string }[]> {
+  const outDir = join(trainingFolder, jobName)
+  const prefix = `${safeJobName(jobName)}_`
+  const suffix = '.safetensors'
+  const found: { step: number; path: string; mtime: number }[] = []
+  try {
+    await access(outDir, constants.R_OK)
+  } catch {
+    return []
+  }
+  const entries = await readdir(outDir, { withFileTypes: true })
+  for (const ent of entries) {
+    if (!ent.isFile()) continue
+    const name = ent.name
+    if (!name.startsWith(prefix) || !name.endsWith(suffix)) continue
+    const stepPart = name.slice(prefix.length, -suffix.length)
+    if (!/^\d{6}$/.test(stepPart)) continue
+    const full = join(outDir, name)
+    let mtime = 0
+    try {
+      mtime = (await stat(full)).mtimeMs
+    } catch {
+      mtime = 0
+    }
+    found.push({ step: Number(stepPart), path: full, mtime })
+  }
+  found.sort((a, b) => a.step - b.step || a.mtime - b.mtime)
+  return found.map(({ step, path }) => ({ step, path }))
+}
 
 // Avoid Chromium HTTP disk-cache corruption (Critical error -8) when loading many
 // local-file:// dataset thumbnails. Wipe any leftover Cache before NetworkService starts.
@@ -1078,6 +1118,34 @@ app.whenReady().then(async () => {
   ipcMain.handle('train:status', async () => ({
     running: Boolean(trainProc && !trainProc.killed)
   }))
+
+  ipcMain.handle(
+    'train:listCheckpoints',
+    async (
+      _event,
+      opts: { trainingFolder?: string; jobName?: string }
+    ): Promise<{
+      ok: boolean
+      error?: string
+      checkpoints: { step: number; path: string }[]
+    }> => {
+      const trainingFolder = (opts?.trainingFolder || '').trim()
+      const jobName = (opts?.jobName || '').trim()
+      if (!trainingFolder || !jobName) {
+        return { ok: true, checkpoints: [] }
+      }
+      try {
+        const checkpoints = await listStepLoraCheckpoints(trainingFolder, jobName)
+        return { ok: true, checkpoints }
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          checkpoints: []
+        }
+      }
+    }
+  )
 
   ipcMain.handle('train:stop', async () => {
     killTrainProcess()

@@ -61,6 +61,9 @@ _KREA2_STANDALONE_TO_COMFY = {
     "txt_in.linear_2": "txtmlp.3",
     "text_fusion.projector": "txtfusion.projector",
 }
+_KREA2_ATTN_FROM_COMFY = {v: k for k, v in _KREA2_ATTN_TO_COMFY.items()}
+_KREA2_FF_FROM_COMFY = {v: k for k, v in _KREA2_FF_TO_COMFY.items()}
+_KREA2_STANDALONE_FROM_COMFY = {v: k for k, v in _KREA2_STANDALONE_TO_COMFY.items()}
 
 
 def log(msg: str) -> None:
@@ -159,6 +162,177 @@ def convert_diffusers_krea2_lora_to_comfy(state_dict: dict) -> dict:
     if skipped:
         log(f"WARNING: skipped {len(skipped)} unmapped adapter key(s); examples: {skipped[:5]}")
     return out
+
+
+def convert_comfy_krea2_lora_to_diffusers(state_dict: dict) -> dict:
+    """Map ComfyUI `diffusion_model.*` adapter keys back to Diffusers module paths."""
+    out: dict = {}
+    skipped: list[str] = []
+
+    adapter_re = re.compile(
+        r"\.(?P<suf>"
+        r"lora_[AB]\.weight|"
+        r"lora\.(?:down|up)\.weight|"
+        r"hada_[^.]+\.weight|"
+        r"lokr_[^.]+\.weight|"
+        r"alpha"
+        r")$"
+    )
+
+    for key, tensor in state_dict.items():
+        k = key
+        if k.startswith("diffusion_model."):
+            k = k[len("diffusion_model.") :]
+
+        m = adapter_re.search(k)
+        if m is None:
+            skipped.append(key)
+            continue
+
+        module = k[: m.start()]
+        suf = m.group("suf")
+        if suf == "lora.down.weight":
+            suffix = ".lora_A.weight"
+        elif suf == "lora.up.weight":
+            suffix = ".lora_B.weight"
+        elif suf == "alpha":
+            suffix = ".alpha"
+        else:
+            suffix = f".{suf}"
+
+        diff_module: str | None = None
+        m_attn = re.match(r"blocks\.(\d+)\.attn\.(.+)$", module)
+        if m_attn and m_attn.group(2) in _KREA2_ATTN_FROM_COMFY:
+            diff_module = (
+                f"transformer_blocks.{m_attn.group(1)}.attn."
+                f"{_KREA2_ATTN_FROM_COMFY[m_attn.group(2)]}"
+            )
+        if diff_module is None:
+            m_ff = re.match(r"blocks\.(\d+)\.mlp\.(.+)$", module)
+            if m_ff and m_ff.group(2) in _KREA2_FF_FROM_COMFY:
+                diff_module = (
+                    f"transformer_blocks.{m_ff.group(1)}."
+                    f"{_KREA2_FF_FROM_COMFY[m_ff.group(2)]}"
+                )
+        if diff_module is None:
+            m_tf = re.match(
+                r"txtfusion\.(layerwise_blocks|refiner_blocks)\.(\d+)\.attn\.(.+)$",
+                module,
+            )
+            if m_tf and m_tf.group(3) in _KREA2_ATTN_FROM_COMFY:
+                diff_module = (
+                    f"text_fusion.{m_tf.group(1)}.{m_tf.group(2)}.attn."
+                    f"{_KREA2_ATTN_FROM_COMFY[m_tf.group(3)]}"
+                )
+        if diff_module is None:
+            m_tf_ff = re.match(
+                r"txtfusion\.(layerwise_blocks|refiner_blocks)\.(\d+)\.mlp\.(.+)$",
+                module,
+            )
+            if m_tf_ff and m_tf_ff.group(3) in _KREA2_FF_FROM_COMFY:
+                diff_module = (
+                    f"text_fusion.{m_tf_ff.group(1)}.{m_tf_ff.group(2)}."
+                    f"{_KREA2_FF_FROM_COMFY[m_tf_ff.group(3)]}"
+                )
+        if diff_module is None:
+            diff_module = _KREA2_STANDALONE_FROM_COMFY.get(module)
+
+        if diff_module is None:
+            skipped.append(key)
+            continue
+        out[f"{diff_module}{suffix}"] = tensor
+
+    if not out:
+        raise ValueError(
+            f"Could not map any ComfyUI adapter keys to Diffusers format; "
+            f"examples: {skipped[:5]}"
+        )
+    if skipped:
+        log(f"WARNING: skipped {len(skipped)} unmapped Comfy key(s); examples: {skipped[:5]}")
+    return out
+
+
+def parse_resume_step_from_path(path: Path, job_name: str) -> int | None:
+    """Parse `{job}_{NNNNNN}.safetensors` step from a checkpoint path."""
+    name = path.name
+    prefix = f"{safe_job_name(job_name)}_"
+    suffix = ".safetensors"
+    if not (name.startswith(prefix) and name.endswith(suffix)):
+        # Fallback: any trailing _######.safetensors
+        m = re.search(r"_(\d{6})\.safetensors$", name)
+        return int(m.group(1)) if m else None
+    step_part = name[len(prefix) : -len(suffix)]
+    if not re.fullmatch(r"\d{6}", step_part):
+        return None
+    return int(step_part)
+
+
+def strip_adapter_key_prefixes(key: str) -> str:
+    k = key
+    for prefix in ("base_model.model.", "base_model.", "transformer.", "diffusion_model."):
+        if k.startswith(prefix):
+            k = k[len(prefix) :]
+    return k
+
+
+def align_adapter_state_to_peft(loaded: dict, peft_ref: dict) -> dict:
+    """Match loaded adapter tensors onto current PEFT state_dict key names."""
+    by_core: dict[str, object] = {}
+    for k, v in loaded.items():
+        by_core[strip_adapter_key_prefixes(k)] = v
+
+    aligned: dict = {}
+    missing: list[str] = []
+    for ref_key in peft_ref.keys():
+        core = strip_adapter_key_prefixes(ref_key)
+        if core in by_core:
+            aligned[ref_key] = by_core[core]
+        else:
+            missing.append(ref_key)
+
+    if not aligned:
+        raise ValueError(
+            f"No overlapping adapter keys after resume load; "
+            f"loaded={len(loaded)} peft={len(peft_ref)} "
+            f"examples_loaded={[strip_adapter_key_prefixes(k) for k in list(loaded)[:3]]} "
+            f"examples_peft={[strip_adapter_key_prefixes(k) for k in list(peft_ref)[:3]]}"
+        )
+    if missing:
+        log(
+            f"WARNING: resume missing {len(missing)}/{len(peft_ref)} adapter key(s); "
+            f"examples: {missing[:5]}"
+        )
+    return aligned
+
+
+def load_adapter_weights_for_resume(
+    path: Path,
+    transformer,
+    *,
+    get_peft_model_state_dict,
+    set_peft_model_state_dict,
+    load_file,
+) -> int:
+    """
+    Load LoRA/LoHa/LoKr weights from a step checkpoint into the PEFT model.
+    Returns number of tensors loaded.
+    """
+    raw = load_file(str(path))
+    if not raw:
+        raise ValueError(f"empty checkpoint: {path}")
+
+    sample_key = next(iter(raw.keys()))
+    if sample_key.startswith("diffusion_model.") or any(
+        k.startswith("diffusion_model.") for k in raw.keys()
+    ):
+        mapped = convert_comfy_krea2_lora_to_diffusers(raw)
+    else:
+        mapped = {strip_adapter_key_prefixes(k): v for k, v in raw.items()}
+
+    peft_ref = get_peft_model_state_dict(transformer)
+    aligned = align_adapter_state_to_peft(mapped, peft_ref)
+    set_peft_model_state_dict(transformer, aligned)
+    return len(aligned)
 
 
 def progress(step: int, total: int, loss: float) -> None:
@@ -1330,6 +1504,18 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     latent_cache_dir = out_dir / "_latent_cache"
     text_cache_dir = out_dir / "_text_cache"
+
+    resume_from_raw = str(cfg.get("resume_from") or "").strip()
+    resume_path: Path | None = Path(resume_from_raw) if resume_from_raw else None
+    resume_step: int | None = None
+    if resume_path is not None:
+        if not resume_path.is_file():
+            log(f"ERROR: resume_from not found: {resume_path}")
+            return 3
+        resume_step = parse_resume_step_from_path(resume_path, job_name)
+        if resume_step is None:
+            log(f"ERROR: cannot parse step from resume_from filename: {resume_path.name}")
+            return 3
     latent_cache_dir.mkdir(parents=True, exist_ok=True)
     text_cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1384,6 +1570,13 @@ def main() -> int:
     use_ema = bool(ema_cfg.get("use_ema", False))
     ema_decay = float(ema_cfg.get("ema_decay") or 0.99)
 
+    if resume_step is not None and resume_step >= steps:
+        log(
+            f"ERROR: resume step {resume_step} >= train.steps {steps}; "
+            f"increase Steps before resuming"
+        )
+        return 3
+
     # Always-on AR buckets under enabled resolution tiers.
     ar_assign: list[tuple[int, int]] = []
     ar_counts: dict[tuple[int, int], int] = {}
@@ -1416,6 +1609,8 @@ def main() -> int:
     log(f"train_base={train_path}")
     log(f"dataset={folder}")
     log(f"output={out_dir}")
+    if resume_path is not None and resume_step is not None:
+        log(f"resume_from={resume_path} step={resume_step}")
     log(
         f"steps={steps} batch={batch_size} lr={lr} rank={rank} alpha={alpha} "
         f"network={network_type} scheduler={noise_scheduler} optimizer={optimizer_name} "
@@ -1441,7 +1636,7 @@ def main() -> int:
     try:
         from diffusers import Krea2Pipeline
         from peft import LoraConfig, LoHaConfig, LoKrConfig, get_peft_model
-        from peft.utils import get_peft_model_state_dict
+        from peft.utils import get_peft_model_state_dict, set_peft_model_state_dict
         from safetensors.torch import load_file, save_file
     except Exception as e:
         log(
@@ -1870,6 +2065,26 @@ def main() -> int:
         if any(x in lower for x in ("lora_", "hada_", "lokr_")):
             p.requires_grad_(True)
 
+    if resume_path is not None and resume_step is not None:
+        try:
+            n_loaded = load_adapter_weights_for_resume(
+                resume_path,
+                transformer,
+                get_peft_model_state_dict=get_peft_model_state_dict,
+                set_peft_model_state_dict=set_peft_model_state_dict,
+                load_file=load_file,
+            )
+            log(
+                f"Resuming from step {resume_step} -> {resume_path} "
+                f"({n_loaded} tensors)"
+            )
+        except Exception as e:
+            log(f"ERROR: failed to load resume checkpoint: {e}")
+            import traceback
+
+            log(traceback.format_exc())
+            return 3
+
     dit_est = estimate_module_bytes(transformer)
     # Fallback: if WOQ ran but estimate barely moved (torchao still reports bf16
     # element_size), assume ~int8 for the quantized fraction of the pre-quant size.
@@ -2273,10 +2488,14 @@ def main() -> int:
             ema.restore()
         return path
 
-    global_step = 0
+    global_step = int(resume_step or 0)
     optimizer.zero_grad(set_to_none=True)
     running_loss = 0.0
     import time as _time
+
+    if global_step > 0:
+        progress(global_step, steps, 0.0)
+        log(f"training loop starts at step {global_step}/{steps}")
 
     def do_sample(at_step: int) -> None:
         try:

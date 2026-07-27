@@ -3,6 +3,7 @@ import type { LoraTrainAppSettings, LoraTrainJobConfig } from '../types'
 import { KREA2_RAW, normalizeLoraTrainJob } from '../types'
 import { serializeTrainConfig } from '../services/trainConfig'
 import { GpuDeviceSelect } from './GpuDeviceSelect'
+import { RestartTrainWarningDialog } from './RestartTrainWarningDialog'
 import { ResourceMonitorPane } from './ResourceMonitorPane'
 
 type SectionId = 'basics' | 'dataset' | 'train' | 'lora' | 'sample' | 'advanced'
@@ -408,9 +409,12 @@ export function LoraTrainView({
   const [draft, setDraft] = useState(() => normalizeLoraTrainJob(job))
   const [activeSection, setActiveSection] = useState<SectionId>('basics')
   const [training, setTraining] = useState(false)
-  /** Results UI (status / loss / log) from Start until Back or Stop/error. */
+  /** Results UI (status / loss / log) from Start until Back (or intentional Stop). */
   const [showTrainSession, setShowTrainSession] = useState(false)
   const [trainComplete, setTrainComplete] = useState(false)
+  /** Process exited with error while session still open (Back, keep logs). */
+  const [trainFailed, setTrainFailed] = useState(false)
+  const userStoppedTrainRef = useRef(false)
   const [progress, setProgress] = useState<{
     step: number
     total: number
@@ -443,6 +447,13 @@ export function LoraTrainView({
     imageCount: number
     forcedUpscale: number
   } | null>(null)
+  /** Latest output checkpoint vs current Steps: resume, already done, or none. */
+  const [outputCheckpoint, setOutputCheckpoint] = useState<
+    | { kind: 'resume'; step: number; path: string }
+    | { kind: 'done'; step: number; path: string }
+    | null
+  >(null)
+  const [showRestartWarning, setShowRestartWarning] = useState(false)
   const skipPersist = useRef(true)
   const draftRef = useRef(draft)
   draftRef.current = draft
@@ -494,6 +505,60 @@ export function LoraTrainView({
   const patch = useCallback((updater: (prev: LoraTrainJobConfig) => LoraTrainJobConfig) => {
     setDraft((prev) => updater(prev))
   }, [])
+
+  const refreshResumeTarget = useCallback(async () => {
+    const d = draftRef.current
+    const folder = (d.training_folder || '').trim()
+    const name = (d.name || '').trim()
+    const steps = Number(d.train.steps) || 0
+    if (!folder || !name) {
+      setOutputCheckpoint(null)
+      return
+    }
+    try {
+      const result = await window.api.listTrainCheckpoints({
+        trainingFolder: folder,
+        jobName: name
+      })
+      if (!result.ok) {
+        setOutputCheckpoint(null)
+        return
+      }
+      const list = result.checkpoints || []
+      if (list.length === 0) {
+        setOutputCheckpoint(null)
+        return
+      }
+      const latest = list[list.length - 1]
+      if (latest.step <= 0) {
+        setOutputCheckpoint(null)
+        return
+      }
+      if (latest.step < steps) {
+        setOutputCheckpoint({ kind: 'resume', step: latest.step, path: latest.path })
+      } else {
+        // step >= configured Steps → training already complete for current target
+        setOutputCheckpoint({ kind: 'done', step: latest.step, path: latest.path })
+      }
+    } catch {
+      setOutputCheckpoint(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showTrainSession || training) return
+    const t = setTimeout(() => {
+      void refreshResumeTarget()
+    }, 250)
+    return () => clearTimeout(t)
+  }, [
+    draft.training_folder,
+    draft.name,
+    draft.train.steps,
+    showTrainSession,
+    training,
+    refreshResumeTarget
+  ])
 
   const refreshModelStatus = useCallback(async () => {
     setModelChecking(true)
@@ -653,6 +718,7 @@ export function LoraTrainView({
       })
     })
     const offDone = window.api.onTrainDone(({ path }) => {
+      userStoppedTrainRef.current = false
       const started = trainStartedAtRef.current
       const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0
       setFinalElapsedMs(elapsed)
@@ -660,20 +726,29 @@ export function LoraTrainView({
       trainStartedAtRef.current = null
       setTraining(false)
       setTrainComplete(true)
+      setTrainFailed(false)
       onStatus(`Training done: ${path}`)
+      void refreshResumeTarget()
     })
     const offErr = window.api.onTrainError(({ message }) => {
       setTraining(false)
-      setShowTrainSession(false)
-      setTrainComplete(false)
-      setFinalElapsedMs(null)
+      // Intentional Stop already left the session; don't reopen for the kill exit code.
+      if (userStoppedTrainRef.current) {
+        userStoppedTrainRef.current = false
+        onStatus('Training stopped')
+        void refreshResumeTarget()
+        return
+      }
+      const started = trainStartedAtRef.current
+      const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0
+      setFinalElapsedMs(elapsed)
       setTrainStartedAt(null)
       trainStartedAtRef.current = null
-      resetStepTiming()
-      setLossHistory([])
-      setTrainLogs([])
-      setProgress(null)
+      setShowTrainSession(true)
+      setTrainComplete(false)
+      setTrainFailed(true)
       onStatus(message, true)
+      void refreshResumeTarget()
     })
     const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
       setDlCurrent(repoId)
@@ -721,7 +796,7 @@ export function LoraTrainView({
       offDlDone()
       offDlErr()
     }
-  }, [onStatus, applyDownloadedPath, pumpDownloadQueue, refreshModelStatus, recordStepTiming, resetStepTiming])
+  }, [onStatus, applyDownloadedPath, pumpDownloadQueue, refreshModelStatus, refreshResumeTarget, recordStepTiming, resetStepTiming])
 
   useEffect(() => {
     if (!training) return
@@ -915,6 +990,7 @@ export function LoraTrainView({
   const clearTrainSessionUi = () => {
     setShowTrainSession(false)
     setTrainComplete(false)
+    setTrainFailed(false)
     setFinalElapsedMs(null)
     setTrainStartedAt(null)
     trainStartedAtRef.current = null
@@ -924,7 +1000,20 @@ export function LoraTrainView({
     setProgress(null)
   }
 
-  const startTrain = async () => {
+  const requestRestartTrain = () => {
+    if (outputCheckpoint) {
+      setShowRestartWarning(true)
+      return
+    }
+    void startTrain('restart')
+  }
+
+  const confirmRestartTrain = () => {
+    setShowRestartWarning(false)
+    void startTrain('restart')
+  }
+
+  const startTrain = async (mode: 'restart' | 'resume' = 'restart') => {
     const normalized = normalizeLoraTrainJob(draftRef.current)
     if (!normalized.datasets[0]?.folder_path) {
       setActiveSection('dataset')
@@ -935,7 +1024,15 @@ export function LoraTrainView({
       onStatus('Only Krea 2 is supported', true)
       return
     }
+    if (mode === 'resume') {
+      const target = outputCheckpoint?.kind === 'resume' ? outputCheckpoint : null
+      if (!target || target.step >= (normalized.train.steps || 0)) {
+        onStatus('No resumable checkpoint found; increase Steps or use Restart', true)
+        return
+      }
+    }
     const py = appSettings.pythonPath.trim()
+    userStoppedTrainRef.current = false
     setProgress(null)
     setTrainLogs([])
     setLossHistory([])
@@ -945,12 +1042,20 @@ export function LoraTrainView({
     trainStartedAtRef.current = started
     setFinalElapsedMs(null)
     setTrainComplete(false)
+    setTrainFailed(false)
     setNowTick(started)
     setShowTrainSession(true)
     setTraining(true)
-    onStatus('Training started…', false, { sticky: true })
+    const resumeCk =
+      mode === 'resume' && outputCheckpoint?.kind === 'resume' ? outputCheckpoint : null
+    onStatus(
+      resumeCk ? `Resuming from step ${resumeCk.step}…` : 'Training started…',
+      false,
+      { sticky: true }
+    )
     const configJson = serializeTrainConfig(normalized, {
-      huggingface_token: appSettings.huggingfaceToken || undefined
+      huggingface_token: appSettings.huggingfaceToken || undefined,
+      resume_from: resumeCk ? resumeCk.path : undefined
     })
     const result = await window.api.startTrain({
       pythonPath: py || undefined,
@@ -961,18 +1066,22 @@ export function LoraTrainView({
       setTraining(false)
       clearTrainSessionUi()
       onStatus(result.error || 'Failed to start training', true)
+      void refreshResumeTarget()
     }
   }
 
   const stopTrain = async () => {
+    userStoppedTrainRef.current = true
     await window.api.stopTrain()
     setTraining(false)
     clearTrainSessionUi()
     onStatus('Training stopped')
+    void refreshResumeTarget()
   }
 
   const backFromTrainSession = () => {
     clearTrainSessionUi()
+    void refreshResumeTarget()
   }
 
   const elapsedMs =
@@ -981,16 +1090,22 @@ export function LoraTrainView({
       : trainStartedAt !== null
         ? Math.max(0, nowTick - trainStartedAt)
         : 0
-  const etaMs = trainComplete
-    ? 0
-    : progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0
-      ? ((progress.total - progress.step) * elapsedMs) / progress.step
-      : null
+  const etaMs =
+    trainComplete || trainFailed
+      ? 0
+      : progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0
+        ? ((progress.total - progress.step) * elapsedMs) / progress.step
+        : null
   const stepsLabel = progress
     ? `${progress.step}/${progress.total}`
     : `0/${draft.train.steps || 0}`
 
   const sectionTitle = SECTIONS.find((s) => s.id === activeSection)?.label ?? ''
+  const trainSessionTitle = trainComplete
+    ? 'Training done'
+    : trainFailed
+      ? 'Training failed'
+      : 'Training...'
 
   return (
     <div className="lora-train">
@@ -1009,9 +1124,7 @@ export function LoraTrainView({
         <nav className="lora-nav" aria-label="Training settings sections">
           {showTrainSession ? (
             <div className="lora-train-status">
-              <p className="lora-train-status-title">
-                {trainComplete ? 'Training done' : 'Training...'}
-              </p>
+              <p className="lora-train-status-title">{trainSessionTitle}</p>
               <div className="lora-train-status-steps-block">
                 <p className="lora-train-status-steps">{stepsLabel} Steps</p>
                 <p className="lora-train-status-avg">
@@ -1062,12 +1175,34 @@ export function LoraTrainView({
               <button type="button" className="danger" onClick={() => void stopTrain()}>
                 Stop
               </button>
-            ) : showTrainSession && trainComplete ? (
+            ) : showTrainSession ? (
               <button type="button" className="primary" onClick={backFromTrainSession}>
                 Back
               </button>
+            ) : outputCheckpoint?.kind === 'resume' ? (
+              <>
+                <button type="button" onClick={requestRestartTrain}>
+                  Restart
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void startTrain('resume')}
+                >
+                  Resume from {outputCheckpoint.step}
+                </button>
+              </>
+            ) : outputCheckpoint?.kind === 'done' ? (
+              <>
+                <button type="button" onClick={requestRestartTrain}>
+                  Restart
+                </button>
+                <button type="button" className="primary" disabled aria-disabled="true">
+                  Train Done
+                </button>
+              </>
             ) : (
-              <button type="button" className="primary" onClick={() => void startTrain()}>
+              <button type="button" className="primary" onClick={requestRestartTrain}>
                 Start Train
               </button>
             )}
@@ -1971,6 +2106,13 @@ export function LoraTrainView({
 
         <ResourceMonitorPane device={draft.device} />
       </div>
+      <RestartTrainWarningDialog
+        open={showRestartWarning}
+        jobName={draft.name || 'this job'}
+        checkpointStep={outputCheckpoint?.step ?? null}
+        onCancel={() => setShowRestartWarning(false)}
+        onConfirm={confirmRestartTrain}
+      />
     </div>
   )
 }
