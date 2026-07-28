@@ -1,4 +1,4 @@
-/** Default Flux/Krea2 Style LoRA-NSFW caption prompt (PNG Info appended at runtime). */
+/** Default Flux/Krea2 Style LoRA-NSFW caption prompt (PNG Info appended at runtime when enabled). */
 export const FLUX_KREA2_CAPTION_PROMPT = `You are an expert at training Flux Style (Aesthetic) LoRAs. Your task is to analyze the provided image AND its embedded PNG Info (metadata / SDXL generation prompt) to generate a highly optimized caption file.
 
 === CORE FUSION RULE ===
@@ -26,8 +26,6 @@ After processing, output exactly in this format and nothing else:
 ### 2. The Final Flux Style Caption
 Output ONLY the raw paragraph. Do not add any label, bracket, title, or extra text. Start directly with the first sentence.
 Write the full natural paragraph here.
-
-PNG Info Prompt of Image:
 `
 
 export const DEFAULT_CAPTION_PRESET_ID = 'flux-krea2-lora-nsfw'

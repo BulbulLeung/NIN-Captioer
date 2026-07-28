@@ -113,6 +113,8 @@ export interface AppSettings {
   datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
+  /** When true, append PNG Info positive prompt to the Natural Auto Caption prompt at runtime. */
+  appendPositivePrompt: boolean
   /** Auto Caption / reCaption output format (Natural VLM vs WD14 ONNX tags). */
   captionFormat: CaptionFormatId
   wd14: Wd14Settings
@@ -166,6 +168,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
+  appendPositivePrompt: true,
   captionFormat: DEFAULT_CAPTION_FORMAT,
   wd14: { ...DEFAULT_WD14_SETTINGS },
   sidebarWidth: 260,
@@ -270,6 +273,7 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
+    appendPositivePrompt: merged.appendPositivePrompt !== false,
     captionFormat: normalizeCaptionFormat(merged.captionFormat),
     wd14: normalizeWd14Settings(merged.wd14),
     model: merged.model ?? '',

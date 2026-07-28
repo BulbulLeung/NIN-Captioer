@@ -24,6 +24,7 @@ export interface AppSettings {
   datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
+  appendPositivePrompt?: boolean
   captionFormat?: string
   wd14?: {
     modelRepoId: string

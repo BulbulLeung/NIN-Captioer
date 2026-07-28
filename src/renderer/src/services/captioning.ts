@@ -193,14 +193,25 @@ export async function generateCaptionForImage(
   if (!presetPrompt) throw new Error('No caption prompt preset selected')
 
   try {
-    const [{ positivePrompt }, { mimeType, base64 }] = await Promise.all([
-      window.api.readImageMeta(imagePath),
-      window.api.readImageBase64(imagePath)
-    ])
+    let fullPrompt = presetPrompt
+    let mimeType: string
+    let base64: string
 
-    const pngInfo =
-      positivePrompt.trim() || '(no PNG Info / positive prompt found in image metadata)'
-    const fullPrompt = `${presetPrompt}\n${pngInfo}`
+    if (settings.appendPositivePrompt) {
+      const [{ positivePrompt }, image] = await Promise.all([
+        window.api.readImageMeta(imagePath),
+        window.api.readImageBase64(imagePath)
+      ])
+      mimeType = image.mimeType
+      base64 = image.base64
+      const pngInfo =
+        positivePrompt.trim() || '(no PNG Info / positive prompt found in image metadata)'
+      fullPrompt = `${presetPrompt}\nPNG Info Prompt of Image:\n${pngInfo}`
+    } else {
+      const image = await window.api.readImageBase64(imagePath)
+      mimeType = image.mimeType
+      base64 = image.base64
+    }
 
     if (settings.provider === 'lmstudio') {
       return await captionWithLmStudio(settings, fullPrompt, mimeType, base64, signal)

@@ -140,7 +140,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     }
   }, [open, draft.provider, baseUrl, fetchModels])
 
-  // Auto-save caption presets / active id while settings stay open
+  // Auto-save caption presets / active id / appendPositivePrompt while settings stay open
   useEffect(() => {
     if (!open) return
     if (skipPromptSave.current) {
@@ -155,7 +155,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     return () => {
       if (promptDebounce.current) clearTimeout(promptDebounce.current)
     }
-  }, [open, draft.captionPresets, draft.activeCaptionPresetId, onAutoSave])
+  }, [open, draft.captionPresets, draft.activeCaptionPresetId, draft.appendPositivePrompt, onAutoSave])
 
   const modelOptions = useMemo(() => {
     if (draft.model && !models.includes(draft.model)) return [draft.model, ...models]
@@ -530,7 +530,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
             />
           </label>
           <label className="field">
-            <span>Prompt (auto-saved; PNG Info is appended at runtime)</span>
+            <span>Prompt (auto-saved)</span>
             <textarea
               className="prompt-textarea"
               value={activePreset?.prompt ?? ''}
@@ -538,6 +538,32 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
               spellCheck={false}
             />
           </label>
+          <div className="field">
+            <div
+              className={`lora-toggle${draft.appendPositivePrompt ? ' is-on' : ''}`}
+            >
+              <button
+                type="button"
+                role="switch"
+                className="lora-switch"
+                aria-checked={draft.appendPositivePrompt}
+                aria-label="Append positive Prompt"
+                onClick={() =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    appendPositivePrompt: !prev.appendPositivePrompt
+                  }))
+                }
+              >
+                <span className="lora-switch-knob" aria-hidden="true" />
+              </button>
+              <span className="lora-toggle-label">Append positive Prompt</span>
+            </div>
+            <p className="field-hint">
+              On: append PNG Info positive prompt to the bottom of the Auto Caption prompt
+              at runtime.
+            </p>
+          </div>
         </div>
 
         <div className="modal-actions">
