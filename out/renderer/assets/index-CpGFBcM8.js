@@ -1,3 +1,6 @@
+function getDefaultExportFromCjs(x2) {
+  return x2 && x2.__esModule && Object.prototype.hasOwnProperty.call(x2, "default") ? x2["default"] : x2;
+}
 var jsxRuntime = { exports: {} };
 var reactJsxRuntime_production = {};
 /**
@@ -307,9 +310,9 @@ react_production.__COMPILER_RUNTIME = {
     return ReactSharedInternals$2.H.useMemoCache(size);
   }
 };
-react_production.cache = function(fn) {
+react_production.cache = function(fn2) {
   return function() {
-    return fn.apply(null, arguments);
+    return fn2.apply(null, arguments);
   };
 };
 react_production.cacheSignal = function() {
@@ -468,6 +471,7 @@ react_production.version = "19.2.7";
   react.exports = react_production;
 }
 var reactExports = react.exports;
+const E = /* @__PURE__ */ getDefaultExportFromCjs(reactExports);
 var client = { exports: {} };
 var reactDomClient_production = {};
 var scheduler = { exports: {} };
@@ -797,10 +801,10 @@ reactDom_production.createPortal = function(children, container) {
     throw Error(formatProdErrorMessage$1(299));
   return createPortal$1(children, container, null, key);
 };
-reactDom_production.flushSync = function(fn) {
+reactDom_production.flushSync = function(fn2) {
   var previousTransition = ReactSharedInternals$1.T, previousUpdatePriority = Internals.p;
   try {
-    if (ReactSharedInternals$1.T = null, Internals.p = 2, fn) return fn();
+    if (ReactSharedInternals$1.T = null, Internals.p = 2, fn2) return fn2();
   } finally {
     ReactSharedInternals$1.T = previousTransition, Internals.p = previousUpdatePriority, Internals.d.f();
   }
@@ -876,8 +880,8 @@ reactDom_production.preloadModule = function(href, options) {
 reactDom_production.requestFormReset = function(form) {
   Internals.d.r(form);
 };
-reactDom_production.unstable_batchedUpdates = function(fn, a) {
-  return fn(a);
+reactDom_production.unstable_batchedUpdates = function(fn2, a) {
+  return fn2(a);
 };
 reactDom_production.useFormState = function(action, initialState, permalink) {
   return ReactSharedInternals$1.H.useFormState(action, initialState, permalink);
@@ -901,6 +905,7 @@ function checkDCE$1() {
   reactDom.exports = reactDom_production;
 }
 var reactDomExports = reactDom.exports;
+const go = /* @__PURE__ */ getDefaultExportFromCjs(reactDomExports);
 /**
  * @license React
  * react-dom-client.production.js
@@ -1081,7 +1086,7 @@ function getComponentNameFromType(type) {
         type = type._init;
         try {
           return getComponentNameFromType(type(innerType));
-        } catch (x) {
+        } catch (x2) {
         }
     }
   return null;
@@ -1151,16 +1156,16 @@ function describeBuiltInComponentFrame(name) {
   if (void 0 === prefix)
     try {
       throw Error();
-    } catch (x) {
-      var match = x.stack.trim().match(/\n( *(at )?)/);
+    } catch (x2) {
+      var match = x2.stack.trim().match(/\n( *(at )?)/);
       prefix = match && match[1] || "";
-      suffix = -1 < x.stack.indexOf("\n    at") ? " (<anonymous>)" : -1 < x.stack.indexOf("@") ? "@unknown:0:0" : "";
+      suffix = -1 < x2.stack.indexOf("\n    at") ? " (<anonymous>)" : -1 < x2.stack.indexOf("@") ? "@unknown:0:0" : "";
     }
   return "\n" + prefix + name + suffix;
 }
 var reentry = false;
-function describeNativeComponentFrame(fn, construct) {
-  if (!fn || reentry) return "";
+function describeNativeComponentFrame(fn2, construct) {
+  if (!fn2 || reentry) return "";
   reentry = true;
   var previousPrepareStackTrace = Error.prepareStackTrace;
   Error.prepareStackTrace = void 0;
@@ -1180,17 +1185,17 @@ function describeNativeComponentFrame(fn, construct) {
             if ("object" === typeof Reflect && Reflect.construct) {
               try {
                 Reflect.construct(Fake, []);
-              } catch (x) {
-                var control = x;
+              } catch (x2) {
+                var control = x2;
               }
-              Reflect.construct(fn, [], Fake);
+              Reflect.construct(fn2, [], Fake);
             } else {
               try {
                 Fake.call();
               } catch (x$1) {
                 control = x$1;
               }
-              fn.call(Fake.prototype);
+              fn2.call(Fake.prototype);
             }
           } else {
             try {
@@ -1198,7 +1203,7 @@ function describeNativeComponentFrame(fn, construct) {
             } catch (x$2) {
               control = x$2;
             }
-            (Fake = fn()) && "function" === typeof Fake.catch && Fake.catch(function() {
+            (Fake = fn2()) && "function" === typeof Fake.catch && Fake.catch(function() {
             });
           }
         } catch (sample) {
@@ -1236,7 +1241,7 @@ function describeNativeComponentFrame(fn, construct) {
             do
               if (RunInRootFrame--, namePropDescriptor--, 0 > namePropDescriptor || sampleLines[RunInRootFrame] !== controlLines[namePropDescriptor]) {
                 var frame = "\n" + sampleLines[RunInRootFrame].replace(" at new ", " at ");
-                fn.displayName && frame.includes("<anonymous>") && (frame = frame.replace("<anonymous>", fn.displayName));
+                fn2.displayName && frame.includes("<anonymous>") && (frame = frame.replace("<anonymous>", fn2.displayName));
                 return frame;
               }
             while (1 <= RunInRootFrame && 0 <= namePropDescriptor);
@@ -1247,7 +1252,7 @@ function describeNativeComponentFrame(fn, construct) {
   } finally {
     reentry = false, Error.prepareStackTrace = previousPrepareStackTrace;
   }
-  return (previousPrepareStackTrace = fn ? fn.displayName || fn.name : "") ? describeBuiltInComponentFrame(previousPrepareStackTrace) : "";
+  return (previousPrepareStackTrace = fn2 ? fn2.displayName || fn2.name : "") ? describeBuiltInComponentFrame(previousPrepareStackTrace) : "";
 }
 function describeFiber(fiber, childFiber) {
   switch (fiber.tag) {
@@ -1281,8 +1286,8 @@ function getStackByFiberInDevAndProd(workInProgress2) {
       info += describeFiber(workInProgress2, previous), previous = workInProgress2, workInProgress2 = workInProgress2.return;
     while (workInProgress2);
     return info;
-  } catch (x) {
-    return "\nError generating stack: " + x.message + "\n" + x.stack;
+  } catch (x2) {
+    return "\nError generating stack: " + x2.message + "\n" + x2.stack;
   }
 }
 var hasOwnProperty = Object.prototype.hasOwnProperty, scheduleCallback$3 = Scheduler.unstable_scheduleCallback, cancelCallback$1 = Scheduler.unstable_cancelCallback, shouldYield = Scheduler.unstable_shouldYield, requestPaint = Scheduler.unstable_requestPaint, now = Scheduler.unstable_now, getCurrentPriorityLevel = Scheduler.unstable_getCurrentPriorityLevel, ImmediatePriority = Scheduler.unstable_ImmediatePriority, UserBlockingPriority = Scheduler.unstable_UserBlockingPriority, NormalPriority$1 = Scheduler.unstable_NormalPriority, LowPriority = Scheduler.unstable_LowPriority, IdlePriority = Scheduler.unstable_IdlePriority, log$1 = Scheduler.log, unstable_setDisableYieldValue = Scheduler.unstable_setDisableYieldValue, rendererID = null, injectedHook = null;
@@ -1295,9 +1300,9 @@ function setIsStrictModeForDevtools(newIsStrictMode) {
     }
 }
 var clz32 = Math.clz32 ? Math.clz32 : clz32Fallback, log = Math.log, LN2 = Math.LN2;
-function clz32Fallback(x) {
-  x >>>= 0;
-  return 0 === x ? 32 : 31 - (log(x) / LN2 | 0) | 0;
+function clz32Fallback(x2) {
+  x2 >>>= 0;
+  return 0 === x2 ? 32 : 31 - (log(x2) / LN2 | 0) | 0;
 }
 var nextTransitionUpdateLane = 256, nextTransitionDeferredLane = 262144, nextRetryLane = 4194304;
 function getHighestPriorityLanes(lanes) {
@@ -1517,10 +1522,10 @@ function resolveUpdatePriority() {
   updatePriority = window.event;
   return void 0 === updatePriority ? 32 : getEventPriority(updatePriority.type);
 }
-function runWithPriority(priority, fn) {
+function runWithPriority(priority, fn2) {
   var previousPriority = ReactDOMSharedInternals.p;
   try {
-    return ReactDOMSharedInternals.p = priority, fn();
+    return ReactDOMSharedInternals.p = priority, fn2();
   } finally {
     ReactDOMSharedInternals.p = previousPriority;
   }
@@ -2012,16 +2017,16 @@ function restoreStateOfTarget(target) {
   }
 }
 var isInsideEventHandler = false;
-function batchedUpdates$1(fn, a, b) {
-  if (isInsideEventHandler) return fn(a, b);
+function batchedUpdates$1(fn2, a, b) {
+  if (isInsideEventHandler) return fn2(a, b);
   isInsideEventHandler = true;
   try {
-    var JSCompiler_inline_result = fn(a);
+    var JSCompiler_inline_result = fn2(a);
     return JSCompiler_inline_result;
   } finally {
     if (isInsideEventHandler = false, null !== restoreTarget || null !== restoreQueue) {
-      if (flushSyncWork$1(), restoreTarget && (a = restoreTarget, fn = restoreQueue, restoreQueue = restoreTarget = null, restoreStateOfTarget(a), fn))
-        for (a = 0; a < fn.length; a++) restoreStateOfTarget(fn[a]);
+      if (flushSyncWork$1(), restoreTarget && (a = restoreTarget, fn2 = restoreQueue, restoreQueue = restoreTarget = null, restoreStateOfTarget(a), fn2))
+        for (a = 0; a < fn2.length; a++) restoreStateOfTarget(fn2[a]);
     }
   }
 }
@@ -2429,8 +2434,8 @@ function getTargetInstForInputOrChangeEvent(domEventName, targetInst) {
   if ("input" === domEventName || "change" === domEventName)
     return getInstIfValueChanged(targetInst);
 }
-function is(x, y) {
-  return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
+function is(x2, y) {
+  return x2 === y && (0 !== x2 || 1 / x2 === 1 / y) || x2 !== x2 && y !== y;
 }
 var objectIs = "function" === typeof Object.is ? Object.is : is;
 function shallowEqual(objA, objB) {
@@ -3230,10 +3235,10 @@ function resolveLazy(lazyType) {
   try {
     var init = lazyType._init;
     return init(lazyType._payload);
-  } catch (x) {
-    if (null !== x && "object" === typeof x && "function" === typeof x.then)
-      throw suspendedThenable = x, SuspenseException;
-    throw x;
+  } catch (x2) {
+    if (null !== x2 && "object" === typeof x2 && "function" === typeof x2.then)
+      throw suspendedThenable = x2, SuspenseException;
+    throw x2;
   }
 }
 var suspendedThenable = null;
@@ -3696,9 +3701,9 @@ function createChildReconciler(shouldTrackSideEffects) {
       );
       thenableState$1 = null;
       return firstChildFiber;
-    } catch (x) {
-      if (x === SuspenseException || x === SuspenseActionException) throw x;
-      var fiber = createFiberImplClass(29, x, null, returnFiber.mode);
+    } catch (x2) {
+      if (x2 === SuspenseException || x2 === SuspenseActionException) throw x2;
+      var fiber = createFiberImplClass(29, x2, null, returnFiber.mode);
       fiber.lanes = lanes;
       fiber.return = returnFiber;
       return fiber;
@@ -4494,9 +4499,9 @@ function updateActionStateImpl(stateHook, currentStateHook, action) {
   if ("object" === typeof currentStateHook && null !== currentStateHook && "function" === typeof currentStateHook.then)
     try {
       var state = useThenable(currentStateHook);
-    } catch (x) {
-      if (x === SuspenseException) throw SuspenseActionException;
-      throw x;
+    } catch (x2) {
+      if (x2 === SuspenseException) throw SuspenseActionException;
+      throw x2;
     }
   else state = currentStateHook;
   currentStateHook = updateWorkInProgressHook();
@@ -12709,107 +12714,116 @@ function AnalysisDialog({
   onClose
 }) {
   if (!open) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "modal modal-wide modal-analysis",
-      role: "dialog",
-      "aria-labelledby": "analysis-title",
-      onClick: (e) => e.stopPropagation(),
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "analysis-header", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "analysis-title", children: "Caption Analysis" }),
-          analyzing && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "analysis-progress", "aria-live": "polite", children: progress ? `Analyzing ${progress.done} / ${progress.total}…` : "Preparing analysis…" })
-        ] }),
-        imageCount === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "Open a folder that contains images first." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: error }),
-          result ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "analysis-dashboard", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stat-card", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-label", children: "Total Images" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-value", children: result.totalImages }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stat-card-meta", children: [
-                  "Captioned ",
-                  result.captionedCount,
-                  " / Missing ",
-                  result.emptyCount
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stat-card", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-label", children: "LoRA Health Score" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                  "div",
-                  {
-                    className: `stat-card-value fitness-score fitness-${result.fitnessLevel}`,
-                    children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "span",
-                        {
-                          className: `fitness-dot fitness-${result.fitnessLevel}`,
-                          "aria-hidden": true
-                        }
-                      ),
-                      result.fitnessScore,
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "fitness-unit", children: "/100" })
-                    ]
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-meta", children: result.summary })
-              ] })
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onClose();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal modal-wide modal-analysis",
+          role: "dialog",
+          "aria-labelledby": "analysis-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "analysis-header", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "analysis-title", children: "Caption Analysis" }),
+              analyzing && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "analysis-progress", "aria-live": "polite", children: progress ? `Analyzing ${progress.done} / ${progress.total}…` : "Preparing analysis…" })
             ] }),
-            result.healthBreakdown.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "health-breakdown", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Score breakdown" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "health-breakdown-list", children: result.healthBreakdown.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-breakdown-row", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "health-breakdown-label", children: [
-                    item.label,
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "health-breakdown-weight", children: [
-                      Math.round(item.weight * 100),
-                      "%"
+            imageCount === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "Open a folder that contains images first." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              error && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: error }),
+              result ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "analysis-dashboard", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stat-card", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-label", children: "Total Images" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-value", children: result.totalImages }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stat-card-meta", children: [
+                      "Captioned ",
+                      result.captionedCount,
+                      " / Missing ",
+                      result.emptyCount
                     ] })
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "health-breakdown-score", children: item.id === "penalty" ? `−${item.score}` : item.score })
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stat-card", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-label", children: "LoRA Health Score" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "div",
+                      {
+                        className: `stat-card-value fitness-score fitness-${result.fitnessLevel}`,
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "span",
+                            {
+                              className: `fitness-dot fitness-${result.fitnessLevel}`,
+                              "aria-hidden": true
+                            }
+                          ),
+                          result.fitnessScore,
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "fitness-unit", children: "/100" })
+                        ]
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stat-card-meta", children: result.summary })
+                  ] })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "health-bar-track", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "div",
+                result.healthBreakdown.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "health-breakdown", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Score breakdown" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "health-breakdown-list", children: result.healthBreakdown.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-breakdown-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "health-breakdown-label", children: [
+                        item.label,
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "health-breakdown-weight", children: [
+                          Math.round(item.weight * 100),
+                          "%"
+                        ] })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "health-breakdown-score", children: item.id === "penalty" ? `−${item.score}` : item.score })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "health-bar-track", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "div",
+                      {
+                        className: `health-bar-fill${item.id === "penalty" ? " health-bar-penalty" : ""}`,
+                        style: {
+                          width: `${Math.min(100, Math.max(0, item.score))}%`
+                        }
+                      }
+                    ) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "health-breakdown-notes", children: item.notes })
+                  ] }, item.id)) })
+                ] }),
+                (result.strengths.length > 0 || result.improvements.length > 0) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-advice", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-advice-col", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "Strengths" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: result.strengths.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: s }, s)) })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-advice-col", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "Improvements" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: result.improvements.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: s }, s)) })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Category Detail Distribution" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "analysis-category-grid", children: CAPTION_CATEGORIES.map((cat) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  CategoryPieChart,
                   {
-                    className: `health-bar-fill${item.id === "penalty" ? " health-bar-penalty" : ""}`,
-                    style: {
-                      width: `${Math.min(100, Math.max(0, item.score))}%`
-                    }
-                  }
-                ) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "health-breakdown-notes", children: item.notes })
-              ] }, item.id)) })
+                    title: cat.label,
+                    details: result.categoryDetails[cat.id]
+                  },
+                  cat.id
+                )) })
+              ] }) : analyzing ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "Loading captions…" }) : null
             ] }),
-            (result.strengths.length > 0 || result.improvements.length > 0) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-advice", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-advice-col", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "Strengths" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: result.strengths.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: s }, s)) })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "health-advice-col", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "Improvements" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: result.improvements.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: s }, s)) })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Category Detail Distribution" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "analysis-category-grid", children: CAPTION_CATEGORIES.map((cat) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-              CategoryPieChart,
-              {
-                title: cat.label,
-                details: result.categoryDetails[cat.id]
-              },
-              cat.id
-            )) })
-          ] }) : analyzing ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "Loading captions…" }) : null
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "spacer" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: onClose, children: "Close" })
-        ] })
-      ]
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: onClose, children: "Close" })
+            ] })
+          ]
+        }
+      )
     }
-  ) });
+  );
 }
 const FLUX_KREA2_CAPTION_PROMPT = `You are an expert at training Flux Style (Aesthetic) LoRAs. Your task is to analyze the provided image AND its embedded PNG Info (metadata / SDXL generation prompt) to generate a highly optimized caption file.
 
@@ -12849,6 +12863,367 @@ function createDefaultCaptionPreset() {
     prompt: FLUX_KREA2_CAPTION_PROMPT
   };
 }
+const CAPTION_FORMAT_OPTIONS = [
+  { id: "natural", label: "Natural Language(Flux/Krea2)" },
+  { id: "wd14", label: "Danbooru Tags(SD/XL)" }
+];
+const DEFAULT_CAPTION_FORMAT = "natural";
+const DEFAULT_WD14_SETTINGS = {
+  modelRepoId: "SmilingWolf/wd-swinv2-tagger-v3",
+  threshold: 0.35,
+  characterThreshold: 0.85
+};
+function normalizeCaptionFormat(value) {
+  if (value === "wd14" || value === "natural") return value;
+  return DEFAULT_CAPTION_FORMAT;
+}
+function normalizeWd14Settings(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const threshold = typeof src.threshold === "number" && Number.isFinite(src.threshold) ? Math.min(1, Math.max(0, src.threshold)) : DEFAULT_WD14_SETTINGS.threshold;
+  const characterThreshold = typeof src.characterThreshold === "number" && Number.isFinite(src.characterThreshold) ? Math.min(1, Math.max(0, src.characterThreshold)) : DEFAULT_WD14_SETTINGS.characterThreshold;
+  const modelRepoId = typeof src.modelRepoId === "string" && src.modelRepoId.trim() ? src.modelRepoId.trim() : DEFAULT_WD14_SETTINGS.modelRepoId;
+  return { modelRepoId, threshold, characterThreshold };
+}
+function join(...parts) {
+  const filtered = parts.filter((p) => p != null && p !== "");
+  if (filtered.length === 0) return "";
+  const sep = filtered.some((p) => p.includes("\\")) ? "\\" : "/";
+  return filtered.map((part, i) => {
+    let s = part.replace(/[/\\]+/g, sep);
+    if (i > 0) {
+      while (s.startsWith(sep)) s = s.slice(sep.length);
+    }
+    if (i < filtered.length - 1) {
+      while (s.endsWith(sep)) s = s.slice(0, -sep.length);
+    }
+    return s;
+  }).join(sep);
+}
+const KREA2_RAW = "krea/Krea-2-Raw";
+const DEFAULT_SAMPLE_PROMPTS = [
+  `A striking, high-contrast waist-up front-facing portrait of an otherworldly, ethereal girl looking directly at the viewer. She has translucent, glowing alabaster skin and long, weightless hair of pure white starlight floating around her. Her large, serene eyes gaze straight forward, staring directly into the viewer's eyes like pools of liquid silver, shining brightly against a deep, pitch-black cosmic abyss.
+The background is a stark, midnight-black void filled with thousands of sharp, highly-reflective crystal particles and shattered gemstone shards hovering frozen in space. These crystalline particles act as tiny prisms, catching a hidden light source and exploding with brilliant, high-contrast flares of electric blue, magenta, and sharp white.
+Cutting sharply across the entire composition from the top-right corner to the bottom-left corner is a rigid band of five taut, parallel straight lines of humming, pure white light. These five luminous geometric lines slash through the space, casting intense, bright highlights onto her symmetrical face, collarbones, and shoulder.
+Her slender, pale hands are held in a gentle, graceful gesture in front of her chest; her long fingers hover millimeters away from the five rigid straight light lines, guiding her hands along the diagonal path with absolute focus.
+At the chords' vibration, nearby floating crystal particles ripple and spin, scattering a dazzling storm of sharp, starry lens flares and microscopic glowing dust around her cheek and shoulders.
+She wears a high-collared gown crafted from layers of woven starlight and transparent diamond-veil fabric, which reflects the intense contrasting light and projects intricate, glittering caustic patterns across her serene front-facing neck and face.`
+];
+const DEFAULT_SAMPLE_WIDTH = 1024;
+const DEFAULT_SAMPLE_HEIGHT = 1024;
+const DEFAULT_SAMPLE_SEED = 42;
+function buildDefaultSamplePrompts() {
+  return DEFAULT_SAMPLE_PROMPTS.map((prompt, i) => ({
+    prompt,
+    width: DEFAULT_SAMPLE_WIDTH,
+    height: DEFAULT_SAMPLE_HEIGHT,
+    seed: DEFAULT_SAMPLE_SEED + i
+  }));
+}
+const DEFAULT_LORA_TRAIN_JOB = {
+  name: "my_first_krea2_lora_v1",
+  training_folder: "output",
+  device: "cuda:0",
+  trigger_word: "",
+  network: {
+    type: "lora",
+    linear: 16,
+    linear_alpha: 16
+  },
+  save: {
+    dtype: "fp16",
+    save_every: 250,
+    max_step_saves_to_keep: 4,
+    push_to_hub: false
+  },
+  datasets: [
+    {
+      folder_path: "",
+      caption_ext: "txt",
+      caption_dropout_rate: 0.05,
+      shuffle_tokens: false,
+      cache_latents_to_disk: true,
+      resolution: [1024]
+    }
+  ],
+  train: {
+    batch_size: 1,
+    steps: 2e3,
+    gradient_accumulation_steps: 1,
+    train_unet: true,
+    train_text_encoder: false,
+    gradient_checkpointing: true,
+    cache_text_embeddings: true,
+    noise_scheduler: "flowmatch",
+    optimizer: "adamw8bit",
+    lr: 1e-4,
+    dtype: "bf16",
+    skip_first_sample: false,
+    disable_sampling: true,
+    ema_config: {
+      use_ema: false,
+      ema_decay: 0.99
+    }
+  },
+  model: {
+    name_or_path: KREA2_RAW,
+    train_name_or_path: KREA2_RAW,
+    arch: "krea2",
+    quantize: false,
+    low_vram: false,
+    layer_offload: false,
+    layer_offload_percent: 0
+  },
+  sample: {
+    sampler: "flowmatch",
+    sample_every: 250,
+    sample_start_step: 0,
+    width: DEFAULT_SAMPLE_WIDTH,
+    height: DEFAULT_SAMPLE_HEIGHT,
+    prompts: buildDefaultSamplePrompts(),
+    neg: "",
+    seed: DEFAULT_SAMPLE_SEED,
+    guidance_scale: 3.5,
+    sample_steps: 20
+  }
+};
+const DEFAULT_LORA_TRAIN_APP = {
+  pythonPath: "",
+  downloadFolder: "",
+  huggingfaceToken: ""
+};
+const DEFAULT_LORA_TRAIN_JOB_PRESET_ID = "job-default";
+function createLoraTrainJobId() {
+  return `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+function asRecord(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return null;
+}
+function asNumber(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+function asBool(value, fallback) {
+  return typeof value === "boolean" ? value : fallback;
+}
+function asString(value, fallback) {
+  return typeof value === "string" ? value : fallback;
+}
+function asNumberArray(value, fallback) {
+  if (!Array.isArray(value)) return [...fallback];
+  const nums = value.filter((v) => typeof v === "number" && Number.isFinite(v));
+  return nums.length > 0 ? nums : [...fallback];
+}
+function normalizeDataset(raw, fallback) {
+  const o = asRecord(raw);
+  if (!o) {
+    return {
+      ...fallback,
+      resolution: [...fallback.resolution]
+    };
+  }
+  return {
+    folder_path: asString(o.folder_path, fallback.folder_path),
+    caption_ext: "txt",
+    caption_dropout_rate: asNumber(o.caption_dropout_rate, fallback.caption_dropout_rate),
+    shuffle_tokens: asBool(o.shuffle_tokens, fallback.shuffle_tokens),
+    cache_latents_to_disk: asBool(o.cache_latents_to_disk, fallback.cache_latents_to_disk),
+    resolution: asNumberArray(o.resolution, fallback.resolution)
+  };
+}
+function normalizeSaveDtype(value, fallback) {
+  const raw = asString(value, fallback).toLowerCase();
+  if (raw === "float16" || raw === "fp16") return "fp16";
+  if (raw === "bfloat16" || raw === "bf16") return "bf16";
+  if (raw === "float32" || raw === "fp32") return "fp32";
+  return fallback === "float16" ? "fp16" : fallback;
+}
+function normalizeNetworkType(value, fallback) {
+  const raw = asString(value, fallback).toLowerCase();
+  if (raw === "lora" || raw === "locon" || raw === "lokr") return raw;
+  return "lora";
+}
+function normalizeArch(value) {
+  return value === "krea2" || value === "flux" ? "krea2" : "krea2";
+}
+function normalizeSamplePrompts(raw, defaults) {
+  if (!Array.isArray(raw)) {
+    return defaults.prompts.map((p) => ({ ...p }));
+  }
+  if (raw.length === 0) return [];
+  return raw.map((item, i) => {
+    const seedFallback = defaults.seed + i;
+    if (typeof item === "string") {
+      return {
+        prompt: item,
+        width: defaults.width,
+        height: defaults.height,
+        seed: seedFallback
+      };
+    }
+    const o = asRecord(item);
+    if (!o) {
+      return {
+        prompt: "",
+        width: defaults.width,
+        height: defaults.height,
+        seed: seedFallback
+      };
+    }
+    return {
+      prompt: asString(o.prompt ?? o.text, ""),
+      width: asNumber(o.width, defaults.width),
+      height: asNumber(o.height, defaults.height),
+      seed: asNumber(o.seed, seedFallback)
+    };
+  });
+}
+function normalizeLoraTrainJob(raw) {
+  const d = DEFAULT_LORA_TRAIN_JOB;
+  const o = asRecord(raw) ?? {};
+  const network = asRecord(o.network) ?? {};
+  const save = asRecord(o.save) ?? {};
+  const train = asRecord(o.train) ?? {};
+  const ema = asRecord(train.ema_config) ?? {};
+  const model = asRecord(o.model) ?? {};
+  const sample = asRecord(o.sample) ?? {};
+  let datasets;
+  if (Array.isArray(o.datasets) && o.datasets.length > 0) {
+    datasets = o.datasets.map(
+      (item, i) => normalizeDataset(item, d.datasets[Math.min(i, d.datasets.length - 1)])
+    );
+  } else {
+    datasets = d.datasets.map((ds) => ({ ...ds, resolution: [...ds.resolution] }));
+  }
+  const legacyPath = asString(model.name_or_path, d.model.train_name_or_path);
+  const trainPath = asString(model.train_name_or_path, legacyPath || d.model.train_name_or_path);
+  return {
+    name: asString(o.name, d.name),
+    training_folder: asString(o.training_folder, d.training_folder),
+    device: asString(o.device, d.device),
+    trigger_word: asString(o.trigger_word, d.trigger_word),
+    network: {
+      type: normalizeNetworkType(network.type, d.network.type),
+      linear: asNumber(network.linear, d.network.linear),
+      linear_alpha: asNumber(network.linear_alpha, d.network.linear_alpha)
+    },
+    save: {
+      dtype: normalizeSaveDtype(save.dtype, d.save.dtype),
+      save_every: asNumber(save.save_every, d.save.save_every),
+      max_step_saves_to_keep: asNumber(
+        save.max_step_saves_to_keep,
+        d.save.max_step_saves_to_keep
+      ),
+      push_to_hub: false
+    },
+    datasets,
+    train: {
+      batch_size: asNumber(train.batch_size, d.train.batch_size),
+      steps: asNumber(train.steps, d.train.steps),
+      gradient_accumulation_steps: asNumber(
+        train.gradient_accumulation_steps,
+        d.train.gradient_accumulation_steps
+      ),
+      train_unet: true,
+      train_text_encoder: false,
+      gradient_checkpointing: asBool(
+        train.gradient_checkpointing,
+        d.train.gradient_checkpointing
+      ),
+      cache_text_embeddings: asBool(
+        train.cache_text_embeddings,
+        d.train.cache_text_embeddings
+      ),
+      noise_scheduler: asString(train.noise_scheduler, d.train.noise_scheduler),
+      optimizer: asString(train.optimizer, d.train.optimizer),
+      lr: asNumber(train.lr, d.train.lr),
+      dtype: asString(train.dtype, d.train.dtype),
+      skip_first_sample: asBool(train.skip_first_sample, d.train.skip_first_sample),
+      disable_sampling: asBool(train.disable_sampling, d.train.disable_sampling),
+      ema_config: {
+        use_ema: asBool(ema.use_ema, d.train.ema_config.use_ema),
+        ema_decay: asNumber(ema.ema_decay, d.train.ema_config.ema_decay)
+      }
+    },
+    model: {
+      name_or_path: trainPath,
+      train_name_or_path: trainPath,
+      arch: normalizeArch(model.arch),
+      quantize: asBool(model.quantize, d.model.quantize),
+      low_vram: asBool(model.low_vram, d.model.low_vram),
+      layer_offload: asBool(model.layer_offload, d.model.layer_offload),
+      layer_offload_percent: (() => {
+        if (asString(model.layer_offload_mode, "") === "auto") return 0;
+        const raw2 = asNumber(model.layer_offload_percent, d.model.layer_offload_percent);
+        return Math.min(100, Math.max(0, Math.round(raw2)));
+      })()
+    },
+    sample: {
+      sampler: asString(sample.sampler, d.sample.sampler),
+      sample_every: asNumber(sample.sample_every, d.sample.sample_every),
+      sample_start_step: asNumber(sample.sample_start_step, d.sample.sample_start_step),
+      width: asNumber(sample.width, d.sample.width),
+      height: asNumber(sample.height, d.sample.height),
+      prompts: normalizeSamplePrompts(sample.prompts, {
+        width: asNumber(sample.width, d.sample.width),
+        height: asNumber(sample.height, d.sample.height),
+        seed: asNumber(sample.seed, d.sample.seed),
+        prompts: d.sample.prompts
+      }),
+      neg: asString(sample.neg, d.sample.neg),
+      seed: asNumber(sample.seed, d.sample.seed),
+      guidance_scale: asNumber(sample.guidance_scale, d.sample.guidance_scale),
+      sample_steps: asNumber(sample.sample_steps, d.sample.sample_steps)
+    }
+  };
+}
+function createDefaultLoraTrainJobPreset(job, id = DEFAULT_LORA_TRAIN_JOB_PRESET_ID) {
+  return {
+    id,
+    job: normalizeLoraTrainJob(job ?? DEFAULT_LORA_TRAIN_JOB)
+  };
+}
+function normalizeLoraTrainJobPresets(rawJobs, legacyJob, activeIdRaw) {
+  const jobs = [];
+  if (Array.isArray(rawJobs)) {
+    for (const item of rawJobs) {
+      const o = asRecord(item);
+      if (!o) continue;
+      const id = asString(o.id, "");
+      if (!id) continue;
+      jobs.push({
+        id,
+        job: normalizeLoraTrainJob(o.job ?? o)
+      });
+    }
+  }
+  if (jobs.length === 0) {
+    jobs.push(createDefaultLoraTrainJobPreset(legacyJob));
+  }
+  const activeId = typeof activeIdRaw === "string" && jobs.some((j2) => j2.id === activeIdRaw) ? activeIdRaw : jobs[0].id;
+  return { jobs, activeId };
+}
+function normalizeLoraTrainApp(raw) {
+  const d = DEFAULT_LORA_TRAIN_APP;
+  const o = asRecord(raw) ?? {};
+  return {
+    pythonPath: asString(o.pythonPath, d.pythonPath),
+    downloadFolder: asString(o.downloadFolder, d.downloadFolder),
+    huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken)
+  };
+}
+function pythonInstallPathFromDownloadFolder(downloadFolder) {
+  const trimmed = downloadFolder.trim();
+  return trimmed ? join(trimmed, "python") : void 0;
+}
+function modelDownloadPathFromDownloadFolder(downloadFolder) {
+  const trimmed = downloadFolder.trim();
+  return trimmed ? join(trimmed, "models") : void 0;
+}
+function normalizeActiveView(value) {
+  return value === "loraTrain" ? "loraTrain" : "datasetEdit";
+}
 const LANGUAGES = [
   { code: "zh-TW", label: "繁體中文" },
   { code: "zh-CN", label: "简体中文" },
@@ -12872,11 +13247,18 @@ const DEFAULT_SETTINGS = {
   datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
+  captionFormat: DEFAULT_CAPTION_FORMAT,
+  wd14: { ...DEFAULT_WD14_SETTINGS },
   sidebarWidth: 260,
   rightPaneWidth: 380,
   autoAnalysis: true,
   listViewMode: "list",
-  thumbnailWidth: 96
+  thumbnailWidth: 96,
+  bucketPreview: true,
+  activeView: "datasetEdit",
+  loraTrainJobs: [createDefaultLoraTrainJobPreset()],
+  activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
+  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP }
 };
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 480;
@@ -12918,6 +13300,7 @@ function normalizeDatasetFolders(raw, lastFolder) {
 }
 function normalizeSettings(raw) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
+  const rawRecord = raw ?? {};
   let presets = Array.isArray(merged.captionPresets) ? merged.captionPresets.filter(Boolean) : [];
   if (presets.length === 0) {
     presets = [createDefaultCaptionPreset()];
@@ -12934,10 +13317,33 @@ function normalizeSettings(raw) {
   if (lastFolder && !datasetFolders.includes(lastFolder) && datasetFolders.length > 0) {
     lastFolder = datasetFolders[0];
   }
+  const { jobs: loraTrainJobs, activeId: activeLoraTrainJobId } = normalizeLoraTrainJobPresets(
+    rawRecord.loraTrainJobs ?? merged.loraTrainJobs,
+    rawRecord.loraTrainJob,
+    rawRecord.activeLoraTrainJobId ?? merged.activeLoraTrainJobId
+  );
+  const activeJobIndex = Math.max(
+    0,
+    loraTrainJobs.findIndex((j2) => j2.id === activeLoraTrainJobId)
+  );
+  const activePreset = loraTrainJobs[activeJobIndex];
+  if (!activePreset.job.datasets[0]?.folder_path && lastFolder) {
+    loraTrainJobs[activeJobIndex] = {
+      ...activePreset,
+      job: {
+        ...activePreset.job,
+        datasets: activePreset.job.datasets.map(
+          (ds, i) => i === 0 ? { ...ds, folder_path: lastFolder } : ds
+        )
+      }
+    };
+  }
   return {
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
+    captionFormat: normalizeCaptionFormat(merged.captionFormat),
+    wd14: normalizeWd14Settings(merged.wd14),
     model: merged.model ?? "",
     lastFolder,
     datasetFolders,
@@ -12945,7 +13351,12 @@ function normalizeSettings(raw) {
     rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
     autoAnalysis: merged.autoAnalysis !== false,
     listViewMode: normalizeListViewMode(merged.listViewMode),
-    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth)
+    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth),
+    bucketPreview: merged.bucketPreview !== false,
+    activeView: normalizeActiveView(merged.activeView),
+    loraTrainJobs,
+    activeLoraTrainJobId,
+    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp)
   };
 }
 function CaptionEditor({
@@ -12954,22 +13365,27 @@ function CaptionEditor({
   targetLanguage,
   translating,
   captioning,
-  error,
   canSave,
   canRecaption,
   onEnglishChange,
   onTranslatedChange,
   onLanguageChange,
-  onDismissError,
   onSave,
   onRecaption
 }) {
+  const englishRef = reactExports.useRef(null);
+  const translatedRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (captioning) englishRef.current?.blur();
+  }, [captioning]);
+  reactExports.useEffect(() => {
+    if (translating) translatedRef.current?.blur();
+  }, [translating]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-editor", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-panel", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-header", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "caption-en", children: "English Caption (saved to .txt)" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-header-actions", children: [
-          (translating || captioning) && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "status translating", children: captioning ? "Captioning…" : "Translating (faster after model warmup)…" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -12991,17 +13407,22 @@ function CaptionEditor({
           )
         ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "textarea",
-        {
-          id: "caption-en",
-          className: "caption-textarea",
-          value: english,
-          onChange: (e) => onEnglishChange(e.target.value),
-          placeholder: "English caption…",
-          spellCheck: false
-        }
-      )
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-field", "aria-busy": captioning, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            ref: englishRef,
+            id: "caption-en",
+            className: "caption-textarea",
+            value: english,
+            onChange: (e) => onEnglishChange(e.target.value),
+            placeholder: "English caption…",
+            spellCheck: false,
+            disabled: captioning
+          }
+        ),
+        captioning && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "caption-field-overlay", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "caption-spinner" }) })
+      ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-panel", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-header", children: [
@@ -13017,23 +13438,3851 @@ function CaptionEditor({
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "textarea",
-        {
-          id: "caption-tr",
-          className: "caption-textarea",
-          value: translated,
-          onChange: (e) => onTranslatedChange(e.target.value),
-          placeholder: "Edits here are translated back to English above…",
-          spellCheck: false
-        }
-      )
-    ] }),
-    error && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-error", role: "alert", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onDismissError, children: "Dismiss" })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "caption-field", "aria-busy": translating, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            ref: translatedRef,
+            id: "caption-tr",
+            className: "caption-textarea",
+            value: translated,
+            onChange: (e) => onTranslatedChange(e.target.value),
+            placeholder: "Edits here are translated back to English above…",
+            spellCheck: false,
+            disabled: translating
+          }
+        ),
+        translating && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "caption-field-overlay", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "caption-spinner" }) })
+      ] })
     ] })
   ] });
+}
+const we = 0, Pt = 1, Xt = 2, Vn = 4;
+function fn(t) {
+  return () => t;
+}
+function Io(t) {
+  t();
+}
+function re(t, e) {
+  return (n) => t(e(n));
+}
+function mn(t, e) {
+  return () => t(e);
+}
+function So(t, e) {
+  return (n) => t(e, n);
+}
+function _e(t) {
+  return t !== void 0;
+}
+function xo(...t) {
+  return () => {
+    t.map(Io);
+  };
+}
+function Jt() {
+}
+function ye(t, e) {
+  return e(t), t;
+}
+function vo(t, e) {
+  return e(t);
+}
+function rt(...t) {
+  return t;
+}
+function Y(t, e) {
+  return t(Pt, e);
+}
+function M(t, e) {
+  t(we, e);
+}
+function Ne(t) {
+  t(Xt);
+}
+function it(t) {
+  return t(Vn);
+}
+function z(t, e) {
+  return Y(t, So(e, we));
+}
+function yt(t, e) {
+  const n = t(Pt, (o) => {
+    n(), e(o);
+  });
+  return n;
+}
+function pn(t) {
+  let e, n;
+  return (o) => (r) => {
+    e = r, n && clearTimeout(n), n = setTimeout(() => {
+      o(e);
+    }, t);
+  };
+}
+function Wn(t, e) {
+  return t === e;
+}
+function nt(t = Wn) {
+  let e;
+  return (n) => (o) => {
+    t(e, o) || (e = o, n(o));
+  };
+}
+function P(t) {
+  return (e) => (n) => {
+    t(n) && e(n);
+  };
+}
+function B(t) {
+  return (e) => re(e, t);
+}
+function Bt(t) {
+  return (e) => () => {
+    e(t);
+  };
+}
+function x(t, ...e) {
+  const n = To(...e);
+  return (o, r) => {
+    switch (o) {
+      case Xt:
+        Ne(t);
+        return;
+      case Pt:
+        return Y(t, n(r));
+    }
+  };
+}
+function Ot(t, e) {
+  return (n) => (o) => {
+    n(e = t(e, o));
+  };
+}
+function Ut(t) {
+  return (e) => (n) => {
+    t > 0 ? t-- : e(n);
+  };
+}
+function zt(t) {
+  let e = null, n;
+  return (o) => (r) => {
+    e = r, !n && (n = setTimeout(() => {
+      n = void 0, o(e);
+    }, t));
+  };
+}
+function $(...t) {
+  const e = Array.from({ length: t.length });
+  let n = 0, o = null;
+  const r = 2 ** t.length - 1;
+  return t.forEach((s, i) => {
+    const l = 2 ** i;
+    Y(s, (c) => {
+      const d = n;
+      n |= l, e[i] = c, d !== r && n === r && o && (o(), o = null);
+    });
+  }), (s) => (i) => {
+    const l = () => {
+      s([i].concat(e));
+    };
+    n === r ? l() : o = l;
+  };
+}
+function To(...t) {
+  return (e) => t.reduceRight(vo, e);
+}
+function Co(t) {
+  let e, n;
+  const o = () => e?.();
+  return function(r, s) {
+    switch (r) {
+      case Pt:
+        return s ? n === s ? void 0 : (o(), n = s, e = Y(t, s), e) : (o(), Jt);
+      case Xt:
+        o(), n = null;
+        return;
+    }
+  };
+}
+function T(t) {
+  let e = t;
+  const n = U();
+  return (o, r) => {
+    switch (o) {
+      case we:
+        e = r;
+        break;
+      case Pt: {
+        r(e);
+        break;
+      }
+      case Vn:
+        return e;
+    }
+    return n(o, r);
+  };
+}
+function ht(t, e) {
+  return ye(T(e), (n) => z(t, n));
+}
+function U() {
+  const t = [];
+  return (e, n) => {
+    switch (e) {
+      case we:
+        t.slice().forEach((o) => {
+          o(n);
+        });
+        return;
+      case Xt:
+        t.splice(0);
+        return;
+      case Pt:
+        return t.push(n), () => {
+          const o = t.indexOf(n);
+          o > -1 && t.splice(o, 1);
+        };
+    }
+  };
+}
+function Tt(t) {
+  return ye(U(), (e) => z(t, e));
+}
+const wo = { singleton: true };
+function j(t, e = [], n = wo) {
+  const { singleton: o } = n;
+  return {
+    constructor: t,
+    dependencies: e,
+    id: yo(),
+    singleton: o
+  };
+}
+const yo = () => /* @__PURE__ */ Symbol("id");
+function bo(t) {
+  const e = /* @__PURE__ */ new Map(), n = ({ constructor: o, dependencies: r, id: s, singleton: i }) => {
+    if (i && e.has(s))
+      return e.get(s);
+    const l = o(r.map((c) => n(c)));
+    return i && e.set(s, l), l;
+  };
+  return n(t);
+}
+function at(...t) {
+  const e = U(), n = Array.from({ length: t.length });
+  let o = 0;
+  const r = 2 ** t.length - 1;
+  return t.forEach((s, i) => {
+    const l = 2 ** i;
+    Y(s, (c) => {
+      n[i] = c, o |= l, o === r && M(e, n);
+    });
+  }), function(s, i) {
+    switch (s) {
+      case Xt: {
+        Ne(e);
+        return;
+      }
+      case Pt:
+        return o === r && i(n), Y(e, i);
+    }
+  };
+}
+function W(t, e = Wn) {
+  return x(t, nt(e));
+}
+function Fe(...t) {
+  return function(e, n) {
+    switch (e) {
+      case Xt:
+        return;
+      case Pt:
+        return xo(...t.map((o) => Y(o, n)));
+    }
+  };
+}
+const ft = {
+  /** Detailed debugging information including item measurements */
+  DEBUG: 0,
+  /** General informational messages */
+  INFO: 1,
+  /** Warning messages for potential issues */
+  WARN: 2,
+  /** Error messages for failures (default level) */
+  ERROR: 3
+}, Ro = {
+  [ft.DEBUG]: "debug",
+  [ft.ERROR]: "error",
+  [ft.INFO]: "log",
+  [ft.WARN]: "warn"
+}, Ho = () => typeof globalThis > "u" ? window : globalThis, Gt = j(
+  () => {
+    const t = T(ft.ERROR);
+    return {
+      log: T((n, o, r = ft.INFO) => {
+        const s = Ho().VIRTUOSO_LOG_LEVEL ?? it(t);
+        r >= s && console[Ro[r]](
+          "%creact-virtuoso: %c%s %o",
+          "color: #0253b3; font-weight: bold",
+          "color: initial",
+          n,
+          o
+        );
+      }),
+      logLevel: t
+    };
+  },
+  [],
+  { singleton: true }
+);
+function Eo(t) {
+  return "self" in t ? t.document.documentElement : t;
+}
+function Pn(t) {
+  const e = Eo(t);
+  return e.ownerDocument.defaultView.getComputedStyle(e).direction === "rtl";
+}
+function _t(t, e) {
+  return Pn(t) ? -e : e;
+}
+function hn(t, e) {
+  return Pn(t) ? -e : e;
+}
+function kt(t, e, n) {
+  return De(t, e, n).callbackRef;
+}
+function De(t, e, n) {
+  const o = E.useRef(null);
+  let r = (i) => {
+  };
+  const s = E.useMemo(() => typeof ResizeObserver < "u" ? new ResizeObserver((i) => {
+    const l = () => {
+      const c = i[0].target;
+      c.offsetParent !== null && t(c);
+    };
+    n ? l() : requestAnimationFrame(l);
+  }) : null, [t, n]);
+  return r = (i) => {
+    i && e ? (s?.observe(i), o.current = i) : (o.current && s?.unobserve(o.current), o.current = null);
+  }, { callbackRef: r, ref: o };
+}
+function Gn(t, e, n, o, r, s, i, l, c) {
+  const d = E.useCallback(
+    (m) => {
+      const v = Bo(m.children, e, l ? "offsetWidth" : "offsetHeight", r);
+      let p = m.parentElement;
+      for (; p.dataset.virtuosoScroller === void 0; )
+        p = p.parentElement;
+      const I = p.lastElementChild?.dataset.viewportType === "window";
+      let w;
+      I && (w = p.ownerDocument.defaultView);
+      const R = i ? l ? i.scrollWidth : i.scrollHeight : I ? l ? w.document.documentElement.scrollWidth : w.document.documentElement.scrollHeight : l ? p.scrollWidth : p.scrollHeight, h = i ? l ? i.offsetWidth : i.offsetHeight : I ? l ? w.innerWidth : w.innerHeight : l ? p.offsetWidth : p.offsetHeight, f = i ? l ? _t(i, i.scrollLeft) : i.scrollTop : I ? l ? _t(w, w.scrollX || w.document.documentElement.scrollLeft) : w.scrollY || w.document.documentElement.scrollTop : l ? _t(p, p.scrollLeft) : p.scrollTop;
+      o({
+        scrollHeight: R,
+        scrollTop: Math.max(f, 0),
+        viewportHeight: h
+      }), s?.(
+        l ? gn("column-gap", getComputedStyle(m).columnGap, r) : gn("row-gap", getComputedStyle(m).rowGap, r)
+      ), v !== null && t(v);
+    },
+    [t, e, r, s, i, o, l]
+  );
+  return De(d, n, c);
+}
+function Bo(t, e, n, o) {
+  const r = t.length;
+  if (r === 0)
+    return null;
+  const s = [];
+  for (let i = 0; i < r; i++) {
+    const l = t.item(i);
+    if (l.dataset.index === void 0)
+      continue;
+    const c = parseInt(l.dataset.index, 10), d = parseFloat(l.dataset.knownSize), m = e(l, n);
+    if (m === 0 && o("Zero-sized element, this should not happen", { child: l }, ft.ERROR), m === d)
+      continue;
+    const v = s[s.length - 1];
+    s.length === 0 || v.size !== m || v.endIndex !== c - 1 ? s.push({ endIndex: c, size: m, startIndex: c }) : s[s.length - 1].endIndex++;
+  }
+  return s;
+}
+function gn(t, e, n) {
+  return e !== "normal" && e?.endsWith("px") !== true && n(`${t} was not resolved to pixel value correctly`, e, ft.WARN), e === "normal" ? 0 : parseInt(e ?? "0", 10);
+}
+function $e(t, e, n) {
+  const o = E.useRef(null), r = E.useCallback(
+    (c) => {
+      if (!c?.offsetParent)
+        return;
+      const d = c.getBoundingClientRect(), m = d.width;
+      let v, p;
+      if (e) {
+        const I = e.getBoundingClientRect(), w = d.top - I.top;
+        p = I.height - Math.max(0, w), v = w + e.scrollTop;
+      } else {
+        const I = i.current.ownerDocument.defaultView;
+        p = I.innerHeight - Math.max(0, d.top), v = d.top + I.scrollY;
+      }
+      o.current = {
+        listHeight: d.height,
+        offsetTop: v,
+        visibleHeight: p,
+        visibleWidth: m
+      }, t(o.current);
+    },
+    // oxlint-disable-next-line exhaustive-deps
+    [t, e]
+  ), { callbackRef: s, ref: i } = De(r, true, n), l = E.useCallback(() => {
+    r(i.current);
+  }, [r, i]);
+  return E.useEffect(() => {
+    if (e) {
+      e.addEventListener("scroll", l);
+      const d = new ResizeObserver(() => {
+        requestAnimationFrame(l);
+      });
+      return d.observe(e), () => {
+        e.removeEventListener("scroll", l), d.unobserve(e);
+      };
+    }
+    const c = i.current?.ownerDocument.defaultView;
+    return c?.addEventListener("scroll", l), c?.addEventListener("resize", l), () => {
+      c?.removeEventListener("scroll", l), c?.removeEventListener("resize", l);
+    };
+  }, [l, e, i]), s;
+}
+const It = j(
+  () => {
+    const t = U(), e = U(), n = T(0), o = U(), r = T(0), s = U(), i = U(), l = T(0), c = T(0), d = T(0), m = T(0), v = U(), p = U(), I = T(false), w = T(false), R = T(false);
+    return z(
+      x(
+        t,
+        B(({ scrollTop: h }) => h)
+      ),
+      e
+    ), z(
+      x(
+        t,
+        B(({ scrollHeight: h }) => h)
+      ),
+      i
+    ), z(e, r), {
+      deviation: n,
+      fixedFooterHeight: d,
+      fixedHeaderHeight: c,
+      footerHeight: m,
+      headerHeight: l,
+      horizontalDirection: w,
+      scrollBy: p,
+      // input
+      scrollContainerState: t,
+      scrollHeight: i,
+      scrollingInProgress: I,
+      // signals
+      scrollTo: v,
+      scrollTop: e,
+      skipAnimationFrameInResizeObserver: R,
+      smoothScrollTargetReached: o,
+      // state
+      statefulScrollTop: r,
+      viewportHeight: s
+    };
+  },
+  [],
+  { singleton: true }
+), se = { lvl: 0 };
+function An(t, e) {
+  const n = t.length;
+  if (n === 0)
+    return [];
+  let { index: o, value: r } = e(t[0]);
+  const s = [];
+  for (let i = 1; i < n; i++) {
+    const { index: l, value: c } = e(t[i]);
+    s.push({ end: l - 1, start: o, value: r }), o = l, r = c;
+  }
+  return s.push({ end: 1 / 0, start: o, value: r }), s;
+}
+function J(t) {
+  return t === se;
+}
+function ie(t, e) {
+  if (!J(t))
+    return e === t.k ? t.v : e < t.k ? ie(t.l, e) : ie(t.r, e);
+}
+function Rt(t, e, n = "k") {
+  if (J(t))
+    return [-1 / 0, void 0];
+  if (Number(t[n]) === e)
+    return [t.k, t.v];
+  if (Number(t[n]) < e) {
+    const o = Rt(t.r, e, n);
+    return o[0] === -1 / 0 ? [t.k, t.v] : o;
+  }
+  return Rt(t.l, e, n);
+}
+function vt(t, e, n) {
+  return J(t) ? Nn(e, n, 1) : e === t.k ? dt(t, { k: e, v: n }) : e < t.k ? In(dt(t, { l: vt(t.l, e, n) })) : In(dt(t, { r: vt(t.r, e, n) }));
+}
+function Yt() {
+  return se;
+}
+function Zt(t, e, n) {
+  if (J(t))
+    return [];
+  const o = Rt(t, e)[0];
+  return Oo(We(t, o, n));
+}
+function Ve(t, e) {
+  if (J(t))
+    return se;
+  const { k: n, l: o, r } = t;
+  if (e === n) {
+    if (J(o))
+      return r;
+    if (J(r))
+      return o;
+    const [s, i] = _n(o);
+    return xe(dt(t, { k: s, l: Mn(o), v: i }));
+  }
+  return e < n ? xe(dt(t, { l: Ve(o, e) })) : xe(dt(t, { r: Ve(r, e) }));
+}
+function Nt(t) {
+  return J(t) ? [] : [...Nt(t.l), { k: t.k, v: t.v }, ...Nt(t.r)];
+}
+function We(t, e, n) {
+  if (J(t))
+    return [];
+  const { k: o, l: r, r: s, v: i } = t;
+  let l = [];
+  return o > e && (l = l.concat(We(r, e, n))), o >= e && o <= n && l.push({ k: o, v: i }), o <= n && (l = l.concat(We(s, e, n))), l;
+}
+function xe(t) {
+  const { l: e, lvl: n, r: o } = t;
+  if (o.lvl >= n - 1 && e.lvl >= n - 1)
+    return t;
+  if (n > o.lvl + 1) {
+    if (Be(e))
+      return Dn(dt(t, { lvl: n - 1 }));
+    if (!J(e) && !J(e.r))
+      return dt(e.r, {
+        l: dt(e, { r: e.r.l }),
+        lvl: n,
+        r: dt(t, {
+          l: e.r.r,
+          lvl: n - 1
+        })
+      });
+    throw new Error("Unexpected empty nodes");
+  }
+  if (Be(t))
+    return Pe(dt(t, { lvl: n - 1 }));
+  if (!J(o) && !J(o.l)) {
+    const r = o.l, s = Be(r) ? o.lvl - 1 : o.lvl;
+    return dt(r, {
+      l: dt(t, {
+        lvl: n - 1,
+        r: r.l
+      }),
+      lvl: r.lvl + 1,
+      r: Pe(dt(o, { l: r.r, lvl: s }))
+    });
+  }
+  throw new Error("Unexpected empty nodes");
+}
+function dt(t, e) {
+  return Nn(
+    e.k === void 0 ? t.k : e.k,
+    e.v === void 0 ? t.v : e.v,
+    e.lvl === void 0 ? t.lvl : e.lvl,
+    e.l === void 0 ? t.l : e.l,
+    e.r === void 0 ? t.r : e.r
+  );
+}
+function Mn(t) {
+  return J(t.r) ? t.l : xe(dt(t, { r: Mn(t.r) }));
+}
+function Be(t) {
+  return J(t) || t.lvl > t.r.lvl;
+}
+function _n(t) {
+  return J(t.r) ? [t.k, t.v] : _n(t.r);
+}
+function Nn(t, e, n, o = se, r = se) {
+  return { k: t, l: o, lvl: n, r, v: e };
+}
+function In(t) {
+  return Pe(Dn(t));
+}
+function Dn(t) {
+  const { l: e } = t;
+  return !J(e) && e.lvl === t.lvl ? dt(e, { r: dt(t, { l: e.r }) }) : t;
+}
+function Pe(t) {
+  const { lvl: e, r: n } = t;
+  return !J(n) && !J(n.r) && n.lvl === e && n.r.lvl === e ? dt(n, { l: dt(t, { r: n.l }), lvl: e + 1 }) : t;
+}
+function Oo(t) {
+  return An(t, ({ k: e, v: n }) => ({ index: e, value: n }));
+}
+function $n(t, e) {
+  return !!(t && t.startIndex === e.startIndex && t.endIndex === e.endIndex);
+}
+function le(t, e) {
+  return !!(t && t[0] === e[0] && t[1] === e[1]);
+}
+const Ue = j(
+  () => ({ recalcInProgress: T(false) }),
+  [],
+  { singleton: true }
+);
+function Un(t, e, n) {
+  return t[Te(t, e, n)];
+}
+function Te(t, e, n, o = 0) {
+  let r = t.length - 1;
+  for (; o <= r; ) {
+    const s = Math.floor((o + r) / 2), i = t[s], l = n(i, e);
+    if (l === 0)
+      return s;
+    if (l === -1) {
+      if (r - o < 2)
+        return s - 1;
+      r = s - 1;
+    } else {
+      if (r === o)
+        return s;
+      o = s + 1;
+    }
+  }
+  throw new Error(`Failed binary finding record in array - ${t.join(",")}, searched for ${e}`);
+}
+function ko(t, e, n, o) {
+  const r = Te(t, e, o), s = Te(t, n, o, r);
+  return t.slice(r, s + 1);
+}
+function Ht(t, e) {
+  return Math.round(t.getBoundingClientRect()[e]);
+}
+function be(t) {
+  return !J(t.groupOffsetTree);
+}
+function Ke({ index: t }, e) {
+  return e === t ? 0 : e < t ? -1 : 1;
+}
+function Lo() {
+  return {
+    groupIndices: [],
+    groupOffsetTree: Yt(),
+    lastIndex: 0,
+    lastOffset: 0,
+    lastSize: 0,
+    offsetTree: [],
+    sizeTree: Yt()
+  };
+}
+function zo(t, e) {
+  let n = J(t) ? 0 : 1 / 0;
+  for (const o of e) {
+    const { endIndex: r, size: s, startIndex: i } = o;
+    if (n = Math.min(n, i), J(t)) {
+      t = vt(t, 0, s);
+      continue;
+    }
+    const l = Zt(t, i - 1, r + 1);
+    if (l.some(Mo(o)))
+      continue;
+    let c = false, d = false;
+    for (const { end: m, start: v, value: p } of l)
+      c ? (r >= v || s === p) && (t = Ve(t, v)) : (d = p !== s, c = true), m > r && r >= v && p !== s && (t = vt(t, r + 1, p));
+    d && (t = vt(t, i, s));
+  }
+  return [t, n];
+}
+function Fo(t) {
+  return t.groupIndex !== void 0;
+}
+function Vo({ offset: t }, e) {
+  return e === t ? 0 : e < t ? -1 : 1;
+}
+function ce(t, e, n) {
+  if (e.length === 0)
+    return 0;
+  const { index: o, offset: r, size: s } = Un(e, t, Ke), i = t - o, l = s * i + (i - 1) * n + r;
+  return l > 0 ? l + n : l;
+}
+function Kn(t, e) {
+  if (!be(e))
+    return t;
+  let n = 0;
+  for (; e.groupIndices[n] <= t + n; )
+    n++;
+  return t + n;
+}
+function jn(t, e, n) {
+  if (Fo(t))
+    return e.groupIndices[t.groupIndex] + 1;
+  const o = t.index === "LAST" ? n : t.index;
+  let r = Kn(o, e);
+  return r = Math.max(0, Math.min(n, r)), r;
+}
+function Wo(t, e, n, o = 0) {
+  return o > 0 && (e = Math.max(e, Un(t, o, Ke).offset)), An(ko(t, e, n, Vo), Ao);
+}
+function Po(t, [e, n, o, r]) {
+  e.length > 0 && o("received item sizes", e, ft.DEBUG);
+  const s = t.sizeTree;
+  let i = s, l = 0;
+  if (n.length > 0 && J(s) && e.length === 2) {
+    const p = e[0].size, I = e[1].size;
+    i = n.reduce((w, R) => vt(vt(w, R, p), R + 1, I), i);
+  } else
+    [i, l] = zo(i, e);
+  if (i === s)
+    return t;
+  const { lastIndex: c, lastOffset: d, lastSize: m, offsetTree: v } = Ge(t.offsetTree, l, i, r);
+  return {
+    groupIndices: n,
+    groupOffsetTree: n.reduce((p, I) => vt(p, I, ce(I, v, r)), Yt()),
+    lastIndex: c,
+    lastOffset: d,
+    lastSize: m,
+    offsetTree: v,
+    sizeTree: i
+  };
+}
+function Go(t) {
+  return Nt(t).map(({ k: e, v: n }, o, r) => {
+    const s = r[o + 1];
+    return { endIndex: s === void 0 ? 1 / 0 : s.k - 1, size: n, startIndex: e };
+  });
+}
+function Sn(t, e) {
+  let n = 0, o = 0;
+  for (; n < t; )
+    n += e[o + 1] - e[o] - 1, o++;
+  return o - (n === t ? 0 : 1);
+}
+function Ge(t, e, n, o) {
+  let r = t, s = 0, i = 0, l = 0, c = 0;
+  if (e === 0)
+    r = [];
+  else {
+    c = Te(r, e - 1, Ke), l = r[c].offset;
+    const m = Rt(n, e - 1);
+    s = m[0], i = m[1], r.length && r[c].size === Rt(n, e)[1] && (c -= 1), r = r.slice(0, c + 1);
+  }
+  for (const { start: d, value: m } of Zt(n, e, 1 / 0)) {
+    const v = d - s, p = v * i + l + v * o;
+    r.push({
+      index: d,
+      offset: p,
+      size: m
+    }), s = d, l = p, i = m;
+  }
+  return {
+    lastIndex: s,
+    lastOffset: l,
+    lastSize: i,
+    offsetTree: r
+  };
+}
+function Ao(t) {
+  return { index: t.index, value: t };
+}
+function Mo(t) {
+  const { endIndex: e, size: n, startIndex: o } = t;
+  return (r) => r.start === o && (r.end === e || r.end === 1 / 0) && r.value === n;
+}
+const _o = {
+  offsetHeight: "height",
+  offsetWidth: "width"
+}, Lt = j(
+  ([{ log: t }, { recalcInProgress: e }]) => {
+    const n = U(), o = U(), r = ht(o, 0), s = U(), i = U(), l = T(0), c = T([]), d = T(void 0), m = T(void 0), v = T(void 0), p = T(void 0), I = T((u, g) => Ht(u, _o[g])), w = T(void 0), R = T(0), h = Lo(), f = ht(
+      x(n, $(c, t, R), Ot(Po, h), nt()),
+      h
+    ), a = ht(
+      x(
+        c,
+        nt(),
+        Ot((u, g) => ({ current: g, prev: u.current }), {
+          current: [],
+          prev: []
+        }),
+        B(({ prev: u }) => u)
+      ),
+      []
+    );
+    z(
+      x(
+        c,
+        P((u) => u.length > 0),
+        $(f, R),
+        B(([u, g, C]) => {
+          const L = u.reduce((O, V, N) => vt(O, V, ce(V, g.offsetTree, C) || N), Yt());
+          return {
+            ...g,
+            groupIndices: u,
+            groupOffsetTree: L
+          };
+        })
+      ),
+      f
+    ), z(
+      x(
+        o,
+        $(f),
+        P(([u, { lastIndex: g }]) => u < g),
+        B(([u, { lastIndex: g, lastSize: C }]) => [
+          {
+            endIndex: g,
+            size: C,
+            startIndex: u
+          }
+        ])
+      ),
+      n
+    ), z(d, m);
+    const S = ht(
+      x(
+        d,
+        B((u) => u === void 0)
+      ),
+      true
+    );
+    z(
+      x(
+        m,
+        P((u) => u !== void 0 && J(it(f).sizeTree)),
+        B((u) => {
+          const g = it(v), C = it(c).length > 0;
+          return g !== void 0 && g !== 0 ? C ? [
+            { endIndex: 0, size: g, startIndex: 0 },
+            { endIndex: 1, size: u, startIndex: 1 }
+          ] : [] : [{ endIndex: 0, size: u, startIndex: 0 }];
+        })
+      ),
+      n
+    ), z(
+      x(
+        p,
+        P((u) => u !== void 0 && u.length > 0 && J(it(f).sizeTree)),
+        B((u) => {
+          const g = [];
+          let C = u[0], L = 0;
+          for (let O = 1; O < u.length; O++) {
+            const V = u[O];
+            V !== C && (g.push({
+              endIndex: O - 1,
+              size: C,
+              startIndex: L
+            }), C = V, L = O);
+          }
+          return g.push({
+            endIndex: u.length - 1,
+            size: C,
+            startIndex: L
+          }), g;
+        })
+      ),
+      n
+    ), z(
+      x(
+        c,
+        $(v, m),
+        P(([, u, g]) => u !== void 0 && g !== void 0),
+        B(([u, g, C]) => {
+          const L = [];
+          for (let O = 0; O < u.length; O++) {
+            const V = u[O], N = u[O + 1];
+            L.push({
+              startIndex: V,
+              endIndex: V,
+              size: g
+            }), N !== void 0 && L.push({
+              startIndex: V + 1,
+              endIndex: N - 1,
+              size: C
+            });
+          }
+          return L;
+        })
+      ),
+      n
+    );
+    const H = Tt(
+      x(
+        n,
+        $(f),
+        Ot(
+          ({ sizes: u }, [g, C]) => ({
+            changed: C !== u,
+            sizes: C
+          }),
+          { changed: false, sizes: h }
+        ),
+        B((u) => u.changed)
+      )
+    );
+    Y(
+      x(
+        l,
+        Ot(
+          (u, g) => ({ diff: u.prev - g, prev: g }),
+          { diff: 0, prev: 0 }
+        ),
+        B((u) => u.diff)
+      ),
+      (u) => {
+        const { groupIndices: g } = it(f);
+        if (u > 0)
+          M(e, true), M(s, u + Sn(u, g));
+        else if (u < 0) {
+          const C = it(a);
+          C.length > 0 && (u -= Sn(-u, C)), M(i, u);
+        }
+      }
+    ), Y(x(l, $(t)), ([u, g]) => {
+      u < 0 && g(
+        "`firstItemIndex` prop should not be set to less than zero. If you don't know the total count, just use a very high value",
+        { firstItemIndex: l },
+        ft.ERROR
+      );
+    });
+    const y = Tt(s);
+    z(
+      x(
+        s,
+        $(f),
+        B(([u, g]) => {
+          const C = g.groupIndices.length > 0, L = [], O = g.lastSize;
+          if (C) {
+            const V = ie(g.sizeTree, 0);
+            let N = 0, Z = 0;
+            for (; N < u; ) {
+              const q = g.groupIndices[Z], Q = g.groupIndices.length === Z + 1 ? 1 / 0 : g.groupIndices[Z + 1] - q - 1;
+              L.push({
+                endIndex: q,
+                size: V,
+                startIndex: q
+              }), L.push({
+                endIndex: q + 1 + Q - 1,
+                size: O,
+                startIndex: q + 1
+              }), Z++, N += Q + 1;
+            }
+            const F = Nt(g.sizeTree);
+            return N !== u && F.shift(), F.reduce(
+              (q, { k: Q, v: gt }) => {
+                let lt = q.ranges;
+                return q.prevSize !== 0 && (lt = [
+                  ...q.ranges,
+                  {
+                    endIndex: Q + u - 1,
+                    size: q.prevSize,
+                    startIndex: q.prevIndex
+                  }
+                ]), {
+                  prevIndex: Q + u,
+                  prevSize: gt,
+                  ranges: lt
+                };
+              },
+              {
+                prevIndex: u,
+                prevSize: 0,
+                ranges: L
+              }
+            ).ranges;
+          }
+          return Nt(g.sizeTree).reduce(
+            (V, { k: N, v: Z }) => ({
+              prevIndex: N + u,
+              prevSize: Z,
+              ranges: [...V.ranges, { endIndex: N + u - 1, size: V.prevSize, startIndex: V.prevIndex }]
+            }),
+            {
+              prevIndex: 0,
+              prevSize: O,
+              ranges: []
+            }
+          ).ranges;
+        })
+      ),
+      n
+    );
+    const k = Tt(
+      x(
+        i,
+        $(f, R),
+        B(([u, { offsetTree: g }, C]) => {
+          const L = -u;
+          return ce(L, g, C);
+        })
+      )
+    );
+    return z(
+      x(
+        i,
+        $(f, R),
+        B(([u, g, C]) => {
+          if (g.groupIndices.length > 0) {
+            if (J(g.sizeTree))
+              return g;
+            let V = Yt();
+            const N = it(a);
+            let Z = 0, F = 0, mt = 0;
+            for (; Z < -u; ) {
+              mt = N[F];
+              const Q = N[F + 1] - mt - 1;
+              F++, Z += Q + 1;
+            }
+            if (V = Nt(g.sizeTree).reduce((Q, { k: gt, v: lt }) => vt(Q, Math.max(0, gt + u), lt), V), Z !== -u) {
+              const Q = ie(g.sizeTree, mt);
+              V = vt(V, 0, Q);
+              const gt = Rt(g.sizeTree, -u + 1)[1];
+              V = vt(V, 1, gt);
+            }
+            return {
+              ...g,
+              sizeTree: V,
+              ...Ge(g.offsetTree, 0, V, C)
+            };
+          }
+          const O = Nt(g.sizeTree).reduce((V, { k: N, v: Z }) => vt(V, Math.max(0, N + u), Z), Yt());
+          return {
+            ...g,
+            sizeTree: O,
+            ...Ge(g.offsetTree, 0, O, C)
+          };
+        })
+      ),
+      f
+    ), {
+      beforeUnshiftWith: y,
+      // input
+      data: w,
+      defaultItemSize: m,
+      firstItemIndex: l,
+      fixedItemSize: d,
+      fixedGroupSize: v,
+      gap: R,
+      groupIndices: c,
+      heightEstimates: p,
+      itemSize: I,
+      listRefresh: H,
+      shiftWith: i,
+      shiftWithOffset: k,
+      sizeRanges: n,
+      // output
+      sizes: f,
+      statefulTotalCount: r,
+      totalCount: o,
+      trackItemSizes: S,
+      unshiftWith: s
+    };
+  },
+  rt(Gt, Ue),
+  { singleton: true }
+);
+function No(t) {
+  return t.reduce(
+    (e, n) => (e.groupIndices.push(e.totalCount), e.totalCount += n + 1, e),
+    {
+      groupIndices: [],
+      totalCount: 0
+    }
+  );
+}
+const qn = j(
+  ([{ groupIndices: t, sizes: e, totalCount: n }, { headerHeight: o, scrollTop: r }]) => {
+    const s = U(), i = U(), l = Tt(x(s, B(No)));
+    return z(
+      x(
+        l,
+        B((c) => c.totalCount)
+      ),
+      n
+    ), z(
+      x(
+        l,
+        B((c) => c.groupIndices)
+      ),
+      t
+    ), z(
+      x(
+        at(r, e, o),
+        P(([c, d]) => be(d)),
+        B(([c, d, m]) => Rt(d.groupOffsetTree, Math.max(c - m, 0), "v")[0]),
+        nt(),
+        B((c) => [c])
+      ),
+      i
+    ), { groupCounts: s, topItemsIndexes: i };
+  },
+  rt(Lt, It)
+), At = j(
+  ([{ log: t }]) => {
+    const e = T(false), n = Tt(
+      x(
+        e,
+        P((o) => o),
+        nt()
+      )
+    );
+    return Y(e, (o) => {
+      o && it(t)("props updated", {}, ft.DEBUG);
+    }), { didMount: n, propsReady: e };
+  },
+  rt(Gt),
+  { singleton: true }
+), Do = typeof document < "u" && "scrollBehavior" in document.documentElement.style;
+function Yn(t) {
+  const e = typeof t == "number" ? { index: t } : { ...t };
+  return e.align || (e.align = "start"), (!e.behavior || !Do) && (e.behavior = "auto"), e.offset === void 0 && (e.offset = 0), e;
+}
+const fe = j(
+  ([
+    { gap: t, listRefresh: e, sizes: n, totalCount: o },
+    {
+      fixedFooterHeight: r,
+      fixedHeaderHeight: s,
+      footerHeight: i,
+      headerHeight: l,
+      scrollingInProgress: c,
+      scrollTo: d,
+      smoothScrollTargetReached: m,
+      viewportHeight: v
+    },
+    { log: p }
+  ]) => {
+    const I = U(), w = U(), R = T(0);
+    let h = null, f = null, a = null;
+    function S() {
+      h !== null && (h(), h = null), a !== null && (a(), a = null), f && (clearTimeout(f), f = null), M(c, false);
+    }
+    return z(
+      x(
+        I,
+        $(n, v, o, R, l, i, p),
+        $(t, s, r),
+        B(
+          ([
+            [H, y, k, u, g, C, L, O],
+            V,
+            N,
+            Z
+          ]) => {
+            const F = Yn(H), { align: mt, behavior: q, offset: Q } = F, gt = u - 1, lt = jn(F, y, gt);
+            let St = ce(lt, y.offsetTree, V) + C;
+            mt === "end" ? (St += N + Rt(y.sizeTree, lt)[1] - k + Z, lt === gt && (St += L)) : mt === "center" ? St += (N + Rt(y.sizeTree, lt)[1] - k + Z) / 2 : St -= g, Q !== void 0 && Q !== 0 && (St += Q);
+            const Ft = (pt) => {
+              S(), pt ? (O("retrying to scroll to", { location: H }, ft.DEBUG), M(I, H)) : (M(w, true), O("list did not change, scroll successful", {}, ft.DEBUG));
+            };
+            if (S(), q === "smooth") {
+              let pt = false;
+              a = Y(e, (jt) => {
+                pt = pt || jt;
+              }), h = yt(m, () => {
+                Ft(pt);
+              });
+            } else
+              h = yt(x(e, $o(150)), Ft);
+            return f = setTimeout(() => {
+              S();
+            }, 1200), M(c, true), O("scrolling from index to", { behavior: q, index: lt, top: St }, ft.DEBUG), { behavior: q, top: St };
+          }
+        )
+      ),
+      d
+    ), {
+      scrollTargetReached: w,
+      scrollToIndex: I,
+      topListHeight: R
+    };
+  },
+  rt(Lt, It, Gt),
+  { singleton: true }
+);
+function $o(t) {
+  return (e) => {
+    const n = setTimeout(() => {
+      e(false);
+    }, t);
+    return (o) => {
+      o && (e(true), clearTimeout(n));
+    };
+  };
+}
+function je(t, e) {
+  t === 0 ? e() : requestAnimationFrame(() => {
+    je(t - 1, e);
+  });
+}
+function qe(t, e) {
+  if (t === void 0)
+    return 0;
+  const n = e - 1, o = typeof t == "number" ? t : t.index === "LAST" ? n : t.index;
+  return Math.max(0, Math.min(o, n));
+}
+function Ae(t) {
+  return t === void 0 ? true : typeof t == "number" ? t === 0 : t.index === 0 && (t.align === void 0 || t.align === "start") && (t.offset === void 0 || t.offset === 0);
+}
+const me = j(
+  ([{ defaultItemSize: t, listRefresh: e, sizes: n }, { scrollTop: o }, { scrollTargetReached: r, scrollToIndex: s }, { didMount: i }]) => {
+    const l = T(true), c = T(0), d = T(true);
+    return z(
+      x(
+        i,
+        $(c),
+        P(([m, v]) => !Ae(v)),
+        Bt(false)
+      ),
+      l
+    ), z(
+      x(
+        i,
+        $(c),
+        P(([m, v]) => !Ae(v)),
+        Bt(false)
+      ),
+      d
+    ), Y(
+      x(
+        at(e, i),
+        $(l, n, t, d),
+        P(([[, m], v, { sizeTree: p }, I, w]) => m && (!J(p) || _e(I)) && !v && !w),
+        $(c)
+      ),
+      ([, m]) => {
+        if (m === void 0) {
+          M(l, true), M(d, true);
+          return;
+        }
+        yt(r, () => {
+          M(d, true);
+        }), je(4, () => {
+          yt(o, () => {
+            M(l, true);
+          }), M(s, m);
+        });
+      }
+    ), {
+      initialItemFinalLocationReached: d,
+      initialTopMostItemIndex: c,
+      scrolledToInitialItem: l
+    };
+  },
+  rt(Lt, It, fe, At),
+  { singleton: true }
+);
+function Zn(t, e) {
+  return Math.abs(t - e) < 1.01;
+}
+const ue = "up", ne = "down", Uo = "none", Ko = {
+  atBottom: false,
+  notAtBottomBecause: "NOT_SHOWING_LAST_ITEM",
+  state: {
+    offsetBottom: 0,
+    scrollHeight: 0,
+    scrollTop: 0,
+    viewportHeight: 0
+  }
+}, jo = 0, pe = j(([{ footerHeight: t, headerHeight: e, scrollBy: n, scrollContainerState: o, scrollTop: r, viewportHeight: s }]) => {
+  const i = T(false), l = T(true), c = U(), d = U(), m = T(4), v = T(jo), p = ht(
+    x(
+      Fe(x(W(r), Ut(1), Bt(true)), x(W(r), Ut(1), Bt(false), pn(100))),
+      nt()
+    ),
+    false
+  ), I = ht(
+    x(Fe(x(n, Bt(true)), x(n, Bt(false), pn(200))), nt()),
+    false
+  );
+  z(
+    x(
+      at(W(r), W(v)),
+      B(([a, S]) => a <= S),
+      nt()
+    ),
+    l
+  ), z(x(l, zt(50)), d);
+  const w = Tt(
+    x(
+      at(o, W(s), W(e), W(t), W(m)),
+      Ot((a, [{ scrollHeight: S, scrollTop: H }, y, k, u, g]) => {
+        const C = H + y - S > -g, L = {
+          scrollHeight: S,
+          scrollTop: H,
+          viewportHeight: y
+        };
+        if (C) {
+          let V, N;
+          return H > a.state.scrollTop ? (V = "SCROLLED_DOWN", N = a.state.scrollTop - H) : (V = "SIZE_DECREASED", N = a.state.scrollTop - H || a.scrollTopDelta), {
+            atBottom: true,
+            atBottomBecause: V,
+            scrollTopDelta: N,
+            state: L
+          };
+        }
+        let O;
+        return L.scrollHeight > a.state.scrollHeight ? O = "SIZE_INCREASED" : y < a.state.viewportHeight ? O = "VIEWPORT_HEIGHT_DECREASING" : H < a.state.scrollTop ? O = "SCROLLING_UPWARDS" : O = "NOT_FULLY_SCROLLED_TO_LAST_ITEM_BOTTOM", {
+          atBottom: false,
+          notAtBottomBecause: O,
+          state: L
+        };
+      }, Ko),
+      nt((a, S) => a !== void 0 && a.atBottom === S.atBottom)
+    )
+  ), R = ht(
+    x(
+      o,
+      Ot(
+        (a, { scrollHeight: S, scrollTop: H, viewportHeight: y }) => {
+          if (!Zn(a.scrollHeight, S)) {
+            const k = S - (H + y) < 1;
+            return a.scrollTop !== H && k ? {
+              changed: true,
+              jump: a.scrollTop - H,
+              scrollHeight: S,
+              scrollTop: H
+            } : {
+              changed: true,
+              jump: 0,
+              scrollHeight: S,
+              scrollTop: H
+            };
+          }
+          return {
+            changed: false,
+            jump: 0,
+            scrollHeight: S,
+            scrollTop: H
+          };
+        },
+        { changed: false, jump: 0, scrollHeight: 0, scrollTop: 0 }
+      ),
+      P((a) => a.changed),
+      B((a) => a.jump)
+    ),
+    0
+  );
+  z(
+    x(
+      w,
+      B((a) => a.atBottom)
+    ),
+    i
+  ), z(x(i, zt(50)), c);
+  const h = T(ne);
+  z(
+    x(
+      o,
+      B(({ scrollTop: a }) => a),
+      nt(),
+      Ot(
+        (a, S) => it(I) ? { direction: a.direction, prevScrollTop: S } : { direction: S < a.prevScrollTop ? ue : ne, prevScrollTop: S },
+        { direction: ne, prevScrollTop: 0 }
+      ),
+      B((a) => a.direction)
+    ),
+    h
+  ), z(x(o, zt(50), Bt(Uo)), h);
+  const f = T(0);
+  return z(
+    x(
+      p,
+      P((a) => !a),
+      Bt(0)
+    ),
+    f
+  ), z(
+    x(
+      r,
+      zt(100),
+      $(p),
+      P(([a, S]) => S),
+      Ot(([a, S], [H]) => [S, H], [0, 0]),
+      B(([a, S]) => S - a)
+    ),
+    f
+  ), {
+    atBottomState: w,
+    atBottomStateChange: c,
+    atBottomThreshold: m,
+    atTopStateChange: d,
+    atTopThreshold: v,
+    isAtBottom: i,
+    isAtTop: l,
+    isScrolling: p,
+    lastJumpDueToItemResize: R,
+    scrollDirection: h,
+    scrollVelocity: f
+  };
+}, rt(It)), ae = "top", de = "bottom", xn = "none";
+function vn(t, e, n) {
+  return typeof t == "number" ? n === ue && e === ae || n === ne && e === de ? t : 0 : n === ue ? e === ae ? t.main : t.reverse : e === de ? t.main : t.reverse;
+}
+function Tn(t, e) {
+  return typeof t == "number" ? t : t[e] ?? 0;
+}
+const Ye = j(
+  ([{ deviation: t, fixedHeaderHeight: e, headerHeight: n, scrollTop: o, viewportHeight: r }]) => {
+    const s = U(), i = T(0), l = T(0), c = T(0), d = ht(
+      x(
+        at(
+          W(o),
+          W(r),
+          W(n),
+          W(s, le),
+          W(c),
+          W(i),
+          W(e),
+          W(t),
+          W(l)
+        ),
+        B(
+          ([
+            m,
+            v,
+            p,
+            [I, w],
+            R,
+            h,
+            f,
+            a,
+            S
+          ]) => {
+            const H = m - a, y = h + f, k = Math.max(p - H, 0);
+            let u = xn;
+            const g = Tn(S, ae), C = Tn(S, de);
+            return I -= a, I += p + f, w += p + f, w -= a, I > m + y - g && (u = ue), w < m - k + v + C && (u = ne), u !== xn ? [
+              Math.max(H - p - vn(R, ae, u) - g, 0),
+              H - k - f + v + vn(R, de, u) + C
+            ] : null;
+          }
+        ),
+        P((m) => m !== null),
+        nt(le)
+      ),
+      [0, 0]
+    );
+    return {
+      increaseViewportBy: l,
+      // input
+      listBoundary: s,
+      overscan: c,
+      topListHeight: i,
+      // output
+      visibleRange: d
+    };
+  },
+  rt(It),
+  { singleton: true }
+);
+function qo(t, e, n) {
+  if (be(e)) {
+    const o = Kn(t, e);
+    return [
+      { index: Rt(e.groupOffsetTree, o)[0], offset: 0, size: 0 },
+      { data: n?.[0], index: o, offset: 0, size: 0 }
+    ];
+  }
+  return [{ data: n?.[0], index: t, offset: 0, size: 0 }];
+}
+const Oe = {
+  bottom: 0,
+  firstItemIndex: 0,
+  items: [],
+  offsetBottom: 0,
+  offsetTop: 0,
+  top: 0,
+  topItems: [],
+  topListHeight: 0,
+  totalCount: 0
+};
+function ve(t, e, n, o, r, s) {
+  const { lastIndex: i, lastOffset: l, lastSize: c } = r;
+  let d = 0, m = 0;
+  if (t.length > 0) {
+    d = t[0].offset;
+    const R = t[t.length - 1];
+    m = R.offset + R.size;
+  }
+  const v = n - i, p = l + v * c + (v - 1) * o, I = d, w = p - m;
+  return {
+    bottom: m,
+    firstItemIndex: s,
+    items: Cn(t, r, s),
+    offsetBottom: w,
+    offsetTop: d,
+    top: I,
+    topItems: Cn(e, r, s),
+    topListHeight: e.reduce((R, h) => h.size + R, 0),
+    totalCount: n
+  };
+}
+function Xn(t, e, n, o, r, s) {
+  let i = 0;
+  if (n.groupIndices.length > 0)
+    for (const m of n.groupIndices) {
+      if (m - i >= t)
+        break;
+      i++;
+    }
+  const l = t + i, c = qe(e, l), d = Array.from({ length: l }).map((m, v) => ({
+    data: s[v + c],
+    index: v + c,
+    offset: 0,
+    size: 0
+  }));
+  return ve(d, [], l, r, n, o);
+}
+function Cn(t, e, n) {
+  if (t.length === 0)
+    return [];
+  if (!be(e))
+    return t.map((d) => ({ ...d, index: d.index + n, originalIndex: d.index }));
+  const o = t[0].index, r = t[t.length - 1].index, s = [], i = Zt(e.groupOffsetTree, o, r);
+  let l, c = 0;
+  for (const d of t) {
+    (!l || l.end < d.index) && (l = i.shift(), c = e.groupIndices.indexOf(l.start));
+    let m;
+    d.index === l.start ? m = {
+      index: c,
+      type: "group"
+    } : m = {
+      groupIndex: c,
+      index: d.index - (c + 1) + n
+    }, s.push({
+      ...m,
+      data: d.data,
+      offset: d.offset,
+      originalIndex: d.index,
+      size: d.size
+    });
+  }
+  return s;
+}
+function wn(t, e) {
+  return t === void 0 ? 0 : typeof t == "number" ? t : t[e] ?? 0;
+}
+const Kt = j(
+  ([
+    { data: t, firstItemIndex: e, gap: n, sizes: o, totalCount: r },
+    s,
+    { listBoundary: i, topListHeight: l, visibleRange: c },
+    { initialTopMostItemIndex: d, scrolledToInitialItem: m },
+    { topListHeight: v },
+    p,
+    { didMount: I },
+    { recalcInProgress: w }
+  ]) => {
+    const R = T([]), h = T(0), f = U(), a = T(0);
+    z(s.topItemsIndexes, R);
+    const S = ht(
+      x(
+        at(
+          I,
+          w,
+          W(c, le),
+          W(r),
+          W(o),
+          W(d),
+          m,
+          W(R),
+          W(e),
+          W(n),
+          W(a),
+          t
+        ),
+        P(([u, g, , C, , , , , , , , L]) => {
+          const O = L !== void 0 && L.length !== C;
+          return u && !g && !O;
+        }),
+        B(
+          ([
+            ,
+            ,
+            [u, g],
+            C,
+            L,
+            O,
+            V,
+            N,
+            Z,
+            F,
+            mt,
+            q
+          ]) => {
+            const Q = L, { offsetTree: gt, sizeTree: lt } = Q, St = it(h);
+            if (C === 0)
+              return { ...Oe, totalCount: C };
+            if (u === 0 && g === 0)
+              return St === 0 ? { ...Oe, totalCount: C } : Xn(St, O, L, Z, F, q || []);
+            if (J(lt))
+              return St > 0 ? null : ve(
+                qo(qe(O, C), Q, q),
+                [],
+                C,
+                F,
+                Q,
+                Z
+              );
+            const Ft = [];
+            if (N.length > 0) {
+              const D = N[0], K = N[N.length - 1];
+              let st = 0;
+              for (const tt of Zt(lt, D, K)) {
+                const X = tt.value, ct = Math.max(tt.start, D), xt = Math.min(tt.end, K);
+                for (let ut = ct; ut <= xt; ut++)
+                  Ft.push({ data: q?.[ut], index: ut, offset: st, size: X }), st += X;
+              }
+            }
+            if (!V)
+              return ve([], Ft, C, F, Q, Z);
+            const pt = N.length > 0 ? N[N.length - 1] + 1 : 0, jt = Wo(gt, u, g, pt);
+            if (jt.length === 0)
+              return null;
+            const Qt = C - 1, Et = ye([], (D) => {
+              for (const K of jt) {
+                const st = K.value;
+                let tt = st.offset, X = K.start;
+                const ct = st.size;
+                if (st.offset < u) {
+                  X += Math.floor((u - st.offset + F) / (ct + F));
+                  const ut = X - K.start;
+                  tt += ut * ct + ut * F;
+                }
+                X < pt && (tt += (pt - X) * ct, X = pt);
+                const xt = Math.min(K.end, Qt);
+                for (let ut = X; ut <= xt && !(tt >= g); ut++)
+                  D.push({ data: q?.[ut], index: ut, offset: tt, size: ct }), tt += ct + F;
+              }
+            }), te = wn(mt, ae), b = wn(mt, de);
+            if (Et.length > 0 && (te > 0 || b > 0)) {
+              const D = Et[0], K = Et[Et.length - 1];
+              if (te > 0 && D.index > pt) {
+                const st = Math.min(te, D.index - pt), tt = [];
+                let X = D.offset;
+                for (let ct = D.index - 1; ct >= D.index - st; ct--) {
+                  const ut = Zt(lt, ct, ct)[0]?.value ?? D.size;
+                  X -= ut + F, tt.unshift({ data: q?.[ct], index: ct, offset: X, size: ut });
+                }
+                Et.unshift(...tt);
+              }
+              if (b > 0 && K.index < Qt) {
+                const st = Math.min(b, Qt - K.index);
+                let tt = K.offset + K.size + F;
+                for (let X = K.index + 1; X <= K.index + st; X++) {
+                  const xt = Zt(lt, X, X)[0]?.value ?? K.size;
+                  Et.push({ data: q?.[X], index: X, offset: tt, size: xt }), tt += xt + F;
+                }
+              }
+            }
+            return ve(Et, Ft, C, F, Q, Z);
+          }
+        ),
+        //@ts-expect-error filter needs to be fixed
+        P((u) => u !== null),
+        nt()
+      ),
+      Oe
+    );
+    z(
+      x(
+        t,
+        P(_e),
+        B((u) => u?.length)
+      ),
+      r
+    ), z(
+      x(
+        S,
+        B((u) => u.topListHeight)
+      ),
+      v
+    ), z(v, l), z(
+      x(
+        S,
+        B((u) => [u.top, u.bottom])
+      ),
+      i
+    ), z(
+      x(
+        S,
+        B((u) => u.items)
+      ),
+      f
+    );
+    const H = Tt(
+      x(
+        S,
+        P(({ items: u }) => u.length > 0),
+        $(r, t),
+        P(([{ items: u }, g]) => u[u.length - 1].originalIndex === g - 1),
+        B(([, u, g]) => [u - 1, g]),
+        nt(le),
+        B(([u]) => u)
+      )
+    ), y = Tt(
+      x(
+        S,
+        zt(200),
+        P(({ items: u, topItems: g }) => u.length > 0 && u[0].originalIndex === g.length),
+        B(({ items: u }) => u[0].index),
+        nt()
+      )
+    ), k = Tt(
+      x(
+        S,
+        P(({ items: u }) => u.length > 0),
+        // oxlint-disable-next-line array-callback-return -- callback always returns after trimming group sentinels
+        B(({ items: u }) => {
+          let g = 0, C = u.length - 1;
+          for (; u[g].type === "group" && g < C; )
+            g++;
+          for (; u[C].type === "group" && C > g; )
+            C--;
+          return {
+            endIndex: u[C].index,
+            startIndex: u[g].index
+          };
+        }),
+        nt($n)
+      )
+    );
+    return {
+      endReached: H,
+      initialItemCount: h,
+      itemsRendered: f,
+      listState: S,
+      minOverscanItemCount: a,
+      rangeChanged: k,
+      startReached: y,
+      topItemsIndexes: R,
+      ...p
+    };
+  },
+  rt(
+    Lt,
+    qn,
+    Ye,
+    me,
+    fe,
+    pe,
+    At,
+    Ue
+  ),
+  { singleton: true }
+), Jn = j(
+  ([{ fixedFooterHeight: t, fixedHeaderHeight: e, footerHeight: n, headerHeight: o }, { listState: r }]) => {
+    const s = U(), i = ht(
+      x(
+        at(n, t, o, e, r),
+        B(([l, c, d, m, v]) => l + c + d + m + v.offsetBottom + v.bottom)
+      ),
+      0
+    );
+    return z(W(i), s), { totalListHeight: i, totalListHeightChanged: s };
+  },
+  rt(It, Kt),
+  { singleton: true }
+), Yo = j(
+  ([{ viewportHeight: t }, { totalListHeight: e }]) => {
+    const n = T(false), o = ht(
+      x(
+        at(n, t, e),
+        P(([r]) => r),
+        B(([, r, s]) => Math.max(0, r - s)),
+        zt(0),
+        nt()
+      ),
+      0
+    );
+    return { alignToBottom: n, paddingTopAddition: o };
+  },
+  rt(It, Jn),
+  { singleton: true }
+), Qn = j(() => ({
+  context: T(null)
+})), Zo = ({
+  itemBottom: t,
+  itemTop: e,
+  locationParams: { align: n, behavior: o, ...r },
+  viewportBottom: s,
+  viewportTop: i
+}) => e < i ? { ...r, align: n ?? "start", ...o === void 0 ? {} : { behavior: o } } : t > s ? { ...r, align: n ?? "end", ...o === void 0 ? {} : { behavior: o } } : null, to = j(
+  ([
+    { gap: t, sizes: e, totalCount: n },
+    { fixedFooterHeight: o, fixedHeaderHeight: r, headerHeight: s, scrollingInProgress: i, scrollTop: l, viewportHeight: c },
+    { scrollToIndex: d }
+  ]) => {
+    const m = U();
+    return z(
+      x(
+        m,
+        $(e, c, n, s, r, o, l),
+        $(t),
+        B(([[v, p, I, w, R, h, f, a], S]) => {
+          const { calculateViewLocation: H = Zo, done: y, ...k } = v, u = jn(v, p, w - 1), g = ce(u, p.offsetTree, S) + R + h, C = g + Rt(p.sizeTree, u)[1], L = a + h, O = a + I - f, V = H({
+            itemBottom: C,
+            itemTop: g,
+            locationParams: k,
+            viewportBottom: O,
+            viewportTop: L
+          });
+          return V === null ? y?.() : y && yt(
+            x(
+              i,
+              P((N) => !N),
+              // skips the initial publish of false, and the cleanup call.
+              // but if scrollingInProgress is true, we skip the initial publish.
+              Ut(it(i) ? 1 : 2)
+            ),
+            y
+          ), V;
+        }),
+        P((v) => v !== null)
+      ),
+      d
+    ), {
+      scrollIntoView: m
+    };
+  },
+  rt(Lt, It, fe, Kt, Gt),
+  { singleton: true }
+);
+function yn(t) {
+  return t === false ? false : t === "smooth" ? "smooth" : "auto";
+}
+const Xo = (t, e) => typeof t == "function" ? yn(t(e)) : e && yn(t), Jo = j(
+  ([
+    { listRefresh: t, totalCount: e, fixedItemSize: n, data: o },
+    { atBottomState: r, isAtBottom: s },
+    { scrollToIndex: i },
+    { scrolledToInitialItem: l },
+    { didMount: c, propsReady: d },
+    { log: m },
+    { scrollingInProgress: v },
+    { context: p },
+    { scrollIntoView: I }
+  ]) => {
+    const w = T(false), R = U();
+    let h = null;
+    function f(y) {
+      M(i, {
+        align: "end",
+        behavior: y,
+        index: "LAST"
+      });
+    }
+    Y(
+      x(
+        at(x(W(e), Ut(1)), c),
+        $(W(w), s, l, v),
+        B(([[y, k], u, g, C, L]) => {
+          let O = k && C, V = "auto";
+          return O && (V = Xo(u, g || L), O = O && V !== false), { followOutputBehavior: V, shouldFollow: O, totalCount: y };
+        }),
+        P(({ shouldFollow: y }) => y)
+      ),
+      ({ followOutputBehavior: y, totalCount: k }) => {
+        h !== null && (h(), h = null), it(n) === void 0 ? h = yt(t, () => {
+          it(m)("following output to ", { totalCount: k }, ft.DEBUG), f(y), h = null;
+        }) : requestAnimationFrame(() => {
+          it(m)("following output to ", { totalCount: k }, ft.DEBUG), f(y);
+        });
+      }
+    );
+    function a(y) {
+      const k = yt(r, (u) => {
+        y && !u.atBottom && u.notAtBottomBecause === "SIZE_INCREASED" && h === null && (it(m)("scrolling to bottom due to increased size", {}, ft.DEBUG), f("auto"));
+      });
+      setTimeout(k, 100);
+    }
+    Y(
+      x(
+        at(W(w), e, d),
+        P(([y, , k]) => y !== false && k),
+        Ot(
+          ({ value: y }, [, k]) => ({ refreshed: y === k, value: k }),
+          { refreshed: false, value: 0 }
+        ),
+        P(({ refreshed: y }) => y),
+        $(w, e)
+      ),
+      ([, y]) => {
+        it(l) && a(y !== false);
+      }
+    ), Y(R, () => {
+      a(it(w) !== false);
+    }), Y(at(W(w), r), ([y, k]) => {
+      y !== false && !k.atBottom && k.notAtBottomBecause === "VIEWPORT_HEIGHT_DECREASING" && f("auto");
+    });
+    const S = T(null), H = U();
+    return z(
+      Fe(
+        x(
+          W(o),
+          B((y) => y?.length ?? 0)
+        ),
+        x(W(e))
+      ),
+      H
+    ), Y(
+      x(
+        at(x(H, Ut(1)), c),
+        $(W(S), l, v, p),
+        B(([[y, k], u, g, C, L]) => k && g && u?.({ context: L, totalCount: y, scrollingInProgress: C })),
+        P((y) => !!y),
+        zt(0)
+      ),
+      (y) => {
+        h !== null && (h(), h = null), it(n) === void 0 ? h = yt(t, () => {
+          it(m)("scrolling into view", {}), M(I, y), h = null;
+        }) : requestAnimationFrame(() => {
+          it(m)("scrolling into view", {}), M(I, y);
+        });
+      }
+    ), { autoscrollToBottom: R, followOutput: w, scrollIntoViewOnChange: S };
+  },
+  rt(
+    Lt,
+    pe,
+    fe,
+    me,
+    At,
+    Gt,
+    It,
+    Qn,
+    to
+  )
+), Qo = j(
+  ([{ data: t, firstItemIndex: e, gap: n, sizes: o }, { initialTopMostItemIndex: r }, { initialItemCount: s, listState: i }, { didMount: l }]) => (z(
+    x(
+      l,
+      $(s),
+      P(([, c]) => c !== 0),
+      $(r, o, e, n, t),
+      B(([[, c], d, m, v, p, I = []]) => Xn(c, d, m, v, p, I))
+    ),
+    i
+  ), {}),
+  rt(Lt, me, Kt, At),
+  { singleton: true }
+), tr = j(
+  ([{ didMount: t }, { scrollTo: e }, { listState: n }]) => {
+    const o = T(0);
+    return Y(
+      x(
+        t,
+        $(o),
+        P(([, r]) => r !== 0),
+        B(([, r]) => ({ top: r }))
+      ),
+      (r) => {
+        yt(
+          x(
+            n,
+            Ut(1),
+            P((s) => s.items.length > 1)
+          ),
+          () => {
+            requestAnimationFrame(() => {
+              M(e, r);
+            });
+          }
+        );
+      }
+    ), {
+      initialScrollTop: o
+    };
+  },
+  rt(At, It, Kt),
+  { singleton: true }
+), eo = j(
+  ([{ scrollVelocity: t }]) => {
+    const e = T(false), n = U(), o = T(false);
+    return z(
+      x(
+        t,
+        $(o, e, n),
+        P(([r, s]) => s !== false && s !== void 0),
+        B(([r, s, i, l]) => {
+          const { enter: c, exit: d } = s;
+          if (i) {
+            if (d(r, l))
+              return false;
+          } else if (c(r, l))
+            return true;
+          return i;
+        }),
+        nt()
+      ),
+      e
+    ), Y(
+      x(at(e, t, n), $(o)),
+      ([[r, s, i], l]) => {
+        r && l !== false && l !== void 0 && l.change && l.change(s, i);
+      }
+    ), { isSeeking: e, scrollSeekConfiguration: o, scrollSeekRangeChanged: n, scrollVelocity: t };
+  },
+  rt(pe),
+  { singleton: true }
+), Ze = j(([{ scrollContainerState: t, scrollTo: e }]) => {
+  const n = U(), o = U(), r = U(), s = T(false), i = T(void 0);
+  return z(
+    x(
+      at(n, o),
+      B(([{ scrollTop: l, viewportHeight: c }, { offsetTop: d, listHeight: m }]) => ({
+        scrollHeight: m,
+        scrollTop: Math.max(0, l - d),
+        viewportHeight: c
+      }))
+    ),
+    t
+  ), z(
+    x(
+      e,
+      $(o),
+      B(([l, { offsetTop: c }]) => ({
+        ...l,
+        top: l.top + c
+      }))
+    ),
+    r
+  ), {
+    customScrollParent: i,
+    // config
+    useWindowScroll: s,
+    // input
+    windowScrollContainerState: n,
+    // signals
+    windowScrollTo: r,
+    windowViewportRect: o
+  };
+}, rt(It)), er = j(
+  ([
+    { sizeRanges: t, sizes: e },
+    { headerHeight: n, scrollTop: o },
+    { initialTopMostItemIndex: r },
+    { didMount: s },
+    { useWindowScroll: i, windowScrollContainerState: l, windowViewportRect: c }
+  ]) => {
+    const d = U(), m = T(void 0), v = T(null), p = T(null);
+    return z(l, v), z(c, p), Y(
+      x(
+        d,
+        $(e, o, i, v, p, n)
+      ),
+      ([I, w, R, h, f, a, S]) => {
+        const H = Go(w.sizeTree);
+        h && f !== null && a !== null && (R = f.scrollTop - a.offsetTop), R -= S, I({ ranges: H, scrollTop: R });
+      }
+    ), z(x(m, P(_e), B(nr)), r), z(
+      x(
+        s,
+        $(m),
+        P(([, I]) => I !== void 0),
+        nt(),
+        B(([, I]) => I.ranges)
+      ),
+      t
+    ), {
+      getState: d,
+      restoreStateFrom: m
+    };
+  },
+  rt(Lt, It, me, At, Ze)
+);
+function nr(t) {
+  return { align: "start", index: 0, offset: t.scrollTop };
+}
+const or = j(([{ topItemsIndexes: t }]) => {
+  const e = T(0);
+  return z(
+    x(
+      e,
+      P((n) => n >= 0),
+      B((n) => Array.from({ length: n }).map((o, r) => r))
+    ),
+    t
+  ), { topItemCount: e };
+}, rt(Kt));
+function no(t) {
+  let e = false, n;
+  return () => (e || (e = true, n = t()), n);
+}
+const rr = no(() => /iP(ad|od|hone)/i.test(navigator.userAgent) && /WebKit/i.test(navigator.userAgent)), sr = j(
+  ([
+    { deviation: t, scrollBy: e, scrollingInProgress: n, scrollTop: o },
+    { isAtBottom: r, isScrolling: s, lastJumpDueToItemResize: i, scrollDirection: l },
+    { listState: c },
+    { beforeUnshiftWith: d, gap: m, shiftWithOffset: v, sizes: p },
+    { log: I },
+    { recalcInProgress: w }
+  ]) => {
+    const R = Tt(
+      x(
+        c,
+        $(i),
+        Ot(
+          ([, f, a, S], [{ bottom: H, items: y, offsetBottom: k, totalCount: u }, g]) => {
+            const C = H + k;
+            let L = 0;
+            return a === u && f.length > 0 && y.length > 0 && (y[0].originalIndex === 0 && f[0].originalIndex === 0 || (L = C - S, L !== 0 && (L += g))), [L, y, u, C];
+          },
+          [0, [], 0, 0]
+        ),
+        P(([f]) => f !== 0),
+        $(o, l, n, r, I, w),
+        P(([, f, a, S, , , H]) => !H && !S && f !== 0 && a === ue),
+        B(([[f], , , , , a]) => (a("Upward scrolling compensation", { amount: f }, ft.DEBUG), f))
+      )
+    );
+    function h(f) {
+      f > 0 ? (M(e, { behavior: "auto", top: -f }), M(t, 0)) : (M(t, 0), M(e, { behavior: "auto", top: -f }));
+    }
+    return Y(x(R, $(t, s)), ([f, a, S]) => {
+      S && rr() ? M(t, a - f) : h(-f);
+    }), Y(
+      x(
+        at(ht(s, false), t, w),
+        P(([f, a, S]) => !f && !S && a !== 0),
+        B(([f, a]) => a),
+        zt(1)
+      ),
+      h
+    ), z(
+      x(
+        v,
+        B((f) => ({ top: -f }))
+      ),
+      e
+    ), Y(
+      x(
+        d,
+        $(p, m),
+        B(([f, { groupIndices: a, lastSize: S, sizeTree: H }, y]) => {
+          function k(O) {
+            return O * (S + y);
+          }
+          if (a.length === 0)
+            return k(f);
+          let u = 0;
+          const g = ie(H, 0);
+          let C = 0, L = 0;
+          for (; C < f; ) {
+            C++, u += g;
+            let O = a.length === L + 1 ? 1 / 0 : a[L + 1] - a[L] - 1;
+            C + O > f && (u -= g, O = f - C + 1), C += O, u += k(O), L++;
+          }
+          return u;
+        })
+      ),
+      (f) => {
+        M(t, f), requestAnimationFrame(() => {
+          M(e, { top: f }), requestAnimationFrame(() => {
+            M(t, 0), M(w, false);
+          });
+        });
+      }
+    ), { deviation: t };
+  },
+  rt(It, pe, Kt, Lt, Gt, Ue)
+), ir = j(
+  ([
+    t,
+    e,
+    n,
+    o,
+    r,
+    s,
+    i,
+    l,
+    c,
+    d,
+    m
+  ]) => ({
+    ...t,
+    ...e,
+    ...n,
+    ...o,
+    ...r,
+    ...s,
+    ...i,
+    ...l,
+    ...c,
+    ...d,
+    ...m
+  }),
+  rt(
+    Ye,
+    Qo,
+    At,
+    eo,
+    Jn,
+    tr,
+    Yo,
+    Ze,
+    to,
+    Gt,
+    Qn
+  )
+), oo = j(
+  ([
+    {
+      data: t,
+      defaultItemSize: e,
+      firstItemIndex: n,
+      fixedItemSize: o,
+      fixedGroupSize: r,
+      gap: s,
+      groupIndices: i,
+      heightEstimates: l,
+      itemSize: c,
+      sizeRanges: d,
+      sizes: m,
+      statefulTotalCount: v,
+      totalCount: p,
+      trackItemSizes: I
+    },
+    { initialItemFinalLocationReached: w, initialTopMostItemIndex: R, scrolledToInitialItem: h },
+    f,
+    a,
+    S,
+    H,
+    { scrollToIndex: y },
+    k,
+    { topItemCount: u },
+    { groupCounts: g },
+    C
+  ]) => {
+    const { listState: L, minOverscanItemCount: O, topItemsIndexes: V, rangeChanged: N, ...Z } = H;
+    return z(N, C.scrollSeekRangeChanged), z(
+      x(
+        C.windowViewportRect,
+        B((F) => F.visibleHeight)
+      ),
+      f.viewportHeight
+    ), {
+      data: t,
+      defaultItemHeight: e,
+      firstItemIndex: n,
+      fixedItemHeight: o,
+      fixedGroupHeight: r,
+      gap: s,
+      groupCounts: g,
+      heightEstimates: l,
+      initialItemFinalLocationReached: w,
+      initialTopMostItemIndex: R,
+      scrolledToInitialItem: h,
+      sizeRanges: d,
+      topItemCount: u,
+      topItemsIndexes: V,
+      // input
+      totalCount: p,
+      ...S,
+      groupIndices: i,
+      itemSize: c,
+      listState: L,
+      minOverscanItemCount: O,
+      scrollToIndex: y,
+      // output
+      statefulTotalCount: v,
+      trackItemSizes: I,
+      // exported from stateFlagsSystem
+      rangeChanged: N,
+      ...Z,
+      // the bag of IO from featureGroup1System
+      ...C,
+      ...f,
+      sizes: m,
+      ...a
+    };
+  },
+  rt(
+    Lt,
+    me,
+    It,
+    er,
+    Jo,
+    Kt,
+    fe,
+    sr,
+    or,
+    qn,
+    ir
+  )
+);
+function lr(t, e) {
+  const n = {}, o = {};
+  let r = 0;
+  const s = t.length;
+  for (; r < s; )
+    o[t[r]] = 1, r += 1;
+  for (const i in e)
+    Object.hasOwn(o, i) || (n[i] = e[i]);
+  return n;
+}
+const Ie = typeof document > "u" ? E.useEffect : E.useLayoutEffect;
+function Xe(t, e, n) {
+  const o = Object.keys(e.required || {}), r = Object.keys(e.optional || {}), s = Object.keys(e.methods || {}), i = Object.keys(e.events || {}), l = E.createContext({});
+  function c(f, a) {
+    f.propsReady !== void 0 && M(f.propsReady, false);
+    for (const S of o) {
+      const H = f[e.required[S]];
+      M(H, a[S]);
+    }
+    for (const S of r)
+      if (S in a) {
+        const H = f[e.optional[S]];
+        M(H, a[S]);
+      }
+    f.propsReady !== void 0 && M(f.propsReady, true);
+  }
+  function d(f) {
+    return s.reduce((a, S) => (a[S] = (H) => {
+      const y = f[e.methods[S]];
+      M(y, H);
+    }, a), {});
+  }
+  function m(f) {
+    return i.reduce((a, S) => (a[S] = Co(f[e.events[S]]), a), {});
+  }
+  const v = E.forwardRef(function(a, S) {
+    const { children: H, ...y } = a, [k] = E.useState(() => ye(bo(t), (C) => {
+      c(C, y);
+    })), [u] = E.useState(mn(m, k));
+    Ie(() => {
+      for (const C of i)
+        C in y && Y(u[C], y[C]);
+      return () => {
+        Object.values(u).map(Ne);
+      };
+    }, [y, u, k]), Ie(() => {
+      c(k, y);
+    }), E.useImperativeHandle(S, fn(d(k)));
+    const g = n;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(l.Provider, { value: k, children: n === void 0 ? H : /* @__PURE__ */ jsxRuntimeExports.jsx(g, { ...lr([...o, ...r, ...i], y), children: H }) });
+  }), p = (f) => {
+    const a = E.useContext(l);
+    return E.useCallback(
+      (S) => {
+        M(a[f], S);
+      },
+      [a, f]
+    );
+  }, I = (f) => {
+    const S = E.useContext(l)[f], H = E.useCallback(
+      (y) => Y(S, y),
+      [S]
+    );
+    return E.useSyncExternalStore(
+      H,
+      () => it(S),
+      () => it(S)
+    );
+  }, w = (f) => {
+    const S = E.useContext(l)[f], [H, y] = E.useState(mn(it, S));
+    return Ie(
+      () => Y(S, (k) => {
+        k !== H && y(fn(k));
+      }),
+      [S, H]
+    ), H;
+  }, R = parseInt(E.version, 10) >= 18 ? I : w;
+  return {
+    Component: v,
+    useEmitter: (f, a) => {
+      const H = E.useContext(l)[f];
+      Ie(() => Y(H, a), [a, H]);
+    },
+    useEmitterValue: R,
+    usePublisher: p
+  };
+}
+const Re = E.createContext(void 0), ro = E.createContext(void 0), ke = "-webkit-sticky", bn = "sticky", Je = no(() => {
+  if (typeof document > "u")
+    return bn;
+  const t = document.createElement("div");
+  return t.style.position = ke, t.style.position === ke ? ke : bn;
+}), so = typeof document > "u" ? E.useEffect : E.useLayoutEffect;
+function Le(t) {
+  return "self" in t;
+}
+function cr(t) {
+  return "body" in t;
+}
+function io(t, e, n, o = Jt, r, s) {
+  const i = E.useRef(null), l = E.useRef(null), c = E.useRef(null), d = E.useCallback(
+    (p) => {
+      let I, w, R;
+      const h = p.target;
+      if (cr(h) || Le(h)) {
+        const a = Le(h) ? h : h.defaultView;
+        R = s === true ? _t(a, a.scrollX) : a.scrollY, I = s === true ? a.document.documentElement.scrollWidth : a.document.documentElement.scrollHeight, w = s === true ? a.innerWidth : a.innerHeight;
+      } else
+        R = s === true ? _t(h, h.scrollLeft) : h.scrollTop, I = s === true ? h.scrollWidth : h.scrollHeight, w = s === true ? h.offsetWidth : h.offsetHeight;
+      const f = () => {
+        t({
+          scrollHeight: I,
+          scrollTop: Math.max(R, 0),
+          viewportHeight: w
+        });
+      };
+      p.suppressFlushSync === true ? f() : go.flushSync(f), l.current !== null && (R === l.current || R <= 0 || R === I - w) && (l.current = null, e(true), c.current && (clearTimeout(c.current), c.current = null));
+    },
+    [t, e, s]
+  );
+  E.useEffect(() => {
+    const p = r ?? i.current;
+    return o(r ?? i.current), d({ suppressFlushSync: true, target: p }), p.addEventListener("scroll", d, { passive: true }), () => {
+      o(null), p.removeEventListener("scroll", d);
+    };
+  }, [i, d, n, o, r]);
+  function m(p) {
+    const I = i.current;
+    if (!I || (s === true ? "offsetWidth" in I && I.offsetWidth === 0 : "offsetHeight" in I && I.offsetHeight === 0))
+      return;
+    const w = p.behavior === "smooth";
+    let R, h, f;
+    Le(I) ? (h = Math.max(
+      Ht(I.document.documentElement, s === true ? "width" : "height"),
+      s === true ? I.document.documentElement.scrollWidth : I.document.documentElement.scrollHeight
+    ), R = s === true ? I.innerWidth : I.innerHeight, f = s === true ? _t(I, I.scrollX) : I.scrollY) : (h = I[s === true ? "scrollWidth" : "scrollHeight"], R = Ht(I, s === true ? "width" : "height"), f = s === true ? _t(I, I.scrollLeft) : I.scrollTop);
+    const a = h - R;
+    if (p.top === void 0) {
+      I.scrollTo(p);
+      return;
+    }
+    const S = Math.ceil(Math.max(Math.min(a, p.top), 0));
+    if (p.top = S, Zn(R, h) || S === f) {
+      t({ scrollHeight: h, scrollTop: f, viewportHeight: R }), w && e(true);
+      return;
+    }
+    w ? (l.current = S, c.current && clearTimeout(c.current), c.current = setTimeout(() => {
+      c.current = null, l.current = null, e(true);
+    }, 1e3)) : l.current = null, s === true && (p = {
+      ...p.behavior === void 0 ? {} : { behavior: p.behavior },
+      left: hn(I, S)
+    }), I.scrollTo(p);
+  }
+  function v(p) {
+    s === true && (p = {
+      ...p.behavior === void 0 ? {} : { behavior: p.behavior },
+      ...p.top === void 0 ? {} : { left: hn(i.current, p.top) }
+    }), i.current.scrollBy(p);
+  }
+  return { scrollByCallback: v, scrollerRef: i, scrollToCallback: m };
+}
+function Qe(t) {
+  return t;
+}
+const ur = /* @__PURE__ */ j(() => {
+  const t = T((l) => `Item ${l}`), e = T((l) => `Group ${l}`), n = T({}), o = T(Qe), r = T("div"), s = T(Jt), i = (l, c = null) => ht(
+    x(
+      n,
+      B((d) => d[l]),
+      nt()
+    ),
+    c
+  );
+  return {
+    components: n,
+    computeItemKey: o,
+    EmptyPlaceholder: i("EmptyPlaceholder"),
+    FooterComponent: i("Footer"),
+    GroupComponent: i("Group", "div"),
+    groupContent: e,
+    HeaderComponent: i("Header"),
+    HeaderFooterTag: r,
+    ItemComponent: i("Item", "div"),
+    itemContent: t,
+    ListComponent: i("List", "div"),
+    ScrollerComponent: i("Scroller", "div"),
+    scrollerRef: s,
+    ScrollSeekPlaceholder: i("ScrollSeekPlaceholder"),
+    TopItemListComponent: i("TopItemList")
+  };
+}), ar = /* @__PURE__ */ j(
+  ([t, e]) => ({ ...t, ...e }),
+  rt(oo, ur)
+), dr = ({ height: t }) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: t } }), fr = { overflowAnchor: "none", position: Je(), zIndex: 1 }, lo = { overflowAnchor: "none" }, mr = { ...lo, display: "inline-block", height: "100%" }, Rn = /* @__PURE__ */ E.memo(function({ showTopList: e = false }) {
+  const n = A("listState"), o = Ct("sizeRanges"), r = A("useWindowScroll"), s = A("customScrollParent"), i = Ct("windowScrollContainerState"), l = Ct("scrollContainerState"), c = s || r ? i : l, d = A("itemContent"), m = A("context"), v = A("groupContent"), p = A("trackItemSizes"), I = A("itemSize"), w = A("log"), R = Ct("gap"), h = A("horizontalDirection"), { callbackRef: f } = Gn(
+    o,
+    I,
+    p,
+    e ? Jt : c,
+    w,
+    R,
+    s,
+    h,
+    A("skipAnimationFrameInResizeObserver")
+  ), [a, S] = E.useState(0);
+  on("deviation", (F) => {
+    a !== F && S(F);
+  });
+  const H = A("EmptyPlaceholder"), y = A("ScrollSeekPlaceholder") ?? dr, k = A("ListComponent"), u = A("ItemComponent"), g = A("GroupComponent"), C = A("computeItemKey"), L = A("isSeeking"), O = A("groupIndices").length > 0, V = A("alignToBottom"), N = A("initialItemFinalLocationReached"), Z = e ? {} : {
+    boxSizing: "border-box",
+    ...h ? {
+      display: "inline-block",
+      height: "100%",
+      marginInlineStart: a === 0 ? V ? "auto" : 0 : a,
+      paddingInlineEnd: n.offsetBottom,
+      paddingInlineStart: n.offsetTop,
+      whiteSpace: "nowrap"
+    } : {
+      marginTop: a === 0 ? V ? "auto" : 0 : a,
+      paddingBottom: n.offsetBottom,
+      paddingTop: n.offsetTop
+    },
+    ...N ? {} : { visibility: "hidden" }
+  };
+  return !e && n.totalCount === 0 && H !== null && H !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(H, { ...ot(H, m) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+    k,
+    {
+      ...ot(k, m),
+      "data-testid": e ? "virtuoso-top-item-list" : "virtuoso-item-list",
+      ref: f,
+      style: Z,
+      children: (e ? n.topItems : n.items).map((F) => {
+        const mt = F.originalIndex, q = C(mt + n.firstItemIndex, F.data, m);
+        return L ? /* @__PURE__ */ reactExports.createElement(
+          y,
+          {
+            ...ot(y, m),
+            height: F.size,
+            index: F.index,
+            key: q,
+            type: F.type || "item",
+            ...F.type === "group" ? {} : { groupIndex: F.groupIndex }
+          }
+        ) : F.type === "group" ? /* @__PURE__ */ reactExports.createElement(
+          g,
+          {
+            ...ot(g, m),
+            "data-index": mt,
+            "data-item-index": F.index,
+            "data-known-size": F.size,
+            key: q,
+            style: fr
+          },
+          v(F.index, m)
+        ) : /* @__PURE__ */ reactExports.createElement(
+          u,
+          {
+            ...ot(u, m),
+            ...co(u, F.data),
+            "data-index": mt,
+            "data-item-group-index": F.groupIndex,
+            "data-item-index": F.index,
+            "data-known-size": F.size,
+            key: q,
+            style: h ? mr : lo
+          },
+          O ? d(F.index, F.groupIndex, F.data, m) : d(F.index, F.data, m)
+        );
+      })
+    }
+  );
+}), pr = {
+  height: "100%",
+  outline: "none",
+  overflowY: "auto",
+  position: "relative",
+  WebkitOverflowScrolling: "touch"
+}, hr = {
+  outline: "none",
+  overflowX: "auto",
+  position: "relative"
+}, He = (t) => ({
+  height: "100%",
+  position: "absolute",
+  top: 0,
+  width: "100%",
+  ...t ? { display: "flex", flexDirection: "column" } : void 0
+}), tn = (t, e, n = 0) => ({
+  ...He(t),
+  position: e ? "relative" : "absolute",
+  top: e ? -n : 0
+}), gr = {
+  position: Je(),
+  top: 0,
+  width: "100%",
+  zIndex: 1
+};
+function ot(t, e) {
+  if (typeof t != "string")
+    return { context: e };
+}
+function co(t, e) {
+  return { item: typeof t == "string" ? void 0 : e };
+}
+const Ir = /* @__PURE__ */ E.memo(function() {
+  const e = A("HeaderComponent"), n = Ct("headerHeight"), o = A("HeaderFooterTag"), r = kt(
+    E.useMemo(
+      () => (i) => {
+        n(Ht(i, "height"));
+      },
+      [n]
+    ),
+    true,
+    A("skipAnimationFrameInResizeObserver")
+  ), s = A("context");
+  return e != null ? /* @__PURE__ */ jsxRuntimeExports.jsx(o, { ref: r, children: /* @__PURE__ */ jsxRuntimeExports.jsx(e, { ...ot(e, s) }) }) : null;
+}), Sr = /* @__PURE__ */ E.memo(function() {
+  const e = A("FooterComponent"), n = Ct("footerHeight"), o = A("HeaderFooterTag"), r = kt(
+    E.useMemo(
+      () => (i) => {
+        n(Ht(i, "height"));
+      },
+      [n]
+    ),
+    true,
+    A("skipAnimationFrameInResizeObserver")
+  ), s = A("context");
+  return e != null ? /* @__PURE__ */ jsxRuntimeExports.jsx(o, { ref: r, children: /* @__PURE__ */ jsxRuntimeExports.jsx(e, { ...ot(e, s) }) }) : null;
+});
+function en({ useEmitter: t, useEmitterValue: e, usePublisher: n }) {
+  return E.memo(function({ children: s, style: i, context: l, ...c }) {
+    const d = n("scrollContainerState"), m = e("ScrollerComponent"), v = n("smoothScrollTargetReached"), p = e("scrollerRef"), I = e("horizontalDirection") || false, { scrollByCallback: w, scrollerRef: R, scrollToCallback: h } = io(
+      d,
+      v,
+      m,
+      p,
+      void 0,
+      I
+    );
+    return t("scrollTo", h), t("scrollBy", w), /* @__PURE__ */ jsxRuntimeExports.jsx(
+      m,
+      {
+        "data-testid": "virtuoso-scroller",
+        "data-virtuoso-scroller": true,
+        ref: R,
+        style: { ...I ? hr : pr, ...i },
+        tabIndex: 0,
+        ...c,
+        ...ot(m, l),
+        children: s
+      }
+    );
+  });
+}
+function nn({ useEmitter: t, useEmitterValue: e, usePublisher: n }) {
+  return E.memo(function({ children: s, style: i, context: l, ...c }) {
+    const d = n("windowScrollContainerState"), m = e("ScrollerComponent"), v = n("smoothScrollTargetReached"), p = e("totalListHeight"), I = e("deviation"), w = e("customScrollParent"), R = E.useRef(null), h = e("scrollerRef"), { scrollByCallback: f, scrollerRef: a, scrollToCallback: S } = io(
+      d,
+      v,
+      m,
+      h,
+      w
+    );
+    return so(() => (a.current = w ?? R.current?.ownerDocument.defaultView, () => {
+      a.current = null;
+    }), [a, w]), t("windowScrollTo", S), t("scrollBy", f), /* @__PURE__ */ jsxRuntimeExports.jsx(
+      m,
+      {
+        ref: R,
+        "data-virtuoso-scroller": true,
+        style: { position: "relative", ...i, ...p === 0 ? void 0 : { height: p + I } },
+        ...c,
+        ...ot(m, l),
+        children: s
+      }
+    );
+  });
+}
+const xr = ({ children: t }) => {
+  const e = E.useContext(Re), n = Ct("viewportHeight"), o = Ct("fixedItemHeight"), r = A("alignToBottom"), s = A("horizontalDirection"), i = E.useMemo(
+    () => re(n, (c) => Ht(c, s ? "width" : "height")),
+    [n, s]
+  ), l = kt(i, true, A("skipAnimationFrameInResizeObserver"));
+  return E.useEffect(() => {
+    e && (n(e.viewportHeight), o(e.itemHeight));
+  }, [e, n, o]), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "data-viewport-type": "element", ref: l, style: He(r), children: t });
+}, vr = ({ children: t }) => {
+  const e = E.useContext(Re), n = Ct("windowViewportRect"), o = Ct("fixedItemHeight"), r = A("customScrollParent"), s = A("useWindowScroll"), i = A("topListHeight"), l = $e(
+    n,
+    r,
+    A("skipAnimationFrameInResizeObserver")
+  ), c = A("alignToBottom");
+  return E.useEffect(() => {
+    e && (o(e.itemHeight), n({ listHeight: 0, offsetTop: 0, visibleHeight: e.viewportHeight, visibleWidth: 100 }));
+  }, [e, n, o]), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "data-viewport-type": "window", ref: l, style: tn(c, s, i), children: t });
+}, Tr = ({ children: t }) => {
+  const e = A("TopItemListComponent") ?? "div", n = A("headerHeight"), o = { ...gr, marginTop: `${n}px` }, r = A("context");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(e, { style: o, ...ot(e, r), children: t });
+}, Cr = /* @__PURE__ */ E.memo(function(e) {
+  const n = A("useWindowScroll"), o = A("topItemsIndexes").length > 0, r = A("customScrollParent"), s = A("context");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(r || n ? yr : wr, { ...e, context: s, children: [
+    o && /* @__PURE__ */ jsxRuntimeExports.jsx(Tr, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Rn, { showTopList: true }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(r || n ? vr : xr, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Ir, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Rn, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Sr, {})
+    ] })
+  ] });
+}), {
+  Component: uo,
+  useEmitter: on,
+  useEmitterValue: A,
+  usePublisher: Ct
+} = /* @__PURE__ */ Xe(
+  ar,
+  {
+    optional: {
+      restoreStateFrom: "restoreStateFrom",
+      context: "context",
+      followOutput: "followOutput",
+      scrollIntoViewOnChange: "scrollIntoViewOnChange",
+      itemContent: "itemContent",
+      groupContent: "groupContent",
+      overscan: "overscan",
+      increaseViewportBy: "increaseViewportBy",
+      minOverscanItemCount: "minOverscanItemCount",
+      totalCount: "totalCount",
+      groupCounts: "groupCounts",
+      topItemCount: "topItemCount",
+      firstItemIndex: "firstItemIndex",
+      initialTopMostItemIndex: "initialTopMostItemIndex",
+      components: "components",
+      atBottomThreshold: "atBottomThreshold",
+      atTopThreshold: "atTopThreshold",
+      computeItemKey: "computeItemKey",
+      defaultItemHeight: "defaultItemHeight",
+      fixedGroupHeight: "fixedGroupHeight",
+      // Must be set above 'fixedItemHeight'
+      fixedItemHeight: "fixedItemHeight",
+      heightEstimates: "heightEstimates",
+      itemSize: "itemSize",
+      scrollSeekConfiguration: "scrollSeekConfiguration",
+      headerFooterTag: "HeaderFooterTag",
+      data: "data",
+      initialItemCount: "initialItemCount",
+      initialScrollTop: "initialScrollTop",
+      alignToBottom: "alignToBottom",
+      useWindowScroll: "useWindowScroll",
+      customScrollParent: "customScrollParent",
+      scrollerRef: "scrollerRef",
+      logLevel: "logLevel",
+      horizontalDirection: "horizontalDirection",
+      skipAnimationFrameInResizeObserver: "skipAnimationFrameInResizeObserver"
+    },
+    methods: {
+      scrollToIndex: "scrollToIndex",
+      scrollIntoView: "scrollIntoView",
+      scrollTo: "scrollTo",
+      scrollBy: "scrollBy",
+      autoscrollToBottom: "autoscrollToBottom",
+      getState: "getState"
+    },
+    events: {
+      isScrolling: "isScrolling",
+      endReached: "endReached",
+      startReached: "startReached",
+      rangeChanged: "rangeChanged",
+      atBottomStateChange: "atBottomStateChange",
+      atTopStateChange: "atTopStateChange",
+      totalListHeightChanged: "totalListHeightChanged",
+      itemsRendered: "itemsRendered",
+      groupIndices: "groupIndices"
+    }
+  },
+  Cr
+), wr = /* @__PURE__ */ en({ useEmitter: on, useEmitterValue: A, usePublisher: Ct }), yr = /* @__PURE__ */ nn({ useEmitter: on, useEmitterValue: A, usePublisher: Ct }), es = uo, br = /* @__PURE__ */ j(() => {
+  const t = T((d) => /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { children: [
+    "Item $",
+    d
+  ] })), e = T(null), n = T((d) => /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { colSpan: 1e3, children: [
+    "Group ",
+    d
+  ] })), o = T(null), r = T(null), s = T({}), i = T(Qe), l = T(Jt), c = (d, m = null) => ht(
+    x(
+      s,
+      B((v) => v[d]),
+      nt()
+    ),
+    m
+  );
+  return {
+    components: s,
+    computeItemKey: i,
+    context: e,
+    EmptyPlaceholder: c("EmptyPlaceholder"),
+    FillerRow: c("FillerRow"),
+    fixedFooterContent: r,
+    fixedHeaderContent: o,
+    itemContent: t,
+    groupContent: n,
+    ScrollerComponent: c("Scroller", "div"),
+    scrollerRef: l,
+    ScrollSeekPlaceholder: c("ScrollSeekPlaceholder"),
+    TableBodyComponent: c("TableBody", "tbody"),
+    TableComponent: c("Table", "table"),
+    TableFooterComponent: c("TableFoot", "tfoot"),
+    TableHeadComponent: c("TableHead", "thead"),
+    TableRowComponent: c("TableRow", "tr"),
+    GroupComponent: c("Group", "tr")
+  };
+});
+/* @__PURE__ */ j(
+  ([t, e]) => ({ ...t, ...e }),
+  rt(oo, br)
+);
+({ position: Je() });
+const Bn = {
+  bottom: 0,
+  itemHeight: 0,
+  items: [],
+  itemWidth: 0,
+  offsetBottom: 0,
+  offsetTop: 0,
+  top: 0
+}, Wr = {
+  bottom: 0,
+  itemHeight: 0,
+  items: [{ index: 0 }],
+  itemWidth: 0,
+  offsetBottom: 0,
+  offsetTop: 0,
+  top: 0
+}, { ceil: On, floor: Ce, max: oe, min: ze, round: kn } = Math;
+function Ln(t, e, n) {
+  return Array.from({ length: e - t + 1 }).map((o, r) => ({ data: n === null ? null : n[r + t], index: r + t }));
+}
+function Pr(t) {
+  return {
+    ...Wr,
+    items: t
+  };
+}
+function Se(t, e) {
+  return t !== void 0 && t.width === e.width && t.height === e.height;
+}
+function Gr(t, e) {
+  return t !== void 0 && t.column === e.column && t.row === e.row;
+}
+const Ar = /* @__PURE__ */ j(
+  ([
+    { increaseViewportBy: t, listBoundary: e, overscan: n, visibleRange: o },
+    { footerHeight: r, headerHeight: s, scrollBy: i, scrollContainerState: l, scrollTo: c, scrollTop: d, smoothScrollTargetReached: m, viewportHeight: v },
+    p,
+    I,
+    { didMount: w, propsReady: R },
+    { customScrollParent: h, useWindowScroll: f, windowScrollContainerState: a, windowScrollTo: S, windowViewportRect: H },
+    y
+  ]) => {
+    const k = T(0), u = T(0), g = T(Bn), C = T({ height: 0, width: 0 }), L = T({ height: 0, width: 0 }), O = U(), V = U(), N = T(0), Z = T(null), F = T({ column: 0, row: 0 }), mt = U(), q = U(), Q = T(false), gt = T(0), lt = T(true), St = T(false), Ft = T(false);
+    Y(
+      x(
+        w,
+        $(gt),
+        P(([b, D]) => !Ae(D))
+      ),
+      () => {
+        M(lt, false);
+      }
+    ), Y(
+      x(
+        at(w, lt, L, C, gt, St),
+        P(([b, D, K, st, , tt]) => b && !D && K.height !== 0 && st.height !== 0 && !tt)
+      ),
+      ([, , , , b]) => {
+        if (b === void 0) {
+          M(lt, true);
+          return;
+        }
+        M(St, true), je(1, () => {
+          M(O, b);
+        }), yt(x(d), () => {
+          M(e, [0, 0]), M(lt, true);
+        });
+      }
+    ), z(
+      x(
+        q,
+        P((b) => b != null && b.scrollTop > 0),
+        Bt(0)
+      ),
+      u
+    ), Y(
+      x(
+        w,
+        $(q),
+        P(([, b]) => b != null)
+      ),
+      ([, b]) => {
+        b && (M(C, b.viewport), M(L, b.item), M(F, b.gap), b.scrollTop > 0 && (M(Q, true), yt(x(d, Ut(1)), (D) => {
+          M(Q, false);
+        }), M(c, { top: b.scrollTop })));
+      }
+    ), z(
+      x(
+        C,
+        B(({ height: b }) => b)
+      ),
+      v
+    ), z(
+      x(
+        at(
+          W(C, Se),
+          W(L, Se),
+          W(F, (b, D) => b !== void 0 && b.column === D.column && b.row === D.row),
+          W(d)
+        ),
+        B(([b, D, K, st]) => ({
+          gap: K,
+          item: D,
+          scrollTop: st,
+          viewport: b
+        }))
+      ),
+      mt
+    ), z(
+      x(
+        at(
+          W(k),
+          o,
+          W(F, Gr),
+          W(L, Se),
+          W(C, Se),
+          W(Z),
+          W(u),
+          W(Q),
+          W(lt),
+          W(gt)
+        ),
+        P(([, , , , , , , b]) => !b),
+        B(
+          ([
+            b,
+            [D, K],
+            st,
+            tt,
+            X,
+            ct,
+            xt,
+            ,
+            ut,
+            Vt
+          ]) => {
+            const { column: Wt, row: ee } = st, { height: he, width: Ee } = tt, { width: sn } = X;
+            if (xt === 0 && (b === 0 || sn === 0))
+              return Bn;
+            if (Ee === 0) {
+              const dn = qe(Vt, b), ho = dn + Math.max(xt - 1, 0);
+              return Pr(Ln(dn, ho, ct));
+            }
+            const ge = fo(sn, Ee, Wt);
+            let qt, Mt;
+            ut ? D === 0 && K === 0 && xt > 0 ? (qt = 0, Mt = xt - 1) : (qt = ge * Ce((D + ee) / (he + ee)), Mt = ge * On((K + ee) / (he + ee)) - 1, Mt = ze(b - 1, oe(Mt, ge - 1)), qt = ze(Mt, oe(0, qt))) : (qt = 0, Mt = -1);
+            const ln = Ln(qt, Mt, ct), { bottom: cn, top: un } = zn(X, st, tt, ln), an = On(b / ge), po = an * he + (an - 1) * ee - cn;
+            return { bottom: cn, itemHeight: he, items: ln, itemWidth: Ee, offsetBottom: po, offsetTop: un, top: un };
+          }
+        )
+      ),
+      g
+    ), z(
+      x(
+        Z,
+        P((b) => b !== null),
+        B((b) => b.length)
+      ),
+      k
+    ), z(
+      x(
+        at(C, L, g, F),
+        P(([b, D, { items: K }]) => K.length > 0 && D.height !== 0 && b.height !== 0),
+        B(([b, D, { items: K }, st]) => {
+          const { bottom: tt, top: X } = zn(b, st, D, K);
+          return [X, tt];
+        }),
+        nt(le)
+      ),
+      e
+    );
+    const pt = T(false);
+    z(
+      x(
+        d,
+        $(pt),
+        B(([b, D]) => D || b !== 0)
+      ),
+      pt
+    );
+    const jt = Tt(
+      x(
+        at(g, k),
+        P(([{ items: b }]) => b.length > 0),
+        $(pt),
+        P(([[b, D], K]) => {
+          const tt = b.items[b.items.length - 1].index === D - 1;
+          return (K || b.bottom > 0 && b.itemHeight > 0 && b.offsetBottom === 0 && b.items.length === D) && tt;
+        }),
+        B(([[, b]]) => b - 1),
+        nt()
+      )
+    ), Qt = Tt(
+      x(
+        W(g),
+        P(({ items: b }) => b.length > 0 && b[0].index === 0),
+        Bt(0),
+        nt()
+      )
+    ), Et = Tt(
+      x(
+        W(g),
+        $(Q),
+        P(([{ items: b }, D]) => b.length > 0 && !D),
+        B(([{ items: b }]) => ({
+          endIndex: b[b.length - 1].index,
+          startIndex: b[0].index
+        })),
+        nt($n),
+        zt(0)
+      )
+    );
+    z(Et, I.scrollSeekRangeChanged), z(
+      x(
+        O,
+        $(C, L, k, F),
+        B(([b, D, K, st, tt]) => {
+          const X = Yn(b), { align: ct, behavior: xt, offset: ut } = X;
+          let Vt = X.index;
+          Vt === "LAST" && (Vt = st - 1), Vt = oe(0, Vt, ze(st - 1, Vt));
+          let Wt = Me(D, tt, K, Vt);
+          return ct === "end" ? Wt = kn(Wt - D.height + K.height) : ct === "center" && (Wt = kn(Wt - D.height / 2 + K.height / 2)), ut !== void 0 && ut !== 0 && (Wt += ut), { behavior: xt, top: Wt };
+        })
+      ),
+      c
+    );
+    const te = ht(
+      x(
+        g,
+        B((b) => b.offsetBottom + b.bottom)
+      ),
+      0
+    );
+    return z(
+      x(
+        H,
+        B((b) => ({ height: b.visibleHeight, width: b.visibleWidth }))
+      ),
+      C
+    ), {
+      customScrollParent: h,
+      // input
+      data: Z,
+      deviation: N,
+      footerHeight: r,
+      gap: F,
+      headerHeight: s,
+      increaseViewportBy: t,
+      initialItemCount: u,
+      itemDimensions: L,
+      overscan: n,
+      restoreStateFrom: q,
+      scrollBy: i,
+      scrollContainerState: l,
+      scrollHeight: V,
+      scrollTo: c,
+      scrollToIndex: O,
+      scrollTop: d,
+      smoothScrollTargetReached: m,
+      totalCount: k,
+      useWindowScroll: f,
+      viewportDimensions: C,
+      windowScrollContainerState: a,
+      windowScrollTo: S,
+      windowViewportRect: H,
+      ...I,
+      // output
+      gridState: g,
+      horizontalDirection: Ft,
+      initialTopMostItemIndex: gt,
+      totalListHeight: te,
+      ...p,
+      endReached: jt,
+      propsReady: R,
+      rangeChanged: Et,
+      startReached: Qt,
+      stateChanged: mt,
+      stateRestoreInProgress: Q,
+      ...y
+    };
+  },
+  rt(Ye, It, pe, eo, At, Ze, Gt)
+);
+function fo(t, e, n) {
+  return oe(1, Ce((t + n) / (Ce(e) + n)));
+}
+function zn(t, e, n, o) {
+  const { height: r } = n;
+  if (r === void 0 || o.length === 0)
+    return { bottom: 0, top: 0 };
+  const s = Me(t, e, n, o[0].index);
+  return { bottom: Me(t, e, n, o[o.length - 1].index) + r, top: s };
+}
+function Me(t, e, n, o) {
+  const r = fo(t.width, n.width, e.column), s = Ce(o / r), i = s * n.height + oe(0, s - 1) * e.row;
+  return i > 0 ? i + e.row : i;
+}
+const Mr = /* @__PURE__ */ j(() => {
+  const t = T((v) => `Item ${v}`), e = T({}), n = T(null), o = T("virtuoso-grid-item"), r = T("virtuoso-grid-list"), s = T(Qe), i = T("div"), l = T(Jt), c = (v, p = null) => ht(
+    x(
+      e,
+      B((I) => I[v]),
+      nt()
+    ),
+    p
+  ), d = T(false), m = T(false);
+  return z(W(m), d), {
+    components: e,
+    computeItemKey: s,
+    context: n,
+    FooterComponent: c("Footer"),
+    HeaderComponent: c("Header"),
+    headerFooterTag: i,
+    itemClassName: o,
+    ItemComponent: c("Item", "div"),
+    itemContent: t,
+    listClassName: r,
+    ListComponent: c("List", "div"),
+    readyStateChanged: d,
+    reportReadyState: m,
+    ScrollerComponent: c("Scroller", "div"),
+    scrollerRef: l,
+    ScrollSeekPlaceholder: c("ScrollSeekPlaceholder", "div")
+  };
+}), _r = /* @__PURE__ */ j(
+  ([t, e]) => ({ ...t, ...e }),
+  rt(Ar, Mr)
+), Nr = /* @__PURE__ */ E.memo(function() {
+  const e = et("gridState"), n = et("listClassName"), o = et("itemClassName"), r = et("itemContent"), s = et("computeItemKey"), i = et("isSeeking"), l = wt("scrollHeight"), c = et("ItemComponent"), d = et("ListComponent"), m = et("ScrollSeekPlaceholder"), v = et("context"), p = wt("itemDimensions"), I = wt("gap"), w = et("log"), R = et("stateRestoreInProgress"), h = wt("reportReadyState"), f = kt(
+    E.useMemo(
+      () => (a) => {
+        const S = a.parentElement.parentElement.scrollHeight;
+        l(S);
+        const H = a.firstChild;
+        if (H !== null) {
+          const { height: y, width: k } = H.getBoundingClientRect();
+          p({ height: y, width: k });
+        }
+        I({
+          column: Fn("column-gap", getComputedStyle(a).columnGap, w),
+          row: Fn("row-gap", getComputedStyle(a).rowGap, w)
+        });
+      },
+      [l, p, I, w]
+    ),
+    true,
+    false
+  );
+  return so(() => {
+    e.itemHeight > 0 && e.itemWidth > 0 && h(true);
+  }, [e]), R ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(
+    d,
+    {
+      className: n,
+      ref: f,
+      ...ot(d, v),
+      "data-testid": "virtuoso-item-list",
+      style: { paddingBottom: e.offsetBottom, paddingTop: e.offsetTop },
+      children: e.items.map((a) => {
+        const S = s(a.index, a.data, v);
+        return i ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          m,
+          {
+            ...ot(m, v),
+            height: e.itemHeight,
+            index: a.index,
+            width: e.itemWidth
+          },
+          S
+        ) : /* @__PURE__ */ reactExports.createElement(
+          c,
+          {
+            ...ot(c, v),
+            className: o,
+            "data-index": a.index,
+            key: S
+          },
+          r(a.index, a.data, v)
+        );
+      })
+    }
+  );
+}), Dr = E.memo(function() {
+  const e = et("HeaderComponent"), n = wt("headerHeight"), o = et("headerFooterTag"), r = kt(
+    E.useMemo(
+      () => (i) => {
+        n(Ht(i, "height"));
+      },
+      [n]
+    ),
+    true,
+    false
+  ), s = et("context");
+  return e != null ? /* @__PURE__ */ jsxRuntimeExports.jsx(o, { ref: r, children: /* @__PURE__ */ jsxRuntimeExports.jsx(e, { ...ot(e, s) }) }) : null;
+}), $r = E.memo(function() {
+  const e = et("FooterComponent"), n = wt("footerHeight"), o = et("headerFooterTag"), r = kt(
+    E.useMemo(
+      () => (i) => {
+        n(Ht(i, "height"));
+      },
+      [n]
+    ),
+    true,
+    false
+  ), s = et("context");
+  return e != null ? /* @__PURE__ */ jsxRuntimeExports.jsx(o, { ref: r, children: /* @__PURE__ */ jsxRuntimeExports.jsx(e, { ...ot(e, s) }) }) : null;
+}), Ur = ({ children: t }) => {
+  const e = E.useContext(ro), n = wt("itemDimensions"), o = wt("viewportDimensions"), r = kt(
+    E.useMemo(
+      () => (s) => {
+        o(s.getBoundingClientRect());
+      },
+      [o]
+    ),
+    true,
+    false
+  );
+  return E.useEffect(() => {
+    e && (o({ height: e.viewportHeight, width: e.viewportWidth }), n({ height: e.itemHeight, width: e.itemWidth }));
+  }, [e, o, n]), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: r, style: He(false), children: t });
+}, Kr = ({ children: t }) => {
+  const e = E.useContext(ro), n = wt("windowViewportRect"), o = wt("itemDimensions"), r = et("customScrollParent"), s = et("useWindowScroll"), i = $e(n, r, false);
+  return E.useEffect(() => {
+    e && (o({ height: e.itemHeight, width: e.itemWidth }), n({ listHeight: 0, offsetTop: 0, visibleHeight: e.viewportHeight, visibleWidth: e.viewportWidth }));
+  }, [e, n, o]), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: i, style: tn(false, s), children: t });
+}, jr = /* @__PURE__ */ E.memo(function({ ...e }) {
+  const n = et("useWindowScroll"), o = et("customScrollParent"), r = o || n ? Zr : Yr, s = o || n ? Kr : Ur, i = et("context");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(r, { ...e, ...ot(r, i), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(s, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Dr, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Nr, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx($r, {})
+  ] }) });
+}), {
+  Component: qr,
+  useEmitter: mo,
+  useEmitterValue: et,
+  usePublisher: wt
+} = /* @__PURE__ */ Xe(
+  _r,
+  {
+    optional: {
+      context: "context",
+      totalCount: "totalCount",
+      overscan: "overscan",
+      itemContent: "itemContent",
+      components: "components",
+      computeItemKey: "computeItemKey",
+      data: "data",
+      initialItemCount: "initialItemCount",
+      scrollSeekConfiguration: "scrollSeekConfiguration",
+      headerFooterTag: "headerFooterTag",
+      listClassName: "listClassName",
+      itemClassName: "itemClassName",
+      useWindowScroll: "useWindowScroll",
+      customScrollParent: "customScrollParent",
+      scrollerRef: "scrollerRef",
+      logLevel: "logLevel",
+      restoreStateFrom: "restoreStateFrom",
+      initialTopMostItemIndex: "initialTopMostItemIndex",
+      increaseViewportBy: "increaseViewportBy"
+    },
+    methods: {
+      scrollTo: "scrollTo",
+      scrollBy: "scrollBy",
+      scrollToIndex: "scrollToIndex"
+    },
+    events: {
+      isScrolling: "isScrolling",
+      endReached: "endReached",
+      startReached: "startReached",
+      rangeChanged: "rangeChanged",
+      atBottomStateChange: "atBottomStateChange",
+      atTopStateChange: "atTopStateChange",
+      stateChanged: "stateChanged",
+      readyStateChanged: "readyStateChanged"
+    }
+  },
+  jr
+), Yr = /* @__PURE__ */ en({ useEmitter: mo, useEmitterValue: et, usePublisher: wt }), Zr = /* @__PURE__ */ nn({ useEmitter: mo, useEmitterValue: et, usePublisher: wt });
+function Fn(t, e, n) {
+  return e !== "normal" && e?.endsWith("px") !== true && n(`${t} was not resolved to pixel value correctly`, e, ft.WARN), e === "normal" ? 0 : parseInt(e ?? "0", 10);
+}
+const ss = qr;
+function ImageListItem({
+  img,
+  selected,
+  dirty,
+  busy,
+  isThumbnails,
+  onSelect
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      className: `image-list-item${selected ? " selected" : ""}${isThumbnails ? " thumb" : ""}${busy ? " is-busy" : ""}`,
+      tabIndex: -1,
+      "aria-busy": busy,
+      onMouseDown: (e) => e.preventDefault(),
+      onClick: () => onSelect(img.path),
+      children: [
+        isThumbnails && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-thumb", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: window.api.toLocalUrl(img.path), alt: "", loading: "lazy" }),
+          busy && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "image-list-thumb-overlay", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "caption-spinner image-list-thumb-spinner" }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-meta", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-name", title: img.name, children: [
+            dirty ? "● " : "",
+            img.name
+          ] }),
+          !img.hasCaption && !dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge missing", title: "No caption file", children: "no txt" }),
+          dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge dirty", children: "unsaved" })
+        ] })
+      ]
+    }
+  );
+}
+function ImageList({
+  images,
+  selectedPath,
+  dirtyPaths,
+  busyPaths,
+  viewMode,
+  thumbnailWidth,
+  onSelect
+}) {
+  const listRef = reactExports.useRef(null);
+  const gridRef = reactExports.useRef(null);
+  const isThumbnails = viewMode === "thumbnails";
+  const selectedIndex = reactExports.useMemo(() => {
+    if (!selectedPath) return -1;
+    return images.findIndex((img) => img.path === selectedPath);
+  }, [images, selectedPath]);
+  reactExports.useEffect(() => {
+    if (selectedIndex < 0) return;
+    if (isThumbnails) {
+      gridRef.current?.scrollToIndex({
+        index: selectedIndex,
+        align: "center",
+        behavior: "auto"
+      });
+    } else {
+      listRef.current?.scrollIntoView({
+        index: selectedIndex,
+        align: "center",
+        behavior: "auto"
+      });
+    }
+  }, [selectedIndex, isThumbnails, viewMode]);
+  if (images.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-list empty", children: "No images. Open a folder to begin." });
+  }
+  const renderItem = (index2) => {
+    const img = images[index2];
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ImageListItem,
+      {
+        img,
+        selected: img.path === selectedPath,
+        dirty: dirtyPaths.has(img.path),
+        busy: busyPaths.has(img.path),
+        isThumbnails,
+        onSelect
+      }
+    );
+  };
+  if (isThumbnails) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ss,
+      {
+        ref: gridRef,
+        style: {
+          height: "100%",
+          "--thumb-w": `${thumbnailWidth}px`
+        },
+        totalCount: images.length,
+        overscan: 80,
+        listClassName: "image-list thumbnails",
+        itemClassName: "image-list-grid-item",
+        itemContent: renderItem
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    es,
+    {
+      ref: listRef,
+      style: { height: "100%" },
+      className: "image-list",
+      totalCount: images.length,
+      overscan: 120,
+      itemContent: renderItem
+    }
+  );
+}
+const BUCKET_STEP = 64;
+function normalizeResolutions(resolutions) {
+  const out = [
+    ...new Set(
+      [...resolutions].map((r) => Math.round(Number(r))).filter((r) => Number.isFinite(r) && r > 0)
+    )
+  ].sort((a, b) => a - b);
+  return out.length > 0 ? out : [1024];
+}
+function snap(v, step, lo2, hi) {
+  const s = Math.max(1, Math.round(step));
+  const snapped = Math.round(v / s) * s;
+  return Math.max(lo2, Math.min(hi, snapped));
+}
+function generateBuckets(maxRes, minRes = 512, step = BUCKET_STEP) {
+  const s = Math.max(1, Math.round(step));
+  let maxR = Math.max(s, Math.round(maxRes));
+  let minR = Math.max(s, Math.min(Math.round(minRes), maxR));
+  minR = snap(minR, s, s, maxR);
+  maxR = snap(maxR, s, minR, maxR);
+  const maxArea = maxR * maxR;
+  const buckets = [];
+  for (let h = minR; h <= maxR; h += s) {
+    for (let w = minR; w <= maxR; w += s) {
+      if (w * h <= maxArea) buckets.push([w, h]);
+    }
+  }
+  if (buckets.length === 0) buckets.push([maxR, maxR]);
+  return buckets;
+}
+function pickResolutionTier(iw, ih, resolutions) {
+  const R = normalizeResolutions(resolutions);
+  const longSide = Math.max(Math.round(iw), Math.round(ih));
+  const closest = R.reduce((best, r) => {
+    const d = Math.abs(r - longSide);
+    const bd = Math.abs(best - longSide);
+    if (d < bd) return r;
+    if (d === bd && r < best) return r;
+    return best;
+  });
+  if (closest <= longSide) return { tier: closest, allowUpscale: false };
+  const lower = R.filter((r) => r <= longSide);
+  if (lower.length > 0) return { tier: Math.max(...lower), allowUpscale: false };
+  return { tier: Math.min(...R), allowUpscale: true };
+}
+function closestBucket(iw, ih, buckets, noUpscale = true) {
+  if (iw <= 0 || ih <= 0 || buckets.length === 0) {
+    throw new Error("invalid image size or empty buckets");
+  }
+  const ar2 = Math.log(Math.max(iw, 1) / Math.max(ih, 1));
+  const score = (b) => {
+    const [bw, bh] = b;
+    return [Math.abs(Math.log(Math.max(bw, 1) / Math.max(bh, 1)) - ar2), -(bw * bh)];
+  };
+  const better = (a, b) => {
+    if (a[0] !== b[0]) return a[0] < b[0];
+    return a[1] < b[1];
+  };
+  let best = buckets[0];
+  let bestScore = score(best);
+  for (let i = 1; i < buckets.length; i++) {
+    const s = score(buckets[i]);
+    if (better(s, bestScore)) {
+      best = buckets[i];
+      bestScore = s;
+    }
+  }
+  if (noUpscale && (best[0] > iw || best[1] > ih)) {
+    const fitting = buckets.filter((b) => b[0] <= iw && b[1] <= ih);
+    if (fitting.length > 0) {
+      best = fitting[0];
+      bestScore = score(best);
+      for (let i = 1; i < fitting.length; i++) {
+        const s = score(fitting[i]);
+        if (better(s, bestScore)) {
+          best = fitting[i];
+          bestScore = s;
+        }
+      }
+    } else {
+      best = buckets.reduce((a, b) => a[0] * a[1] <= b[0] * b[1] ? a : b);
+    }
+  }
+  return best;
+}
+function assignBucket(iw, ih, resolutions, step = BUCKET_STEP) {
+  const R = normalizeResolutions(resolutions);
+  const minRes = Math.min(...R);
+  const { tier, allowUpscale } = pickResolutionTier(iw, ih, R);
+  const buckets = generateBuckets(tier, minRes, step);
+  const [w, h] = closestBucket(iw, ih, buckets, !allowUpscale);
+  return { w, h, tier, allowUpscale };
+}
+function coverScale(iw, ih, tw, th, noUpscale) {
+  if (iw <= 0 || ih <= 0) return 1;
+  let scale = Math.max(tw / iw, th / ih);
+  if (noUpscale) scale = Math.min(scale, 1);
+  return scale;
+}
+function coverCropRect(iw, ih, tw, th, noUpscale = true) {
+  const scale = coverScale(iw, ih, tw, th, noUpscale);
+  const rw = Math.max(1, Math.round(iw * scale));
+  const rh = Math.max(1, Math.round(ih * scale));
+  const cropW = Math.min(tw, rw);
+  const cropH = Math.min(th, rh);
+  const maxL = Math.max(0, rw - cropW);
+  const maxT = Math.max(0, rh - cropH);
+  const leftR = Math.floor(maxL / 2);
+  const topR = Math.floor(maxT / 2);
+  const inv = scale > 0 ? 1 / scale : 1;
+  const left = leftR * inv;
+  const top = topR * inv;
+  const width = cropW * inv;
+  const height = cropH * inv;
+  return {
+    left: Math.max(0, Math.min(iw, left)),
+    top: Math.max(0, Math.min(ih, top)),
+    width: Math.max(0, Math.min(iw - left, width)),
+    height: Math.max(0, Math.min(ih - top, height))
+  };
+}
+function computeContainRect(containerW, containerH, naturalW, naturalH) {
+  if (containerW <= 0 || containerH <= 0 || naturalW <= 0 || naturalH <= 0) return null;
+  const scale = Math.min(containerW / naturalW, containerH / naturalH);
+  const width = naturalW * scale;
+  const height = naturalH * scale;
+  return {
+    left: (containerW - width) / 2,
+    top: (containerH - height) / 2,
+    width,
+    height
+  };
+}
+function ImagePreview({
+  imagePath,
+  imageUrl,
+  bucketPreview,
+  bucket,
+  onNaturalSize
+}) {
+  const wrapRef = reactExports.useRef(null);
+  const imgRef = reactExports.useRef(null);
+  const [natural, setNatural] = reactExports.useState(null);
+  const [display, setDisplay] = reactExports.useState(null);
+  const measure = reactExports.useCallback(() => {
+    const wrap = wrapRef.current;
+    const img = imgRef.current;
+    if (!wrap || !img || !img.naturalWidth || !img.naturalHeight) {
+      setDisplay(null);
+      return;
+    }
+    setDisplay(
+      computeContainRect(
+        wrap.clientWidth,
+        wrap.clientHeight,
+        img.naturalWidth,
+        img.naturalHeight
+      )
+    );
+  }, []);
+  reactExports.useLayoutEffect(() => {
+    measure();
+  }, [measure, imageUrl, natural, bucketPreview]);
+  reactExports.useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro2 = new ResizeObserver(() => measure());
+    ro2.observe(wrap);
+    return () => ro2.disconnect();
+  }, [measure, imageUrl]);
+  reactExports.useEffect(() => {
+    setNatural(null);
+    onNaturalSize(null);
+  }, [imagePath, imageUrl, onNaturalSize]);
+  reactExports.useEffect(() => {
+    const img = imgRef.current;
+    if (!img || !imageUrl) return;
+    if (img.complete && img.naturalWidth > 0) {
+      const size = { w: img.naturalWidth, h: img.naturalHeight };
+      setNatural(size);
+      onNaturalSize(size);
+      measure();
+    }
+  }, [imageUrl, imagePath, measure, onNaturalSize]);
+  if (!imagePath || !imageUrl) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview empty", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Select an image from the list to preview" }) });
+  }
+  const crop = bucketPreview && bucket && natural ? coverCropRect(natural.w, natural.h, bucket.w, bucket.h, !bucket.allowUpscale) : null;
+  const overlayStyle = crop && display && natural ? {
+    left: display.left + crop.left / natural.w * display.width,
+    top: display.top + crop.top / natural.h * display.height,
+    width: crop.width / natural.w * display.width,
+    height: crop.height / natural.h * display.height
+  } : null;
+  const imgStyle = display ? {
+    position: "absolute",
+    left: display.left,
+    top: display.top,
+    width: display.width,
+    height: display.height,
+    maxWidth: "none",
+    maxHeight: "none"
+  } : void 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "image-preview", ref: wrapRef, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "img",
+      {
+        ref: imgRef,
+        src: imageUrl,
+        alt: "",
+        draggable: false,
+        style: imgStyle,
+        onLoad: (e) => {
+          const el = e.currentTarget;
+          const size = { w: el.naturalWidth, h: el.naturalHeight };
+          setNatural(size);
+          onNaturalSize(size);
+          measure();
+        }
+      }
+    ),
+    overlayStyle ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bucket-preview-overlay", style: overlayStyle, "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bucket-preview-grid-h" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bucket-preview-grid-h mid" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bucket-preview-grid-v" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bucket-preview-grid-v mid" })
+    ] }) : null
+  ] });
+}
+function DatasetEditView({
+  settings,
+  images,
+  selectedPath,
+  dirtyPaths,
+  busyPaths,
+  folder,
+  missingCount,
+  batchCaptioning,
+  captionBusy,
+  english,
+  translated,
+  translating,
+  translatingPath,
+  captioningPath,
+  dirty,
+  imageUrl,
+  trainResolutions,
+  draggingPane,
+  onStopBatchCaption,
+  onStartAutoCaption,
+  onSetListViewMode,
+  onThumbnailWidthChange,
+  onThumbnailWidthCommit,
+  onBucketPreviewChange,
+  onSelectImage,
+  onStartPaneResize,
+  onEnglishChange,
+  onTranslatedChange,
+  onLanguageChange,
+  onSave,
+  onRecaption
+}) {
+  const [naturalSize, setNaturalSize] = reactExports.useState(null);
+  const onNaturalSize = reactExports.useCallback((size) => {
+    setNaturalSize(size);
+  }, []);
+  const bucket = reactExports.useMemo(() => {
+    if (!naturalSize) return null;
+    return assignBucket(naturalSize.w, naturalSize.h, trainResolutions);
+  }, [naturalSize, trainResolutions]);
+  const bucketPreview = settings.bucketPreview;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "main",
+      style: {
+        "--sidebar-width": `${settings.sidebarWidth}px`,
+        "--right-pane-width": `${settings.rightPaneWidth}px`
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "sidebar", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-toolbar", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "list-toolbar-left", children: batchCaptioning ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onStopBatchCaption, children: "Cancel Auto Caption" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: onStartAutoCaption,
+                disabled: !folder || missingCount === 0 || captionBusy,
+                title: missingCount === 0 ? "All images already have .txt captions" : `Caption ${missingCount} image(s) without .txt`,
+                children: [
+                  "Auto Caption",
+                  missingCount > 0 ? ` (${missingCount})` : ""
+                ]
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-toolbar-right", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `list-toolbar-btn${settings.listViewMode === "list" ? " active" : ""}`,
+                  "aria-pressed": settings.listViewMode === "list",
+                  title: "List view",
+                  onClick: () => onSetListViewMode("list"),
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "path",
+                    {
+                      fill: "currentColor",
+                      d: "M1 2.5h12v1.5H1V2.5zm0 4h12V8H1V6.5zm0 4h12V12H1v-1.5z"
+                    }
+                  ) })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `list-toolbar-btn${settings.listViewMode === "thumbnails" ? " active" : ""}`,
+                  "aria-pressed": settings.listViewMode === "thumbnails",
+                  title: "Thumbnail view",
+                  onClick: () => onSetListViewMode("thumbnails"),
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "path",
+                    {
+                      fill: "currentColor",
+                      d: "M1 1h5v5H1V1zm7 0h5v5H8V1zM1 8h5v5H1V8zm7 0h5v5H8V8z"
+                    }
+                  ) })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "range",
+                  className: "list-toolbar-slider",
+                  min: 48,
+                  max: 160,
+                  step: 4,
+                  value: settings.thumbnailWidth,
+                  disabled: settings.listViewMode !== "thumbnails",
+                  title: "Thumbnail width",
+                  "aria-label": "Thumbnail width",
+                  onChange: (e) => onThumbnailWidthChange(Number(e.target.value)),
+                  onPointerUp: (e) => {
+                    onThumbnailWidthCommit(Number(e.currentTarget.value));
+                    e.currentTarget.blur();
+                  },
+                  onKeyUp: (e) => {
+                    onThumbnailWidthCommit(Number(e.currentTarget.value));
+                    e.currentTarget.blur();
+                  }
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sidebar-list", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ImageList,
+            {
+              images,
+              selectedPath,
+              dirtyPaths,
+              busyPaths,
+              viewMode: settings.listViewMode,
+              thumbnailWidth: settings.thumbnailWidth,
+              onSelect: onSelectImage
+            }
+          ) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: `pane-resizer${draggingPane === "sidebar" ? " dragging" : ""}`,
+            "aria-label": "Resize image list",
+            title: "Drag to resize",
+            onPointerDown: onStartPaneResize("sidebar")
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "center-pane", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "preview-toolbar", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "preview-toolbar-left", "aria-live": "polite", children: naturalSize ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "preview-size-label", title: "Original image size", children: [
+                naturalSize.w,
+                "×",
+                naturalSize.h
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "preview-size-arrow", "aria-hidden": "true", children: "→" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `preview-size-bucket${bucket && (bucket.w > naturalSize.w || bucket.h > naturalSize.h) ? " is-upscale" : ""}`,
+                  title: bucket ? `AR bucket (tier ${bucket.tier}${bucket.w > naturalSize.w || bucket.h > naturalSize.h ? ", upscale" : ""})` : "Bucket",
+                  children: bucket ? `${bucket.w}×${bucket.h}` : "—"
+                }
+              )
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "preview-size-muted", children: "—" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "preview-toolbar-right", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: `preview-toolbar-toggle${bucketPreview ? " active" : ""}`,
+                "aria-pressed": bucketPreview,
+                disabled: !naturalSize || !bucket,
+                title: "Show bucket crop region on preview",
+                onClick: () => onBucketPreviewChange(!bucketPreview),
+                children: "Bucket preview"
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ImagePreview,
+            {
+              imagePath: selectedPath,
+              imageUrl,
+              bucketPreview,
+              bucket,
+              onNaturalSize
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: `pane-resizer${draggingPane === "right" ? " dragging" : ""}`,
+            "aria-label": "Resize caption pane",
+            title: "Drag to resize",
+            onPointerDown: onStartPaneResize("right")
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "right-pane", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CaptionEditor,
+          {
+            english,
+            translated,
+            targetLanguage: settings.targetLanguage,
+            translating: Boolean(translating && translatingPath === selectedPath),
+            captioning: captioningPath !== null && captioningPath === selectedPath,
+            canSave: Boolean(selectedPath) && dirty && !captionBusy,
+            canRecaption: Boolean(selectedPath) && !captionBusy,
+            onEnglishChange,
+            onTranslatedChange,
+            onLanguageChange,
+            onSave,
+            onRecaption
+          }
+        ) })
+      ]
+    }
+  );
 }
 function DeleteConfirmDialog({ open, fileName, onConfirm, onCancel }) {
   const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
@@ -13073,102 +17322,3126 @@ function DeleteConfirmDialog({ open, fileName, onConfirm, onCancel }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
   if (!open) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "modal",
-      role: "dialog",
-      "aria-labelledby": "delete-title",
-      onClick: (e) => e.stopPropagation(),
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "delete-title", children: "Delete image" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
-          'Delete "',
-          fileName,
-          '" and its .txt caption file? Files will be moved to the Recycle Bin.'
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onCancel();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal",
+          role: "dialog",
+          "aria-labelledby": "delete-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "delete-title", children: "Delete image" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+              'Delete "',
+              fileName,
+              '" and its .txt caption file? Files will be moved to the Recycle Bin.'
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: focusBtn === "cancel" ? "kbd-focus" : void 0,
+                  onClick: onCancel,
+                  onMouseEnter: () => setFocusBtn("cancel"),
+                  children: "Cancel"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `danger${focusBtn === "delete" ? " kbd-focus" : ""}`,
+                  onClick: onConfirm,
+                  onMouseEnter: () => setFocusBtn("delete"),
+                  children: "Delete"
+                }
+              )
+            ] })
+          ]
+        }
+      )
+    }
+  );
+}
+function DownloadFolderField({ value, onChange, disabled = false }) {
+  const browse = async () => {
+    const dir = await window.api.openFolder();
+    if (!dir) return;
+    onChange(dir);
+  };
+  const useDefault = async () => {
+    const path = await window.api.defaultDownloadFolder();
+    onChange(path);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Download folder" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          value,
+          onChange: (e) => onChange(e.target.value),
+          placeholder: "Empty = AppData\\Roaming\\Captioer",
+          spellCheck: false,
+          disabled
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browse(), disabled, children: "Browse" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void useDefault(), disabled, children: "Default" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+      "Shared by Python install and model downloads. Uses ",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { children: [
+        "{folder}",
+        "/python"
+      ] }),
+      " and",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { children: [
+        "{folder}",
+        "/models"
+      ] }),
+      ". Empty defaults to",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "AppData\\Roaming\\Captioer" }),
+      "."
+    ] })
+  ] });
+}
+const DEFAULT_HINT = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+  "Shared by Dataset Edit (WD14 tagging) and LoRA Train. Leave empty to use",
+  " ",
+  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "python" }),
+  " from PATH."
+] });
+function PythonExecutableField({
+  value,
+  onChange,
+  downloadFolder,
+  enabled = true,
+  hint = DEFAULT_HINT
+}) {
+  const [probeStatus, setProbeStatus] = reactExports.useState("checking");
+  const [probeMsg, setProbeMsg] = reactExports.useState(null);
+  const [installing, setInstalling] = reactExports.useState(false);
+  const [installMsg, setInstallMsg] = reactExports.useState(null);
+  const [installPct, setInstallPct] = reactExports.useState(0);
+  const probeTimer = reactExports.useRef(null);
+  const offProgress = reactExports.useRef(null);
+  const runProbe = async (pythonPath) => {
+    setProbeStatus("checking");
+    setProbeMsg(null);
+    try {
+      const result = await window.api.probePython(pythonPath.trim() || void 0);
+      setProbeStatus(result.status);
+      setProbeMsg(result.message);
+    } catch (err) {
+      setProbeStatus("error");
+      setProbeMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+  reactExports.useEffect(() => {
+    if (!enabled) return;
+    if (probeTimer.current) clearTimeout(probeTimer.current);
+    probeTimer.current = setTimeout(() => {
+      void runProbe(value);
+    }, 400);
+    return () => {
+      if (probeTimer.current) clearTimeout(probeTimer.current);
+    };
+  }, [value, enabled]);
+  reactExports.useEffect(() => {
+    return () => {
+      offProgress.current?.();
+      offProgress.current = null;
+    };
+  }, []);
+  const browsePython = async () => {
+    const file = await window.api.openFile({
+      title: "Select Python executable",
+      filters: [
+        { name: "Python", extensions: ["exe"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    if (!file) return;
+    onChange(file);
+  };
+  const startInstall = async () => {
+    if (installing) return;
+    setInstalling(true);
+    setInstallMsg("Starting…");
+    setInstallPct(0);
+    offProgress.current?.();
+    offProgress.current = window.api.onPythonInstallProgress((p) => {
+      setInstallMsg(p.message);
+      setInstallPct(p.pct);
+    });
+    try {
+      const result = await window.api.installPython({
+        installPath: pythonInstallPathFromDownloadFolder(downloadFolder)
+      });
+      if (result.ok && result.pythonPath) {
+        setInstallMsg(null);
+        onChange(result.pythonPath);
+      } else {
+        setInstallMsg(null);
+        setProbeStatus("error");
+        setProbeMsg(result.message || "Install failed");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setInstallMsg(null);
+      setProbeStatus("error");
+      setProbeMsg(msg);
+    } finally {
+      offProgress.current?.();
+      offProgress.current = null;
+      setInstalling(false);
+    }
+  };
+  const cancelInstall = async () => {
+    await window.api.cancelPythonInstall();
+    setInstalling(false);
+    setInstallMsg(null);
+    setProbeMsg("Cancelled");
+    setProbeStatus("error");
+  };
+  const showDownload = !installing && (probeStatus === "missingPython" || probeStatus === "missingPackages" || probeStatus === "error");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "python-executable-field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Python executable" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            value,
+            onChange: (e) => onChange(e.target.value),
+            placeholder: "e.g. C:\\Python311\\python.exe or python",
+            spellCheck: false,
+            disabled: installing
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browsePython(), disabled: installing, children: "Browse" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "field", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row python-probe-row", children: [
+      probeStatus === "checking" && !installing && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Checking Python…" }),
+      !installing && probeStatus === "ready" && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: probeMsg }),
+      !installing && (probeStatus === "missingPython" || probeStatus === "missingPackages" || probeStatus === "error") && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: probeMsg }),
+      showDownload && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => void startInstall(), children: "Download" }),
+      installing && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+          installMsg || "Installing…",
+          installPct > 0 ? ` (${installPct}%)` : ""
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: focusBtn === "cancel" ? "kbd-focus" : void 0,
-              onClick: onCancel,
-              onMouseEnter: () => setFocusBtn("cancel"),
-              children: "Cancel"
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => void cancelInstall(), children: "Cancel" })
+      ] })
+    ] }) }),
+    hint != null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: hint })
+  ] });
+}
+function LoraTrainSettingsDialog({ open, settings, onClose, onSave }) {
+  const [draft, setDraft] = reactExports.useState(() => normalizeLoraTrainApp(settings));
+  const [saving, setSaving] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    setDraft(normalizeLoraTrainApp(settings));
+  }, [open, settings]);
+  if (!open) return null;
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(normalizeLoraTrainApp(draft));
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+  const resetDefaults = () => {
+    setDraft({ ...DEFAULT_LORA_TRAIN_APP });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onClose();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal modal-wide",
+          role: "dialog",
+          "aria-labelledby": "lora-settings-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "lora-settings-title", children: "LoRA Train Settings" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Captioer native Krea 2 trainer preferences. Job hyper-parameters live on the LoRA Train panel. Train on Raw, use LoRA on Turbo." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              DownloadFolderField,
+              {
+                value: draft.downloadFolder,
+                onChange: (downloadFolder) => setDraft((prev) => ({ ...prev, downloadFolder }))
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              PythonExecutableField,
+              {
+                value: draft.pythonPath,
+                onChange: (pythonPath) => setDraft((prev) => ({ ...prev, pythonPath })),
+                downloadFolder: draft.downloadFolder,
+                enabled: open,
+                hint: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                  "Same setting as Dataset Edit Settings. Download installs CUDA torch 2.9.1 (cu128), packages from ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "trainer/requirements.txt" }),
+                  " and",
+                  " ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "trainer/requirements-wd14.txt" }),
+                  ", and on Windows",
+                  " ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "triton-windows" }),
+                  " and ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "flash-attn" }),
+                  " (FA2 wheel)."
+                ] })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Hugging Face token (for gated Krea models)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "password",
+                  value: draft.huggingfaceToken,
+                  onChange: (e) => setDraft((prev) => ({ ...prev, huggingfaceToken: e.target.value })),
+                  placeholder: "hf_… from huggingface.co/settings/tokens",
+                  autoComplete: "off"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+                "Also open",
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "a",
+                  {
+                    href: "https://huggingface.co/krea/Krea-2-Raw",
+                    target: "_blank",
+                    rel: "noreferrer",
+                    children: "krea/Krea-2-Raw"
+                  }
+                ),
+                " ",
+                "(and Turbo) while logged in and click Agree — token alone is not enough."
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetDefaults, children: "Reset defaults" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, children: "Cancel" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: "primary",
+                  onClick: () => void handleSave(),
+                  disabled: saving,
+                  children: saving ? "Saving…" : "Save"
+                }
+              )
+            ] })
+          ]
+        }
+      )
+    }
+  );
+}
+function serializeTrainConfig(job, extras) {
+  const payload = {
+    ...job,
+    model: {
+      ...job.model,
+      name_or_path: job.model.train_name_or_path || job.model.name_or_path,
+      train_name_or_path: job.model.train_name_or_path || job.model.name_or_path,
+      arch: job.model.arch || "krea2"
+    },
+    huggingface_token: extras?.huggingface_token || void 0,
+    resume_from: extras?.resume_from || void 0
+  };
+  return `${JSON.stringify(payload, null, 2)}
+`;
+}
+function GpuDeviceSelect({ value, onChange, enabled = true }) {
+  const [devices, setDevices] = reactExports.useState([]);
+  const [loading, setLoading] = reactExports.useState(false);
+  const refresh = reactExports.useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await window.api.listGpuDevices();
+      setDevices(list);
+    } catch {
+      setDevices([{ id: "cuda:0", label: "cuda:0 (not detected)" }]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    if (!enabled) return;
+    void refresh();
+  }, [enabled, refresh]);
+  const options = reactExports.useMemo(() => {
+    if (!value || devices.some((d) => d.id === value)) return devices;
+    return [{ id: value, label: `${value} (saved)` }, ...devices];
+  }, [devices, value]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "select",
+      {
+        value: value || options[0]?.id || "cuda:0",
+        disabled: loading && options.length === 0,
+        "aria-label": "CUDA device",
+        onChange: (e) => onChange(e.target.value),
+        children: options.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "cuda:0", children: loading ? "Detecting…" : "cuda:0" }) : options.map((d) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: d.id, children: d.label }, d.id))
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void refresh(), disabled: loading, children: loading ? "Detecting…" : "Refresh" })
+  ] });
+}
+function RestartTrainWarningDialog({
+  open,
+  jobName,
+  checkpointStep,
+  onConfirm,
+  onCancel
+}) {
+  const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
+  const focusRef = reactExports.useRef("cancel");
+  focusRef.current = focusBtn;
+  const onConfirmRef = reactExports.useRef(onConfirm);
+  const onCancelRef = reactExports.useRef(onCancel);
+  onConfirmRef.current = onConfirm;
+  onCancelRef.current = onCancel;
+  reactExports.useEffect(() => {
+    if (!open) return;
+    setFocusBtn("cancel");
+  }, [open]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancelRef.current();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        setFocusBtn((prev) => prev === "cancel" ? "restart" : "cancel");
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (focusRef.current === "restart") onConfirmRef.current();
+        else onCancelRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
+  if (!open) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onCancel();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal",
+          role: "dialog",
+          "aria-labelledby": "restart-train-warning-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "restart-train-warning-title", children: "Overwrite existing checkpoints?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+              'Restarting "',
+              jobName,
+              '" will start training again from step 0 and may overwrite checkpoints that already exist in the output folder.'
+            ] }),
+            checkpointStep !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+              "Latest detected checkpoint: step ",
+              checkpointStep,
+              "."
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: focusBtn === "cancel" ? "kbd-focus" : void 0,
+                  onClick: onCancel,
+                  onMouseEnter: () => setFocusBtn("cancel"),
+                  children: "Cancel"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `danger${focusBtn === "restart" ? " kbd-focus" : ""}`,
+                  onClick: onConfirm,
+                  onMouseEnter: () => setFocusBtn("restart"),
+                  children: "Restart"
+                }
+              )
+            ] })
+          ]
+        }
+      )
+    }
+  );
+}
+const MIN_VRAM_APP_SLOTS = 12;
+const VRAM_APP_ROW_FALLBACK_PX = 22;
+function clampPercent(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
+function formatGiB(bytes) {
+  const gib = bytes / (1024 * 1024 * 1024);
+  return `${gib.toFixed(1)} GB`;
+}
+function formatMiBAsGiB(mib) {
+  return `${(mib / 1024).toFixed(1)} GB`;
+}
+function formatWatts(value) {
+  return `${value.toFixed(0)} W`;
+}
+function formatVramAppMem(mib) {
+  if (mib >= 1024) return `${(mib / 1024).toFixed(1)} GB`;
+  return `${mib < 10 ? mib.toFixed(1) : Math.round(mib)} MB`;
+}
+function MonitorHeader({ label, meta }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-monitor-header", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-header-label", children: label }),
+    meta ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-header-meta", title: meta, children: meta }) : null
+  ] });
+}
+function Meter({
+  label,
+  valueLabel,
+  percent
+}) {
+  const pct = clampPercent(percent);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-monitor-meter", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-monitor-meter-head", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-meter-value", children: valueLabel })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-monitor-bar", "aria-hidden": true, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-monitor-bar-fill", style: { width: `${pct}%` } }) })
+  ] });
+}
+function ResourceMonitorPane({ device }) {
+  const [stats, setStats] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [killingPid, setKillingPid] = reactExports.useState(null);
+  const [appSlots, setAppSlots] = reactExports.useState(MIN_VRAM_APP_SLOTS);
+  const appListRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const next = await window.api.getResourceStats(device);
+        if (cancelled) return;
+        setStats(next);
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to read stats");
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 1e3);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [device]);
+  reactExports.useEffect(() => {
+    const el = appListRef.current;
+    if (!el) return;
+    const updateSlots = () => {
+      const h = el.clientHeight;
+      if (h <= 0) {
+        setAppSlots(MIN_VRAM_APP_SLOTS);
+        return;
+      }
+      const styles = getComputedStyle(el);
+      const gap = Number.parseFloat(styles.rowGap || styles.gap) || 3.2;
+      const sample = el.querySelector(".lora-monitor-app-row");
+      const rowH = sample?.getBoundingClientRect().height || VRAM_APP_ROW_FALLBACK_PX;
+      const stride = rowH + gap;
+      const fit = stride > 0 ? Math.floor((h + gap) / stride) : MIN_VRAM_APP_SLOTS;
+      setAppSlots(Math.max(MIN_VRAM_APP_SLOTS, Number.isFinite(fit) ? fit : MIN_VRAM_APP_SLOTS));
+    };
+    updateSlots();
+    const ro2 = new ResizeObserver(() => updateSlots());
+    ro2.observe(el);
+    return () => ro2.disconnect();
+  }, [stats?.gpu?.apps?.length]);
+  const onKill = async (pid) => {
+    setKillingPid(pid);
+    try {
+      const result = await window.api.killProcess(pid);
+      if (!result.ok) {
+        setError(result.error || "Failed to kill process");
+      } else {
+        setStats((prev) => {
+          if (!prev?.gpu) return prev;
+          return {
+            ...prev,
+            gpu: {
+              ...prev.gpu,
+              apps: prev.gpu.apps.filter((a) => a.pid !== pid)
             }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
+          };
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to kill process");
+    } finally {
+      setKillingPid(null);
+    }
+  };
+  const ramPct = stats && stats.ramTotalBytes > 0 ? stats.ramUsedBytes / stats.ramTotalBytes * 100 : 0;
+  const vramPct = stats?.gpu && stats.gpu.memTotalMiB > 0 ? stats.gpu.memUsedMiB / stats.gpu.memTotalMiB * 100 : 0;
+  const powerPct = stats?.gpu && stats.gpu.powerDrawW !== null && stats.gpu.powerLimitW !== null && stats.gpu.powerLimitW > 0 ? stats.gpu.powerDrawW / stats.gpu.powerLimitW * 100 : 0;
+  const powerLabel = stats?.gpu && stats.gpu.powerDrawW !== null ? stats.gpu.powerLimitW !== null ? `${formatWatts(stats.gpu.powerDrawW)} / ${formatWatts(stats.gpu.powerLimitW)}` : formatWatts(stats.gpu.powerDrawW) : "—";
+  const appsAll = stats?.gpu?.apps ?? [];
+  const apps = appsAll.slice(0, appSlots);
+  const cpuMeta = stats?.cpuName || "—";
+  const gpuMeta = stats?.gpu?.name ? `${device || "—"}  ${stats.gpu.name}` : device || "—";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lora-monitor", "aria-label": "System resource monitor", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "lora-monitor-title", children: "Monitor" }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-error", children: error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "lora-monitor-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MonitorHeader, { label: "CPU", meta: cpuMeta }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Meter,
+        {
+          label: "Usage",
+          valueLabel: stats ? `${stats.cpuPercent.toFixed(0)}%` : "—",
+          percent: stats?.cpuPercent ?? 0
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Meter,
+        {
+          label: "RAM",
+          valueLabel: stats ? `${formatGiB(stats.ramUsedBytes)} / ${formatGiB(stats.ramTotalBytes)}` : "—",
+          percent: ramPct
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "lora-monitor-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MonitorHeader, { label: "GPU", meta: gpuMeta }),
+      stats?.gpu ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Meter,
+          {
+            label: "Usage",
+            valueLabel: `${stats.gpu.utilPercent.toFixed(0)}%`,
+            percent: stats.gpu.utilPercent
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Meter,
+          {
+            label: "VRAM",
+            valueLabel: `${formatMiBAsGiB(stats.gpu.memUsedMiB)} / ${formatMiBAsGiB(stats.gpu.memTotalMiB)}`,
+            percent: vramPct
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Meter, { label: "Power", valueLabel: powerLabel, percent: powerPct }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lora-monitor-temp", children: [
+          "Temp",
+          " ",
+          stats.gpu.tempC !== null ? `${stats.gpu.tempC.toFixed(0)}°C` : "—"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-monitor-apps", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(MonitorHeader, { label: "VRAM apps" }),
+          appsAll.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無佔用行程" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-monitor-app-list", ref: appListRef, children: apps.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "li",
             {
-              type: "button",
-              className: `danger${focusBtn === "delete" ? " kbd-focus" : ""}`,
-              onClick: onConfirm,
-              onMouseEnter: () => setFocusBtn("delete"),
-              children: "Delete"
+              className: "lora-monitor-app-row",
+              title: `PID ${app.pid}`,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-app-name", children: app.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-app-mem", children: formatVramAppMem(app.memUsedMiB) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "lora-monitor-app-kill",
+                    disabled: !app.killable || killingPid === app.pid,
+                    title: app.killable ? `結束 ${app.name}` : "系統行程，無法結束",
+                    "aria-label": app.killable ? `結束 ${app.name}` : "系統行程，無法結束",
+                    onClick: () => void onKill(app.pid),
+                    children: "×"
+                  }
+                )
+              ]
+            },
+            app.pid
+          )) })
+        ] })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無法讀取 GPU 狀態" })
+    ] })
+  ] });
+}
+function looksLikeHfRepoId(value) {
+  const s = value.trim();
+  if (!s || s.includes("\\") || s.startsWith("/") || s.startsWith(".")) return false;
+  if (s.length >= 2 && s[1] === ":") return false;
+  if (s.startsWith("~")) return false;
+  const parts = s.split("/");
+  return parts.length === 2 && parts.every(Boolean) && !parts.some((p) => p.includes(" "));
+}
+function resolveDownloadRepoId(st) {
+  if (!st) return null;
+  if (st.repoId?.trim()) return st.repoId.trim();
+  if (looksLikeHfRepoId(st.path)) return st.path.trim();
+  return null;
+}
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  const digits = i === 0 ? 0 : v >= 10 ? 1 : 2;
+  return `${v.toFixed(digits)} ${units[i]}`;
+}
+function downloadInputLabel(pct, done, total) {
+  if (total > 0) {
+    return `Downloading … ${formatBytes(done)} / ${formatBytes(total)} ${pct}%`;
+  }
+  return `Downloading … ${pct}%`;
+}
+function folderLabel$1(dir) {
+  return dir.split(/[/\\]/).pop() ?? dir;
+}
+const TRAIN_LOG_MAX_LINES = 2e3;
+const LOSS_HISTORY_MAX_POINTS = 2e3;
+function cumulativeAvgLoss(points, endIndex) {
+  let sum = 0;
+  for (let i = 0; i <= endIndex; i++) sum += points[i].loss;
+  return sum / (endIndex + 1);
+}
+function formatHms(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1e3));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor(totalSec % 3600 / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+function sampleStepLabel(item) {
+  return typeof item.step === "number" && Number.isFinite(item.step) ? `Step ${item.step}` : "Unknown step";
+}
+function samplePromptIndex(item) {
+  const n = item.promptIndex;
+  return typeof n === "number" && Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+const SAMPLE_CARD_WIDTH_PX = 160;
+const SAMPLE_CARD_GAP_PX = 10.4;
+function SamplePromptStrip({
+  items,
+  onOpen
+}) {
+  const stripRef = reactExports.useRef(null);
+  const [visibleCount, setVisibleCount] = reactExports.useState(items.length);
+  reactExports.useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const update = () => {
+      const width = el.clientWidth;
+      if (width <= 0) {
+        setVisibleCount(1);
+        return;
+      }
+      const stride = SAMPLE_CARD_WIDTH_PX + SAMPLE_CARD_GAP_PX;
+      const fit = Math.max(1, Math.floor((width + SAMPLE_CARD_GAP_PX) / stride));
+      setVisibleCount(Math.min(items.length, fit));
+    };
+    update();
+    const ro2 = new ResizeObserver(update);
+    ro2.observe(el);
+    return () => ro2.disconnect();
+  }, [items.length]);
+  const visible = items.slice(0, visibleCount);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-sample-strip", ref: stripRef, children: visible.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      className: "lora-train-sample-card",
+      onClick: () => onOpen(item.path),
+      title: `Open ${item.name}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "img",
+          {
+            src: window.api.toLocalUrl(item.path),
+            alt: `${sampleStepLabel(item)} sample`,
+            className: "lora-train-sample-thumb",
+            loading: "lazy"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-train-sample-meta", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-train-sample-step", children: sampleStepLabel(item) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-train-sample-name", title: item.name, children: item.name })
+        ] })
+      ]
+    },
+    item.path
+  )) });
+}
+const SECTIONS = [
+  { id: "basics", label: "Basics", hint: "Name, output, models" },
+  { id: "dataset", label: "Dataset", hint: "Images + captions" },
+  { id: "train", label: "Train", hint: "Steps, LR, optimizer" },
+  { id: "lora", label: "LoRA", hint: "Rank & alpha" },
+  { id: "sample", label: "Sample", hint: "Preview during train" },
+  { id: "advanced", label: "Advanced", hint: "Save, EMA, VRAM" }
+];
+const RESOLUTION_OPTIONS = [256, 512, 768, 1024, 1280, 1328, 1536, 2048];
+const SEC_PER_STEP_AVG_WINDOW = 10;
+function Field({
+  label,
+  children,
+  hint
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }),
+    children,
+    hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: hint }) : null
+  ] });
+}
+function LossChart({
+  points,
+  showLoss = true,
+  showAvgLoss = true
+}) {
+  const wrapRef = reactExports.useRef(null);
+  const [size, setSize] = reactExports.useState({ w: 640, h: 220 });
+  reactExports.useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setSize({
+        w: Math.max(1, Math.floor(r.width)),
+        h: Math.max(1, Math.floor(r.height))
+      });
+    };
+    update();
+    const ro2 = new ResizeObserver(update);
+    ro2.observe(el);
+    return () => ro2.disconnect();
+  }, []);
+  const vbW = size.w;
+  const vbH = size.h;
+  const padL = 58;
+  const padR = 16;
+  const padT = 14;
+  const padB = 28;
+  const plotW = Math.max(1, vbW - padL - padR);
+  const plotH = Math.max(1, vbH - padT - padB);
+  if (points.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-chart-wrap", ref: wrapRef, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "svg",
+        {
+          className: "lora-train-loss-chart",
+          viewBox: `0 0 ${vbW} ${vbH}`,
+          width: vbW,
+          height: vbH,
+          role: "img",
+          "aria-label": "Loss chart",
+          preserveAspectRatio: "none",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "rect",
+            {
+              x: padL,
+              y: padT,
+              width: plotW,
+              height: plotH,
+              className: "lora-train-loss-plot-bg"
             }
           )
-        ] })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-loss-empty", children: "Waiting for loss…" })
+    ] });
+  }
+  const avgPoints = [];
+  for (let i = 0; i < points.length; i++) {
+    avgPoints.push({
+      step: points[i].step,
+      loss: cumulativeAvgLoss(points, i)
+    });
+  }
+  let minStep = points[0].step;
+  let maxStep = points[0].step;
+  let dataMaxLoss = 0;
+  let hasVisible = false;
+  for (const p of points) {
+    if (p.step < minStep) minStep = p.step;
+    if (p.step > maxStep) maxStep = p.step;
+    if (showLoss && p.loss > dataMaxLoss) {
+      dataMaxLoss = p.loss;
+      hasVisible = true;
+    }
+  }
+  if (showAvgLoss) {
+    for (const p of avgPoints) {
+      if (p.loss > dataMaxLoss) {
+        dataMaxLoss = p.loss;
+        hasVisible = true;
+      }
+    }
+  }
+  if (!hasVisible) dataMaxLoss = 0.1;
+  const stepSpan = Math.max(1, maxStep - minStep);
+  const lossMin = 0;
+  const lossMax = Math.max(0.1, Math.ceil(dataMaxLoss * 10 - 1e-12) / 10);
+  const lossSpan = Math.max(lossMax - lossMin, 1e-9);
+  const toX = (step) => padL + (step - minStep) / stepSpan * plotW;
+  const toY = (loss) => padT + (1 - (loss - lossMin) / lossSpan) * plotH;
+  const polyline = points.map((p) => `${toX(p.step).toFixed(2)},${toY(p.loss).toFixed(2)}`).join(" ");
+  const avgPolyline = avgPoints.map((p) => `${toX(p.step).toFixed(2)},${toY(p.loss).toFixed(2)}`).join(" ");
+  const last = points[points.length - 1];
+  const lastAvg = avgPoints[avgPoints.length - 1];
+  const lastX = toX(last.step);
+  const lastY = toY(last.loss);
+  const lastAvgX = toX(lastAvg.step);
+  const lastAvgY = toY(lastAvg.loss);
+  const yTicks = [];
+  for (let i = 0; i <= 10; i++) {
+    yTicks.push(lossMax - i / 10 * (lossMax - lossMin));
+  }
+  const xTicks = [];
+  for (let i = 0; i <= 10; i++) {
+    xTicks.push(Math.round(minStep + i / 10 * (maxStep - minStep)));
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-loss-chart-wrap", ref: wrapRef, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "svg",
+    {
+      className: "lora-train-loss-chart",
+      viewBox: `0 0 ${vbW} ${vbH}`,
+      width: vbW,
+      height: vbH,
+      role: "img",
+      "aria-label": `Loss chart, latest ${last.loss.toFixed(4)}, avg ${lastAvg.loss.toFixed(4)} at step ${last.step}`,
+      preserveAspectRatio: "none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: padL, y: padT, width: plotW, height: plotH, className: "lora-train-loss-plot-bg" }),
+        yTicks.map((v, i) => {
+          const y = toY(v);
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "line",
+              {
+                x1: padL,
+                y1: y,
+                x2: padL + plotW,
+                y2: y,
+                className: "lora-train-loss-grid"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: padL - 8, y: y + 3, textAnchor: "end", className: "lora-train-loss-axis", children: v.toFixed(3) })
+          ] }, `y-${i}`);
+        }),
+        xTicks.map((v, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "text",
+          {
+            x: toX(v),
+            y: padT + plotH + 18,
+            textAnchor: "middle",
+            className: "lora-train-loss-axis",
+            children: v
+          },
+          `x-${i}`
+        )),
+        showLoss ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: polyline, fill: "none", className: "lora-train-loss-line" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: lastX, cy: lastY, r: 3.5, className: "lora-train-loss-dot" })
+        ] }) : null,
+        showAvgLoss ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: avgPolyline, fill: "none", className: "lora-train-loss-line-avg" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: lastAvgX, cy: lastAvgY, r: 3, className: "lora-train-loss-dot-avg" })
+        ] }) : null
       ]
     }
   ) });
 }
-function ImageList({
-  images,
-  selectedPath,
-  dirtyPaths,
-  viewMode,
-  thumbnailWidth,
-  onSelect
+function ToggleField({
+  label,
+  checked,
+  onChange,
+  hint,
+  disabled
 }) {
-  const selectedRef = reactExports.useRef(null);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `lora-toggle${checked ? " is-on" : ""}${disabled ? " is-disabled" : ""}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              role: "switch",
+              className: "lora-switch",
+              "aria-checked": checked,
+              "aria-label": label,
+              disabled,
+              onClick: () => onChange(!checked),
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-toggle-label", children: label })
+        ]
+      }
+    ),
+    hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: hint }) : null
+  ] });
+}
+function NumberField({
+  value,
+  emptyFallback,
+  onChange,
+  disabled,
+  min,
+  max,
+  step
+}) {
+  const [text, setText] = reactExports.useState(() => String(value));
+  const focusedRef = reactExports.useRef(false);
   reactExports.useEffect(() => {
-    selectedRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selectedPath, viewMode]);
-  if (images.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-list empty", children: "No images. Open a folder to begin." });
-  }
-  const isThumbnails = viewMode === "thumbnails";
+    if (!focusedRef.current) {
+      setText(String(value));
+    }
+  }, [value]);
+  const commit = (raw) => {
+    const trimmed = raw.trim();
+    if (trimmed === "" || !Number.isFinite(Number(trimmed))) {
+      setText(String(emptyFallback));
+      onChange(emptyFallback);
+      return;
+    }
+    const n = Number(trimmed);
+    setText(String(n));
+    onChange(n);
+  };
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "ul",
+    "input",
     {
-      className: `image-list${isThumbnails ? " thumbnails" : ""}`,
-      style: isThumbnails ? { "--thumb-w": `${thumbnailWidth}px` } : void 0,
-      children: images.map((img) => {
-        const selected = img.path === selectedPath;
-        const dirty = dirtyPaths.has(img.path);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            ref: selected ? selectedRef : void 0,
-            className: `image-list-item${selected ? " selected" : ""}${isThumbnails ? " thumb" : ""}`,
-            tabIndex: -1,
-            onMouseDown: (e) => e.preventDefault(),
-            onClick: () => onSelect(img.path),
-            children: [
-              isThumbnails && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "image-list-thumb", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: window.api.toLocalUrl(img.path), alt: "", loading: "lazy" }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-meta", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-list-name", title: img.name, children: [
-                  dirty ? "● " : "",
-                  img.name
-                ] }),
-                !img.hasCaption && !dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge missing", title: "No caption file", children: "no txt" }),
-                dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge dirty", children: "unsaved" })
-              ] })
-            ]
-          }
-        ) }, img.path);
-      })
+      type: "number",
+      min,
+      max,
+      step,
+      disabled,
+      value: text,
+      onFocus: () => {
+        focusedRef.current = true;
+      },
+      onChange: (e) => {
+        const next = e.target.value;
+        setText(next);
+        if (next.trim() === "") return;
+        const n = Number(next);
+        if (Number.isFinite(n)) onChange(n);
+      },
+      onBlur: () => {
+        focusedRef.current = false;
+        commit(text);
+      }
     }
   );
 }
-function ImagePreview({ imagePath, imageUrl }) {
-  if (!imagePath || !imageUrl) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview empty", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Select an image from the list to preview" }) });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "image-preview", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageUrl, alt: "" }) });
+function LoraTrainView({
+  job,
+  appSettings,
+  datasetFolders,
+  onChange,
+  onStatus,
+  onTrainingChange
+}) {
+  const [draft, setDraft] = reactExports.useState(() => normalizeLoraTrainJob(job));
+  const [activeSection, setActiveSection] = reactExports.useState("basics");
+  const [training, setTraining] = reactExports.useState(false);
+  const [showTrainSession, setShowTrainSession] = reactExports.useState(false);
+  const [trainComplete, setTrainComplete] = reactExports.useState(false);
+  const [trainFailed, setTrainFailed] = reactExports.useState(false);
+  const userStoppedTrainRef = reactExports.useRef(false);
+  const [progress, setProgress] = reactExports.useState(null);
+  const [trainLogs, setTrainLogs] = reactExports.useState([]);
+  const [lossHistory, setLossHistory] = reactExports.useState([]);
+  const [showLossCurve, setShowLossCurve] = reactExports.useState(true);
+  const [showAvgLossCurve, setShowAvgLossCurve] = reactExports.useState(true);
+  const [resultsTab, setResultsTab] = reactExports.useState("loss");
+  const [trainSamples, setTrainSamples] = reactExports.useState([]);
+  const [sampleLoading, setSampleLoading] = reactExports.useState(false);
+  const [sampleError, setSampleError] = reactExports.useState(null);
+  const [sampleLightboxPath, setSampleLightboxPath] = reactExports.useState(null);
+  const [trainStartedAt, setTrainStartedAt] = reactExports.useState(null);
+  const [finalElapsedMs, setFinalElapsedMs] = reactExports.useState(null);
+  const [nowTick, setNowTick] = reactExports.useState(() => Date.now());
+  const [secPerStepAvg, setSecPerStepAvg] = reactExports.useState(null);
+  const stepTimingRef = reactExports.useRef([]);
+  const trainStartedAtRef = reactExports.useRef(null);
+  const logEndRef = reactExports.useRef(null);
+  const [modelStatuses, setModelStatuses] = reactExports.useState([]);
+  const [modelChecking, setModelChecking] = reactExports.useState(false);
+  const [modelCheckError, setModelCheckError] = reactExports.useState(null);
+  const [dlCurrent, setDlCurrent] = reactExports.useState(null);
+  const [dlPct, setDlPct] = reactExports.useState(0);
+  const [dlDone, setDlDone] = reactExports.useState(0);
+  const [dlTotal, setDlTotal] = reactExports.useState(0);
+  const [bucketScanBusy, setBucketScanBusy] = reactExports.useState(false);
+  const [bucketScanError, setBucketScanError] = reactExports.useState(null);
+  const [bucketCounts, setBucketCounts] = reactExports.useState(
+    null
+  );
+  const [bucketScanMeta, setBucketScanMeta] = reactExports.useState(null);
+  const [outputCheckpoint, setOutputCheckpoint] = reactExports.useState(null);
+  const [showRestartWarning, setShowRestartWarning] = reactExports.useState(false);
+  const skipPersist = reactExports.useRef(true);
+  const draftRef = reactExports.useRef(draft);
+  draftRef.current = draft;
+  const persistTimer = reactExports.useRef(null);
+  const sampleRefreshTimer = reactExports.useRef(null);
+  const modelStatusesRef = reactExports.useRef(modelStatuses);
+  modelStatusesRef.current = modelStatuses;
+  const dlQueueRef = reactExports.useRef([]);
+  const downloadingRef = reactExports.useRef(false);
+  const appSettingsRef = reactExports.useRef(appSettings);
+  appSettingsRef.current = appSettings;
+  reactExports.useEffect(() => {
+    skipPersist.current = true;
+    const next = normalizeLoraTrainJob(job);
+    setDraft(next);
+  }, [job]);
+  reactExports.useEffect(() => {
+    onTrainingChange?.(training);
+  }, [training, onTrainingChange]);
+  const resetStepTiming = reactExports.useCallback(() => {
+    stepTimingRef.current = [];
+    setSecPerStepAvg(null);
+  }, []);
+  const recordStepTiming = reactExports.useCallback((step) => {
+    const now2 = Date.now();
+    const hist = stepTimingRef.current;
+    hist.push({ step, at: now2 });
+    while (hist.length > SEC_PER_STEP_AVG_WINDOW + 1) hist.shift();
+    if (hist.length < 2) {
+      setSecPerStepAvg(null);
+      return;
+    }
+    const samples = [];
+    for (let i = 1; i < hist.length; i++) {
+      const dStep = hist[i].step - hist[i - 1].step;
+      const dMs = hist[i].at - hist[i - 1].at;
+      if (dStep > 0 && dMs > 0) samples.push(dMs / 1e3 / dStep);
+    }
+    setSecPerStepAvg(
+      samples.length > 0 ? samples.reduce((a, b) => a + b, 0) / samples.length : null
+    );
+  }, []);
+  const patch = reactExports.useCallback((updater) => {
+    setDraft((prev) => updater(prev));
+  }, []);
+  const refreshTrainSamples = reactExports.useCallback(async () => {
+    const d = draftRef.current;
+    const trainingFolder = (d.training_folder || "").trim();
+    const jobName = (d.name || "").trim();
+    if (!trainingFolder || !jobName) {
+      setTrainSamples([]);
+      setSampleError(null);
+      setSampleLoading(false);
+      return;
+    }
+    setSampleLoading(true);
+    try {
+      const result = await window.api.listTrainSamples({ trainingFolder, jobName });
+      if (!result.ok) {
+        setTrainSamples([]);
+        setSampleError(result.error || "Failed to load sample images");
+        return;
+      }
+      setTrainSamples(result.samples || []);
+      setSampleError(null);
+    } catch (err) {
+      setTrainSamples([]);
+      setSampleError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSampleLoading(false);
+    }
+  }, []);
+  const queueRefreshTrainSamples = reactExports.useCallback((delayMs = 300) => {
+    if (sampleRefreshTimer.current) clearTimeout(sampleRefreshTimer.current);
+    sampleRefreshTimer.current = setTimeout(() => {
+      sampleRefreshTimer.current = null;
+      void refreshTrainSamples();
+    }, delayMs);
+  }, [refreshTrainSamples]);
+  const refreshResumeTarget = reactExports.useCallback(async () => {
+    const d = draftRef.current;
+    const folder = (d.training_folder || "").trim();
+    const name = (d.name || "").trim();
+    const steps = Number(d.train.steps) || 0;
+    if (!folder || !name) {
+      setOutputCheckpoint(null);
+      return;
+    }
+    try {
+      const result = await window.api.listTrainCheckpoints({
+        trainingFolder: folder,
+        jobName: name
+      });
+      if (!result.ok) {
+        setOutputCheckpoint(null);
+        return;
+      }
+      const list = result.checkpoints || [];
+      if (list.length === 0) {
+        setOutputCheckpoint(null);
+        return;
+      }
+      const latest = list[list.length - 1];
+      if (latest.step <= 0) {
+        setOutputCheckpoint(null);
+        return;
+      }
+      if (latest.step < steps) {
+        setOutputCheckpoint({ kind: "resume", step: latest.step, path: latest.path });
+      } else {
+        setOutputCheckpoint({ kind: "done", step: latest.step, path: latest.path });
+      }
+    } catch {
+      setOutputCheckpoint(null);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    if (showTrainSession || training) return;
+    const t = setTimeout(() => {
+      void refreshResumeTarget();
+    }, 250);
+    return () => clearTimeout(t);
+  }, [
+    draft.training_folder,
+    draft.name,
+    draft.train.steps,
+    showTrainSession,
+    training,
+    refreshResumeTarget
+  ]);
+  const refreshModelStatus = reactExports.useCallback(async () => {
+    setModelChecking(true);
+    setModelCheckError(null);
+    try {
+      const d = draftRef.current;
+      const settings = appSettingsRef.current;
+      const result = await window.api.checkModelStatus({
+        pythonPath: settings.pythonPath.trim() || void 0,
+        downloadPath: modelDownloadPathFromDownloadFolder(settings.downloadFolder),
+        token: settings.huggingfaceToken.trim() || void 0,
+        targets: [{ role: "train", path: d.model.train_name_or_path }]
+      });
+      const results = result.results || [];
+      setModelStatuses(results);
+      if (!result.ok && result.error) {
+        setModelCheckError(result.error);
+      }
+      let trainPath = d.model.train_name_or_path;
+      let changed = false;
+      for (const st of results) {
+        if (!st.localPath || !st.repoId || !st.localRevision || st.path !== st.repoId || st.status !== "ready" && st.status !== "updateAvailable") {
+          continue;
+        }
+        if (st.role === "train" && trainPath === st.repoId) {
+          trainPath = st.localPath;
+          changed = true;
+        }
+      }
+      if (changed) {
+        setDraft((prev) => ({
+          ...prev,
+          model: {
+            ...prev.model,
+            train_name_or_path: trainPath,
+            name_or_path: trainPath
+          }
+        }));
+      }
+    } catch (err) {
+      setModelCheckError(err instanceof Error ? err.message : String(err));
+      setModelStatuses([]);
+    } finally {
+      setModelChecking(false);
+    }
+  }, []);
+  const applyDownloadedPath = reactExports.useCallback((repoId, localPath) => {
+    setDraft((prev) => {
+      let trainPath = prev.model.train_name_or_path;
+      for (const st of modelStatusesRef.current) {
+        if (st.repoId === repoId || st.path === repoId) {
+          if (st.role === "train") trainPath = localPath;
+        }
+      }
+      if (trainPath === repoId) trainPath = localPath;
+      return {
+        ...prev,
+        model: {
+          ...prev.model,
+          train_name_or_path: trainPath,
+          name_or_path: trainPath
+        }
+      };
+    });
+  }, []);
+  const pumpDownloadQueue = reactExports.useCallback(async () => {
+    if (downloadingRef.current) return;
+    const next = dlQueueRef.current[0];
+    if (!next) {
+      setDlCurrent(null);
+      setDlPct(0);
+      setDlDone(0);
+      setDlTotal(0);
+      return;
+    }
+    downloadingRef.current = true;
+    setDlCurrent(next);
+    setDlPct(0);
+    setDlDone(0);
+    setDlTotal(0);
+    const settings = appSettingsRef.current;
+    const result = await window.api.downloadModel({
+      pythonPath: settings.pythonPath.trim() || void 0,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.downloadFolder),
+      token: settings.huggingfaceToken.trim() || void 0,
+      repoId: next
+    });
+    if (!result.ok) {
+      downloadingRef.current = false;
+      dlQueueRef.current = [];
+      setDlCurrent(null);
+      setDlPct(0);
+      setDlDone(0);
+      setDlTotal(0);
+      onStatus(result.error || "Failed to start model download", true);
+    }
+  }, [onStatus]);
+  const enqueueDownloads = reactExports.useCallback(
+    (repoIds) => {
+      const unique = [...new Set(repoIds.map((r) => r.trim()).filter(Boolean))];
+      if (unique.length === 0) return;
+      for (const id of unique) {
+        if (!dlQueueRef.current.includes(id)) dlQueueRef.current.push(id);
+      }
+      void pumpDownloadQueue();
+    },
+    [pumpDownloadQueue]
+  );
+  reactExports.useEffect(() => {
+    void window.api.trainStatus().then((s) => {
+      setTraining(s.running);
+      if (s.running) {
+        setTrainStartedAt((prev) => prev ?? Date.now());
+        onStatus("Training…", false, { sticky: true });
+      }
+    });
+    const offProg = window.api.onTrainProgress((p) => {
+      setProgress(p);
+      recordStepTiming(p.step);
+      if (typeof p.loss === "number" && Number.isFinite(p.loss)) {
+        setLossHistory((prev) => {
+          const next = prev.length >= LOSS_HISTORY_MAX_POINTS ? prev.slice(-LOSS_HISTORY_MAX_POINTS + 1) : prev.slice();
+          next.push({ step: p.step, loss: p.loss });
+          return next;
+        });
+      }
+      const loss = typeof p.loss === "number" && Number.isFinite(p.loss) ? p.loss.toFixed(4) : null;
+      onStatus(
+        loss ? `Training step ${p.step}/${p.total} · loss=${loss}` : `Training step ${p.step}/${p.total}`,
+        false,
+        { sticky: true }
+      );
+      queueRefreshTrainSamples(250);
+    });
+    const offLog = window.api.onTrainLog(({ line }) => {
+      setTrainLogs((prev) => {
+        const next = prev.length >= TRAIN_LOG_MAX_LINES ? prev.slice(-TRAIN_LOG_MAX_LINES + 1) : prev.slice();
+        next.push(line);
+        return next;
+      });
+      if (/saved .*_Sampling_\d{6}/i.test(line) || /sample complete at step/i.test(line)) {
+        queueRefreshTrainSamples(150);
+      }
+    });
+    const offDone = window.api.onTrainDone(({ path }) => {
+      userStoppedTrainRef.current = false;
+      const started = trainStartedAtRef.current;
+      const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0;
+      setFinalElapsedMs(elapsed);
+      setTrainStartedAt(null);
+      trainStartedAtRef.current = null;
+      setTraining(false);
+      setTrainComplete(true);
+      setTrainFailed(false);
+      onStatus(`Training done: ${path}`);
+      queueRefreshTrainSamples(0);
+      void refreshResumeTarget();
+    });
+    const offErr = window.api.onTrainError(({ message }) => {
+      setTraining(false);
+      if (userStoppedTrainRef.current) {
+        userStoppedTrainRef.current = false;
+        onStatus("Training stopped");
+        void refreshResumeTarget();
+        return;
+      }
+      const started = trainStartedAtRef.current;
+      const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0;
+      setFinalElapsedMs(elapsed);
+      setTrainStartedAt(null);
+      trainStartedAtRef.current = null;
+      setShowTrainSession(true);
+      setTrainComplete(false);
+      setTrainFailed(true);
+      onStatus(message, true);
+      queueRefreshTrainSamples(0);
+      void refreshResumeTarget();
+    });
+    const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
+      setDlCurrent(repoId);
+      setDlPct(pct);
+      if (typeof done === "number") setDlDone(done);
+      if (typeof total === "number") setDlTotal(total);
+      const pctLabel = Number.isFinite(pct) ? `${Math.round(pct)}%` : "";
+      onStatus(
+        pctLabel ? `Downloading ${repoId} ${pctLabel}` : `Downloading ${repoId}…`,
+        false,
+        { sticky: true }
+      );
+    });
+    const offDlDone = window.api.onModelDownloadDone(({ repoId, path }) => {
+      applyDownloadedPath(repoId, path);
+      onStatus(`Model ready: ${repoId}`);
+      dlQueueRef.current = dlQueueRef.current.filter((id) => id !== repoId);
+      downloadingRef.current = false;
+      if (dlQueueRef.current.length === 0) {
+        setDlCurrent(null);
+        setDlPct(0);
+        setDlDone(0);
+        setDlTotal(0);
+        void refreshModelStatus();
+      } else {
+        void pumpDownloadQueue();
+      }
+    });
+    const offDlErr = window.api.onModelDownloadError(({ message }) => {
+      downloadingRef.current = false;
+      dlQueueRef.current = [];
+      setDlCurrent(null);
+      setDlPct(0);
+      setDlDone(0);
+      setDlTotal(0);
+      onStatus(message, true);
+      void refreshModelStatus();
+    });
+    return () => {
+      offProg();
+      offLog();
+      offDone();
+      offErr();
+      offDlProg();
+      offDlDone();
+      offDlErr();
+    };
+  }, [onStatus, applyDownloadedPath, pumpDownloadQueue, queueRefreshTrainSamples, refreshModelStatus, refreshResumeTarget, recordStepTiming, resetStepTiming]);
+  reactExports.useEffect(() => {
+    if (!training) return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 1e3);
+    return () => clearInterval(id);
+  }, [training]);
+  reactExports.useEffect(() => {
+    if (!training) return;
+    logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [trainLogs, training]);
+  reactExports.useEffect(() => {
+    if (showTrainSession) {
+      void refreshTrainSamples();
+      return;
+    }
+    setSampleLoading(false);
+    setSampleError(null);
+    setTrainSamples([]);
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current);
+      sampleRefreshTimer.current = null;
+    }
+  }, [showTrainSession, refreshTrainSamples]);
+  reactExports.useEffect(() => {
+    return () => {
+      if (sampleRefreshTimer.current) clearTimeout(sampleRefreshTimer.current);
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshModelStatus();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [
+    draft.model.train_name_or_path,
+    appSettings.downloadFolder,
+    appSettings.huggingfaceToken,
+    appSettings.pythonPath,
+    refreshModelStatus
+  ]);
+  reactExports.useEffect(() => {
+    if (skipPersist.current) {
+      skipPersist.current = false;
+      return;
+    }
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      onChange(normalizeLoraTrainJob(draftRef.current));
+    }, 400);
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+    };
+  }, [draft, onChange]);
+  const ds0 = draft.datasets[0];
+  const hasDataset = Boolean(ds0.folder_path?.trim());
+  const statusForRole = (role) => modelStatuses.find((s) => s.role === role);
+  const statusLabel = (status) => {
+    if (!status) return modelChecking ? "Checking…" : "—";
+    switch (status) {
+      case "missing":
+        return "Missing";
+      case "ready":
+        return "Ready";
+      case "updateAvailable":
+        return "Update";
+      case "local":
+        return "Local";
+      case "error":
+        return "Error";
+      default:
+        return status;
+    }
+  };
+  const missingAny = modelStatuses.filter((s) => s.status === "missing");
+  missingAny.filter((s) => Boolean(resolveDownloadRepoId(s)));
+  modelStatuses.filter(
+    (s) => s.status === "updateAvailable" && Boolean(resolveDownloadRepoId(s))
+  );
+  const isDownloading = Boolean(dlCurrent);
+  const showBanner = Boolean(modelCheckError);
+  const downloadForRole = (role) => {
+    const st = statusForRole(role);
+    const repo = resolveDownloadRepoId(st);
+    if (!repo) return;
+    const hasToken = Boolean(appSettingsRef.current.huggingfaceToken.trim());
+    if (!hasToken) {
+      onStatus(
+        "Hugging Face token required for gated Krea models. Set it in LoRA Train Settings, accept access on the model page, then retry Download.",
+        true
+      );
+      return;
+    }
+    enqueueDownloads([repo]);
+  };
+  const cancelDownload = async () => {
+    await window.api.cancelModelDownload();
+    downloadingRef.current = false;
+    dlQueueRef.current = [];
+    setDlCurrent(null);
+    setDlPct(0);
+    setDlDone(0);
+    setDlTotal(0);
+    onStatus("Model download cancelled");
+    void refreshModelStatus();
+  };
+  const isRoleDownloading = (role) => {
+    const repo = resolveDownloadRepoId(statusForRole(role));
+    return Boolean(dlCurrent && repo && dlCurrent === repo);
+  };
+  const renderModelDlButton = (role) => {
+    const st = statusForRole(role);
+    const repo = resolveDownloadRepoId(st);
+    const downloading = isRoleDownloading(role);
+    if (downloading) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "danger lora-dl-btn",
+          disabled: training,
+          onClick: () => void cancelDownload(),
+          children: "Cancel"
+        }
+      );
+    }
+    if (!repo) return null;
+    if (st?.status === "missing") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "primary lora-dl-btn",
+          disabled: training || isDownloading,
+          onClick: () => downloadForRole(role),
+          children: "Download"
+        }
+      );
+    }
+    if (st?.status === "updateAvailable") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "primary lora-dl-btn",
+          disabled: training || isDownloading,
+          onClick: () => downloadForRole(role),
+          children: "Update"
+        }
+      );
+    }
+    return null;
+  };
+  const browseTrainingFolder = async () => {
+    const dir = await window.api.openFolder();
+    if (!dir) return;
+    patch((prev) => ({ ...prev, training_folder: dir }));
+  };
+  const scanBuckets = async () => {
+    const ds = draftRef.current.datasets[0];
+    if (!ds?.folder_path?.trim()) {
+      setBucketScanError("Choose a dataset folder first");
+      return;
+    }
+    setBucketScanBusy(true);
+    setBucketScanError(null);
+    try {
+      const resolutions = ds.resolution.length ? ds.resolution : [1024];
+      const result = await window.api.scanArBuckets({
+        folder: ds.folder_path,
+        resolutions,
+        pythonPath: appSettings.pythonPath.trim() || void 0
+      });
+      if (!result.ok) {
+        setBucketCounts(null);
+        setBucketScanMeta(null);
+        setBucketScanError(result.error || "Scan failed");
+        return;
+      }
+      setBucketCounts(result.countsOrdered || []);
+      setBucketScanMeta({
+        imageCount: result.imageCount ?? 0,
+        forcedUpscale: result.forcedUpscale ?? 0
+      });
+    } catch (err) {
+      setBucketScanError(err instanceof Error ? err.message : String(err));
+      setBucketCounts(null);
+      setBucketScanMeta(null);
+    } finally {
+      setBucketScanBusy(false);
+    }
+  };
+  const clearTrainSessionUi = () => {
+    setShowTrainSession(false);
+    setTrainComplete(false);
+    setTrainFailed(false);
+    setResultsTab("loss");
+    setSampleLightboxPath(null);
+    setFinalElapsedMs(null);
+    setTrainStartedAt(null);
+    trainStartedAtRef.current = null;
+    resetStepTiming();
+    setLossHistory([]);
+    setTrainLogs([]);
+    setProgress(null);
+    setSampleLoading(false);
+    setSampleError(null);
+    setTrainSamples([]);
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current);
+      sampleRefreshTimer.current = null;
+    }
+  };
+  const requestRestartTrain = () => {
+    if (outputCheckpoint) {
+      setShowRestartWarning(true);
+      return;
+    }
+    void startTrain("restart");
+  };
+  const confirmRestartTrain = () => {
+    setShowRestartWarning(false);
+    void startTrain("restart");
+  };
+  const startTrain = async (mode = "restart") => {
+    const normalized = normalizeLoraTrainJob(draftRef.current);
+    if (!normalized.datasets[0]?.folder_path) {
+      setActiveSection("dataset");
+      onStatus("Choose a DatasetEdit preset first", true);
+      return;
+    }
+    if (normalized.model.arch !== "krea2") {
+      onStatus("Only Krea 2 is supported", true);
+      return;
+    }
+    if (mode === "resume") {
+      const target = outputCheckpoint?.kind === "resume" ? outputCheckpoint : null;
+      if (!target || target.step >= (normalized.train.steps || 0)) {
+        onStatus("No resumable checkpoint found; increase Steps or use Restart", true);
+        return;
+      }
+    }
+    const py = appSettings.pythonPath.trim();
+    userStoppedTrainRef.current = false;
+    setProgress(null);
+    setTrainLogs([]);
+    setLossHistory([]);
+    resetStepTiming();
+    const started = Date.now();
+    setTrainStartedAt(started);
+    trainStartedAtRef.current = started;
+    setFinalElapsedMs(null);
+    setTrainComplete(false);
+    setTrainFailed(false);
+    setNowTick(started);
+    setShowTrainSession(true);
+    setTraining(true);
+    const resumeCk = mode === "resume" && outputCheckpoint?.kind === "resume" ? outputCheckpoint : null;
+    onStatus(
+      resumeCk ? `Resuming from step ${resumeCk.step}…` : "Training started…",
+      false,
+      { sticky: true }
+    );
+    const configJson = serializeTrainConfig(normalized, {
+      huggingface_token: appSettings.huggingfaceToken || void 0,
+      resume_from: resumeCk ? resumeCk.path : void 0
+    });
+    const result = await window.api.startTrain({
+      pythonPath: py || void 0,
+      configJson,
+      device: normalized.device
+    });
+    if (!result.ok) {
+      setTraining(false);
+      clearTrainSessionUi();
+      onStatus(result.error || "Failed to start training", true);
+      void refreshResumeTarget();
+    }
+  };
+  const stopTrain = async () => {
+    userStoppedTrainRef.current = true;
+    await window.api.stopTrain();
+    setTraining(false);
+    clearTrainSessionUi();
+    onStatus("Training stopped");
+    void refreshResumeTarget();
+  };
+  const backFromTrainSession = () => {
+    clearTrainSessionUi();
+    void refreshResumeTarget();
+  };
+  const elapsedMs = finalElapsedMs !== null ? finalElapsedMs : trainStartedAt !== null ? Math.max(0, nowTick - trainStartedAt) : 0;
+  const etaMs = trainComplete || trainFailed ? 0 : progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0 ? (progress.total - progress.step) * elapsedMs / progress.step : null;
+  const stepsLabel = progress ? `${progress.step}/${progress.total}` : `0/${draft.train.steps || 0}`;
+  const sampleItems = reactExports.useMemo(
+    () => [...trainSamples].sort((a, b) => {
+      const promptA = samplePromptIndex(a);
+      const promptB = samplePromptIndex(b);
+      const stepA = typeof a.step === "number" ? a.step : -1;
+      const stepB = typeof b.step === "number" ? b.step : -1;
+      return promptA - promptB || stepB - stepA || b.mtimeMs - a.mtimeMs || a.name.localeCompare(b.name);
+    }),
+    [trainSamples]
+  );
+  const sampleGroups = reactExports.useMemo(() => {
+    const map = /* @__PURE__ */ new Map();
+    for (const item of sampleItems) {
+      const idx = samplePromptIndex(item);
+      const list = map.get(idx);
+      if (list) list.push(item);
+      else map.set(idx, [item]);
+    }
+    return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([promptIndex, items]) => ({ promptIndex, items }));
+  }, [sampleItems]);
+  const sampleLightboxIndex = sampleLightboxPath ? sampleItems.findIndex((item) => item.path === sampleLightboxPath) : -1;
+  const sampleLightboxItem = sampleLightboxIndex >= 0 ? sampleItems[sampleLightboxIndex] : null;
+  const sampleLightboxGroupItems = reactExports.useMemo(() => {
+    if (!sampleLightboxItem) return [];
+    const idx = samplePromptIndex(sampleLightboxItem);
+    return sampleItems.filter((item) => samplePromptIndex(item) === idx);
+  }, [sampleLightboxItem, sampleItems]);
+  const sampleLightboxGroupIndex = sampleLightboxItem ? sampleLightboxGroupItems.findIndex((item) => item.path === sampleLightboxItem.path) : -1;
+  const pickSampleInPromptGroup = reactExports.useCallback(
+    (targetItems, fromItem, fromGroupIndex) => {
+      if (targetItems.length === 0) return null;
+      const fromStep = typeof fromItem.step === "number" && Number.isFinite(fromItem.step) ? fromItem.step : null;
+      if (fromStep !== null) {
+        const exact = targetItems.find((item) => item.step === fromStep);
+        if (exact) return exact;
+        let best = targetItems[0];
+        let bestDist = Number.POSITIVE_INFINITY;
+        for (const item of targetItems) {
+          if (typeof item.step !== "number" || !Number.isFinite(item.step)) continue;
+          const dist = Math.abs(item.step - fromStep);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = item;
+          }
+        }
+        if (bestDist !== Number.POSITIVE_INFINITY) return best;
+      }
+      if (fromGroupIndex >= 0 && fromGroupIndex < targetItems.length) {
+        return targetItems[fromGroupIndex];
+      }
+      return targetItems[0];
+    },
+    []
+  );
+  const openAdjacentPromptGroup = reactExports.useCallback(
+    (direction) => {
+      if (!sampleLightboxItem || sampleGroups.length <= 1) return;
+      const currentPrompt = samplePromptIndex(sampleLightboxItem);
+      const groupPos = sampleGroups.findIndex((g) => g.promptIndex === currentPrompt);
+      if (groupPos < 0) return;
+      const nextPos = (groupPos + direction + sampleGroups.length) % sampleGroups.length;
+      const target = sampleGroups[nextPos];
+      const picked = pickSampleInPromptGroup(
+        target.items,
+        sampleLightboxItem,
+        sampleLightboxGroupIndex
+      );
+      if (picked) setSampleLightboxPath(picked.path);
+    },
+    [
+      sampleLightboxItem,
+      sampleGroups,
+      sampleLightboxGroupIndex,
+      pickSampleInPromptGroup
+    ]
+  );
+  reactExports.useEffect(() => {
+    if (resultsTab !== "sample") setSampleLightboxPath(null);
+  }, [resultsTab]);
+  reactExports.useEffect(() => {
+    if (!sampleLightboxPath) return;
+    if (sampleLightboxIndex >= 0) return;
+    if (sampleItems.length > 0) {
+      setSampleLightboxPath(sampleItems[0].path);
+    } else {
+      setSampleLightboxPath(null);
+    }
+  }, [sampleLightboxPath, sampleLightboxIndex, sampleItems]);
+  reactExports.useEffect(() => {
+    if (!sampleLightboxItem || sampleLightboxGroupItems.length === 0) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSampleLightboxPath(null);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const next = sampleLightboxGroupIndex <= 0 ? sampleLightboxGroupItems.length - 1 : sampleLightboxGroupIndex - 1;
+        setSampleLightboxPath(sampleLightboxGroupItems[next].path);
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const next = sampleLightboxGroupIndex >= sampleLightboxGroupItems.length - 1 ? 0 : sampleLightboxGroupIndex + 1;
+        setSampleLightboxPath(sampleLightboxGroupItems[next].path);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        openAdjacentPromptGroup(-1);
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        openAdjacentPromptGroup(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    sampleLightboxItem,
+    sampleLightboxGroupIndex,
+    sampleLightboxGroupItems,
+    openAdjacentPromptGroup
+  ]);
+  const promptTextForIndex = (promptIndex) => {
+    const entry = draft.sample.prompts[promptIndex - 1];
+    return entry?.prompt?.trim() || "";
+  };
+  const sectionTitle = SECTIONS.find((s) => s.id === activeSection)?.label ?? "";
+  const trainSessionTitle = trainComplete ? "Training done" : trainFailed ? "Training failed" : "Training...";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train", children: [
+    showBanner && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-model-banner", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        "Model check failed: ",
+        modelCheckError
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-model-banner-actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void refreshModelStatus(), disabled: modelChecking, children: modelChecking ? "Checking…" : "Retry" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-body", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "lora-nav", "aria-label": "Training settings sections", children: [
+        showTrainSession ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-status", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-train-status-title", children: trainSessionTitle }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-status-steps-block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lora-train-status-steps", children: [
+              stepsLabel,
+              " Steps"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-train-status-avg", children: secPerStepAvg !== null ? `${secPerStepAvg.toFixed(1)} sec/step avg.` : "--.- sec/step avg." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lora-train-status-line", children: [
+            "Elapsed: ",
+            formatHms(elapsedMs)
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lora-train-status-line", children: [
+            "ETA: ",
+            etaMs !== null ? formatHms(etaMs) : "--:--:--"
+          ] })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-nav-items", children: [
+          SECTIONS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: `lora-nav-item${activeSection === s.id ? " active" : ""}`,
+              "aria-current": activeSection === s.id ? "page" : void 0,
+              onClick: () => setActiveSection(s.id),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-nav-label", children: s.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-nav-hint", children: s.hint })
+              ]
+            },
+            s.id
+          )),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lora-nav-note", children: [
+            "Required: DatasetEdit preset + Train base (Raw)",
+            !hasDataset ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              " ",
+              "·",
+              " ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: "linkish",
+                  onClick: () => setActiveSection("dataset"),
+                  children: "Set dataset"
+                }
+              )
+            ] }) : null
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-nav-actions", children: training ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => void stopTrain(), children: "Stop" }) : showTrainSession ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: backFromTrainSession, children: "Back" }) : outputCheckpoint?.kind === "resume" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestRestartTrain, children: "Restart" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: "primary",
+              onClick: () => void startTrain("resume"),
+              children: [
+                "Resume from ",
+                outputCheckpoint.step
+              ]
+            }
+          )
+        ] }) : outputCheckpoint?.kind === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestRestartTrain, children: "Restart" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", disabled: true, "aria-disabled": "true", children: "Train Done" })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: requestRestartTrain, children: "Start Train" }) })
+      ] }),
+      showTrainSession ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-mid", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-panel", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-header", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-results-tabs", role: "tablist", "aria-label": "Training results view", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  role: "tab",
+                  className: `lora-train-results-tab${resultsTab === "loss" ? " active" : ""}`,
+                  "aria-selected": resultsTab === "loss",
+                  onClick: () => setResultsTab("loss"),
+                  children: "Loss graph"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  role: "tab",
+                  className: `lora-train-results-tab${resultsTab === "sample" ? " active" : ""}`,
+                  "aria-selected": resultsTab === "sample",
+                  onClick: () => setResultsTab("sample"),
+                  children: [
+                    "Sample image",
+                    sampleItems.length > 0 ? ` (${sampleItems.length})` : ""
+                  ]
+                }
+              )
+            ] }),
+            resultsTab === "loss" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-legend", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "label",
+                {
+                  className: `lora-train-loss-legend-item${showLossCurve ? "" : " is-off"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "checkbox",
+                        className: "lora-train-loss-check",
+                        checked: showLossCurve,
+                        onChange: (e) => setShowLossCurve(e.target.checked),
+                        "aria-label": "Show loss curve"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-train-loss-swatch is-raw" }),
+                    "loss",
+                    lossHistory.length > 0 ? `=${lossHistory[lossHistory.length - 1].loss.toFixed(4)}` : ""
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "label",
+                {
+                  className: `lora-train-loss-legend-item${showAvgLossCurve ? "" : " is-off"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "checkbox",
+                        className: "lora-train-loss-check",
+                        checked: showAvgLossCurve,
+                        onChange: (e) => setShowAvgLossCurve(e.target.checked),
+                        "aria-label": "Show avg. loss curve"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-train-loss-swatch is-avg" }),
+                    "avg. loss",
+                    lossHistory.length > 0 ? `=${cumulativeAvgLoss(lossHistory, lossHistory.length - 1).toFixed(4)}` : ""
+                  ]
+                }
+              )
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-sample-summary", children: sampleLoading ? "Loading samples…" : sampleItems.length > 0 ? `${sampleItems.length} sample${sampleItems.length === 1 ? "" : "s"} · ${sampleGroups.length} prompt${sampleGroups.length === 1 ? "" : "s"}` : "No samples yet" })
+          ] }),
+          resultsTab === "loss" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            LossChart,
+            {
+              points: lossHistory,
+              showLoss: showLossCurve,
+              showAvgLoss: showAvgLossCurve
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-sample-panel", children: [
+            sampleError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: sampleError }) : null,
+            !sampleError && sampleItems.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-sample-empty", children: sampleLoading ? "Loading sample images…" : "No samples yet" }) : sampleGroups.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-sample-groups", role: "list", "aria-label": "Training samples by prompt", children: sampleGroups.map((group) => {
+              const promptText = promptTextForIndex(group.promptIndex);
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "section",
+                {
+                  className: "lora-train-sample-group",
+                  role: "listitem",
+                  "aria-label": `Prompt ${group.promptIndex}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "lora-train-sample-group-header", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-train-sample-group-title", children: [
+                        "Prompt ",
+                        group.promptIndex
+                      ] }),
+                      promptText ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-train-sample-group-prompt", title: promptText, children: promptText }) : null,
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-train-sample-group-count", children: [
+                        group.items.length,
+                        " step",
+                        group.items.length === 1 ? "" : "s"
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      SamplePromptStrip,
+                      {
+                        items: group.items,
+                        onOpen: setSampleLightboxPath
+                      }
+                    )
+                  ]
+                },
+                group.promptIndex
+              );
+            }) }) : null
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-log-panel", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "lora-panel-title", children: "Log" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("pre", { className: "lora-train-log", children: [
+            trainLogs.length > 0 ? trainLogs.join("\n") : "Waiting for trainer output…",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { ref: logEndRef })
+          ] })
+        ] })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-panel", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "lora-panel-title", children: sectionTitle }),
+        activeSection === "basics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Job name", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              value: draft.name,
+              disabled: training,
+              onChange: (e) => patch((p) => ({ ...p, name: e.target.value }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Output folder", hint: "Where checkpoints and LoRA weights are saved", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                value: draft.training_folder,
+                disabled: training,
+                onChange: (e) => patch((p) => ({ ...p, training_folder: e.target.value }))
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                disabled: training,
+                onClick: () => void browseTrainingFolder(),
+                children: "Browse"
+              }
+            )
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "GPU device", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            GpuDeviceSelect,
+            {
+              value: draft.device,
+              onChange: (device) => patch((p) => ({ ...p, device }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Field,
+            {
+              label: "Trigger word",
+              hint: "Optional. Prefixed onto captions when missing.",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  value: draft.trigger_word,
+                  disabled: training,
+                  onChange: (e) => patch((p) => ({ ...p, trigger_word: e.target.value }))
+                }
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Field,
+            {
+              label: "Train base (Raw)",
+              hint: "Official: train LoRA on Krea-2-Raw",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    value: isRoleDownloading("train") ? downloadInputLabel(dlPct, dlDone, dlTotal) : draft.model.train_name_or_path,
+                    disabled: training || isRoleDownloading("train"),
+                    readOnly: isRoleDownloading("train"),
+                    onChange: (e) => patch((p) => ({
+                      ...p,
+                      model: {
+                        ...p.model,
+                        train_name_or_path: e.target.value,
+                        name_or_path: e.target.value,
+                        arch: "krea2"
+                      }
+                    }))
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    disabled: training || isRoleDownloading("train"),
+                    onClick: () => patch((p) => ({
+                      ...p,
+                      model: {
+                        ...p.model,
+                        train_name_or_path: KREA2_RAW,
+                        name_or_path: KREA2_RAW,
+                        arch: "krea2"
+                      }
+                    })),
+                    children: "Raw"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "span",
+                  {
+                    className: `lora-model-status status-${statusForRole("train")?.status || "unknown"}`,
+                    title: statusForRole("train")?.message || void 0,
+                    children: statusLabel(statusForRole("train")?.status)
+                  }
+                ),
+                renderModelDlButton("train")
+              ] })
+            }
+          )
+        ] }),
+        activeSection === "dataset" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Field,
+            {
+              label: "Dataset",
+              hint: "Select a dataset preset from DatasetEdit (images with matching .txt captions)",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "select",
+                {
+                  className: "lora-folder-pick",
+                  "aria-label": "DatasetEdit preset",
+                  disabled: training || datasetFolders.length === 0 && !ds0.folder_path,
+                  value: ds0.folder_path || "",
+                  onChange: (e) => {
+                    const v = e.target.value;
+                    patch((p) => ({
+                      ...p,
+                      datasets: p.datasets.map(
+                        (ds, i) => i === 0 ? { ...ds, folder_path: v } : ds
+                      )
+                    }));
+                  },
+                  title: ds0.folder_path || void 0,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: datasetFolders.length === 0 ? "No DatasetEdit presets — add one in DatasetEdit" : "Select DatasetEdit preset…" }),
+                    ds0.folder_path && !datasetFolders.includes(ds0.folder_path) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: ds0.folder_path, children: [
+                      folderLabel$1(ds0.folder_path),
+                      " (not in DatasetEdit)"
+                    ] }) : null,
+                    datasetFolders.map((dir) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: dir, title: dir, children: folderLabel$1(dir) }, dir))
+                  ]
+                }
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Field,
+            {
+              label: "Resolutions",
+              hint: "Enabled resolution tiers and pixel budget. Always AR bucket (step=64); long side picks closest tier without unnecessary upscale.",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-resolution-grid", role: "group", "aria-label": "Resolutions", children: RESOLUTION_OPTIONS.map((size) => {
+                const on2 = ds0.resolution.includes(size);
+                return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "div",
+                  {
+                    className: `lora-toggle lora-resolution-toggle${on2 ? " is-on" : ""}${training ? " is-disabled" : ""}`,
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          type: "button",
+                          role: "switch",
+                          className: "lora-switch",
+                          "aria-checked": on2,
+                          "aria-label": `${size}`,
+                          disabled: training,
+                          onClick: () => {
+                            setBucketCounts(null);
+                            setBucketScanMeta(null);
+                            setBucketScanError(null);
+                            patch((p) => ({
+                              ...p,
+                              datasets: p.datasets.map((ds, i) => {
+                                if (i !== 0) return ds;
+                                const has = ds.resolution.includes(size);
+                                if (has) {
+                                  const next = ds.resolution.filter((r) => r !== size);
+                                  return {
+                                    ...ds,
+                                    resolution: next.length > 0 ? next : [size]
+                                  };
+                                }
+                                return {
+                                  ...ds,
+                                  resolution: [...ds.resolution, size].sort((a, b) => a - b)
+                                };
+                              })
+                            }));
+                          },
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-resolution-value", children: size })
+                    ]
+                  },
+                  size
+                );
+              }) })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "model-row", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                disabled: training || bucketScanBusy || !ds0.folder_path.trim(),
+                onClick: () => void scanBuckets(),
+                children: bucketScanBusy ? "Scanning…" : "Scan buckets"
+              }
+            ) }),
+            bucketScanError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: bucketScanError }) : null,
+            bucketScanMeta ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
+              bucketScanMeta.imageCount,
+              " images · forced upscale",
+              " ",
+              bucketScanMeta.forcedUpscale,
+              " · tiers",
+              " ",
+              (ds0.resolution.length ? ds0.resolution : [1024]).join(", ")
+            ] }) : null,
+            bucketCounts && bucketCounts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-bucket-stats", role: "table", "aria-label": "Bucket counts", children: bucketCounts.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-bucket-stats-row", role: "row", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-bucket-stats-size", children: row.bucket }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-bucket-stats-count", children: row.count })
+            ] }, row.bucket)) }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Caption dropout", hint: "0–1; randomly blank captions during training", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 0,
+              max: 1,
+              step: 0.01,
+              value: ds0.caption_dropout_rate,
+              emptyFallback: 0,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                datasets: p.datasets.map(
+                  (ds, i) => i === 0 ? { ...ds, caption_dropout_rate: n } : ds
+                )
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Shuffle caption tokens",
+              checked: ds0.shuffle_tokens,
+              disabled: training,
+              onChange: (v) => patch((p) => ({
+                ...p,
+                datasets: p.datasets.map(
+                  (ds, i) => i === 0 ? { ...ds, shuffle_tokens: v } : ds
+                )
+              }))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Cache latents to disk",
+              hint: "Encode images once with VAE. Off = encode every step (high VRAM, ~40GB+)",
+              checked: ds0.cache_latents_to_disk,
+              disabled: training,
+              onChange: (v) => patch((p) => ({
+                ...p,
+                datasets: p.datasets.map(
+                  (ds, i) => i === 0 ? { ...ds, cache_latents_to_disk: v } : ds
+                )
+              }))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Cache text embeddings to disk",
+              hint: "Encode captions once. Off = encode every step (more VRAM)",
+              checked: draft.train.cache_text_embeddings,
+              disabled: training,
+              onChange: (v) => patch((p) => ({
+                ...p,
+                train: { ...p.train, cache_text_embeddings: v }
+              }))
+            }
+          )
+        ] }),
+        activeSection === "train" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Training steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.train.steps,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                train: { ...p.train, steps: n }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Batch size", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.train.batch_size,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                train: { ...p.train, batch_size: n }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Learning rate", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 0,
+              step: "any",
+              value: draft.train.lr,
+              emptyFallback: 0,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                train: { ...p.train, lr: n }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Optimizer", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: draft.train.optimizer,
+              disabled: training,
+              onChange: (e) => patch((p) => ({
+                ...p,
+                train: { ...p.train, optimizer: e.target.value }
+              })),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adamw8bit", children: "adamw8bit" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adamw", children: "adamw" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prodigy", children: "prodigy" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adafactor", children: "adafactor" })
+              ]
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Precision (dtype)", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: draft.train.dtype,
+              disabled: training,
+              onChange: (e) => patch((p) => ({
+                ...p,
+                train: { ...p.train, dtype: e.target.value }
+              })),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "bf16", children: "bf16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp16", children: "fp16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp32", children: "fp32" })
+              ]
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Gradient accumulation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.train.gradient_accumulation_steps,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                train: {
+                  ...p.train,
+                  gradient_accumulation_steps: n
+                }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Noise scheduler", hint: "Krea 2 uses flow matching", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: draft.train.noise_scheduler,
+              disabled: training,
+              onChange: (e) => patch((p) => ({
+                ...p,
+                train: { ...p.train, noise_scheduler: e.target.value }
+              })),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "flowmatch", children: "flowmatch" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ddpm", children: "ddpm" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "euler", children: "euler" })
+              ]
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Gradient checkpointing",
+              hint: "Uses less VRAM; slightly slower",
+              checked: draft.train.gradient_checkpointing,
+              disabled: training,
+              onChange: (v) => patch((p) => ({
+                ...p,
+                train: { ...p.train, gradient_checkpointing: v }
+              }))
+            }
+          )
+        ] }),
+        activeSection === "lora" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Network type", hint: "locon uses PEFT LoHa (LyCORIS)", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: draft.network.type,
+              disabled: training,
+              onChange: (e) => patch((p) => ({
+                ...p,
+                network: { ...p.network, type: e.target.value }
+              })),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "lora", children: "lora" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "locon", children: "locon" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "lokr", children: "lokr" })
+              ]
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Rank", hint: "linear — higher = more capacity / VRAM", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.network.linear,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                network: { ...p.network, linear: n }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Alpha", hint: "linear_alpha — often equal to rank", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.network.linear_alpha,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                network: {
+                  ...p.network,
+                  linear_alpha: n
+                }
+              }))
+            }
+          ) })
+        ] }),
+        activeSection === "sample" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ToggleField,
+                {
+                  label: "Enable sampling during training",
+                  hint: "Off by default (faster). Mid-train samples use Train-on (Raw) + LoRA.",
+                  checked: !draft.train.disable_sampling,
+                  disabled: training,
+                  onChange: (v) => patch((p) => ({
+                    ...p,
+                    train: { ...p.train, disable_sampling: !v }
+                  }))
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ToggleField,
+                {
+                  label: "Skip first sample",
+                  hint: "When off, sample once at step 0 before training starts.",
+                  checked: draft.train.skip_first_sample,
+                  disabled: training || draft.train.disable_sampling,
+                  onChange: (v) => patch((p) => ({
+                    ...p,
+                    train: { ...p.train, skip_first_sample: v }
+                  }))
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Sample every N steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.sample.sample_every,
+                emptyFallback: 1,
+                disabled: training || draft.train.disable_sampling,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  sample: {
+                    ...p.sample,
+                    sample_every: n
+                  }
+                }))
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Sample steps", hint: "Denoise steps for mid-train preview (Raw)", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.sample.sample_steps,
+                emptyFallback: 1,
+                disabled: training || draft.train.disable_sampling,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  sample: {
+                    ...p.sample,
+                    sample_steps: n
+                  }
+                }))
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Guidance", hint: "CFG scale; 0 disables guidance", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                step: "any",
+                value: draft.sample.guidance_scale,
+                emptyFallback: 0,
+                disabled: training || draft.train.disable_sampling,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  sample: {
+                    ...p.sample,
+                    guidance_scale: n
+                  }
+                }))
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-prompt-groups", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-prompt-groups-header", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Sample prompts" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Each group has its own prompt, size, and seed" })
+            ] }),
+            draft.sample.prompts.map((item, index2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-prompt-group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                  "Prompt ",
+                  index2 + 1
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    value: item.prompt,
+                    disabled: training || draft.train.disable_sampling,
+                    onChange: (e) => {
+                      const value = e.target.value;
+                      patch((p) => ({
+                        ...p,
+                        sample: {
+                          ...p.sample,
+                          prompts: p.sample.prompts.map(
+                            (pr2, i) => i === index2 ? { ...pr2, prompt: value } : pr2
+                          )
+                        }
+                      }));
+                    },
+                    spellCheck: false
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-prompt-meta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Width" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    NumberField,
+                    {
+                      min: 64,
+                      step: 64,
+                      value: item.width,
+                      emptyFallback: 64,
+                      disabled: training || draft.train.disable_sampling,
+                      onChange: (n) => {
+                        patch((p) => ({
+                          ...p,
+                          sample: {
+                            ...p.sample,
+                            prompts: p.sample.prompts.map(
+                              (pr2, i) => i === index2 ? { ...pr2, width: n } : pr2
+                            )
+                          }
+                        }));
+                      }
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Height" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    NumberField,
+                    {
+                      min: 64,
+                      step: 64,
+                      value: item.height,
+                      emptyFallback: 64,
+                      disabled: training || draft.train.disable_sampling,
+                      onChange: (n) => {
+                        patch((p) => ({
+                          ...p,
+                          sample: {
+                            ...p.sample,
+                            prompts: p.sample.prompts.map(
+                              (pr2, i) => i === index2 ? { ...pr2, height: n } : pr2
+                            )
+                          }
+                        }));
+                      }
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Seed" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    NumberField,
+                    {
+                      value: item.seed,
+                      emptyFallback: 0,
+                      disabled: training || draft.train.disable_sampling,
+                      onChange: (n) => {
+                        patch((p) => ({
+                          ...p,
+                          sample: {
+                            ...p.sample,
+                            prompts: p.sample.prompts.map(
+                              (pr2, i) => i === index2 ? { ...pr2, seed: n } : pr2
+                            )
+                          }
+                        }));
+                      }
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "lora-prompt-remove",
+                    "aria-label": `Delete prompt ${index2 + 1}`,
+                    title: "Delete group",
+                    disabled: training || draft.train.disable_sampling,
+                    onClick: () => patch((p) => ({
+                      ...p,
+                      sample: {
+                        ...p.sample,
+                        prompts: p.sample.prompts.filter((_, i) => i !== index2)
+                      }
+                    })),
+                    children: "−"
+                  }
+                )
+              ] })
+            ] }, index2)),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-prompt-add", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                "aria-label": "Add prompt group",
+                title: "Add prompt group",
+                disabled: training || draft.train.disable_sampling,
+                onClick: () => patch((p) => {
+                  const last = p.sample.prompts[p.sample.prompts.length - 1];
+                  return {
+                    ...p,
+                    sample: {
+                      ...p.sample,
+                      prompts: [
+                        ...p.sample.prompts,
+                        {
+                          prompt: "",
+                          width: last?.width ?? p.sample.width,
+                          height: last?.height ?? p.sample.height,
+                          seed: (last?.seed ?? p.sample.seed) + 1
+                        }
+                      ]
+                    }
+                  };
+                }),
+                children: "+"
+              }
+            ) })
+          ] })
+        ] }),
+        activeSection === "advanced" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Save every N steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.save.save_every,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                save: { ...p.save, save_every: n }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Max checkpoints to keep", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 1,
+              value: draft.save.max_step_saves_to_keep,
+              emptyFallback: 1,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                save: {
+                  ...p.save,
+                  max_step_saves_to_keep: n
+                }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Save weights dtype", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: draft.save.dtype,
+              disabled: training,
+              onChange: (e) => patch((p) => ({
+                ...p,
+                save: { ...p.save, dtype: e.target.value }
+              })),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "bf16", children: "bf16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp16", children: "fp16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp32", children: "fp32" })
+              ]
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Use EMA",
+              checked: draft.train.ema_config.use_ema,
+              disabled: training,
+              onChange: (v) => patch((p) => ({
+                ...p,
+                train: {
+                  ...p.train,
+                  ema_config: { ...p.train.ema_config, use_ema: v }
+                }
+              }))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "EMA decay", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              min: 0,
+              max: 1,
+              step: 0.01,
+              value: draft.train.ema_config.ema_decay,
+              emptyFallback: 0,
+              disabled: training,
+              onChange: (n) => patch((p) => ({
+                ...p,
+                train: {
+                  ...p.train,
+                  ema_config: {
+                    ...p.train.ema_config,
+                    ema_decay: n
+                  }
+                }
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Quantize",
+              checked: draft.model.quantize,
+              disabled: training,
+              onChange: (v) => patch((p) => ({ ...p, model: { ...p.model, quantize: v } }))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Low VRAM mode",
+              hint: "On: stage TE/VAE off GPU when DiT is busy + force gradient checkpointing. Does not control DiT layer offload.",
+              checked: draft.model.low_vram,
+              disabled: training,
+              onChange: (v) => patch((p) => ({ ...p, model: { ...p.model, low_vram: v } }))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ToggleField,
+            {
+              label: "Layer offload",
+              hint: "Stream DiT transformer blocks CPU↔GPU to free VRAM (slower). Independent of Low VRAM. Only applies when you enable it.",
+              checked: draft.model.layer_offload,
+              disabled: training,
+              onChange: (v) => patch((p) => ({ ...p, model: { ...p.model, layer_offload: v } }))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Field,
+            {
+              label: "Offload %",
+              hint: "0 = Auto (suggest % from free VRAM when Layer offload is on). 1–100 = exact manual %; never auto-raised.",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-offload-pct", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "range",
+                    min: 0,
+                    max: 100,
+                    step: 5,
+                    value: draft.model.layer_offload_percent,
+                    disabled: training || !draft.model.layer_offload,
+                    onChange: (e) => patch((p) => ({
+                      ...p,
+                      model: {
+                        ...p.model,
+                        layer_offload_percent: Number(e.target.value)
+                      }
+                    }))
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "span",
+                  {
+                    className: "lora-offload-pct-value",
+                    "aria-label": "Offload percent",
+                    children: draft.model.layer_offload_percent <= 0 ? "Auto" : `${draft.model.layer_offload_percent}%`
+                  }
+                )
+              ] })
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ResourceMonitorPane, { device: draft.device })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      RestartTrainWarningDialog,
+      {
+        open: showRestartWarning,
+        jobName: draft.name || "this job",
+        checkpointStep: outputCheckpoint?.step ?? null,
+        onCancel: () => setShowRestartWarning(false),
+        onConfirm: confirmRestartTrain
+      }
+    ),
+    sampleLightboxItem ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modal-backdrop lora-sample-lightbox-backdrop",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "Sample image preview",
+        onMouseDown: (e) => {
+          if (e.target === e.currentTarget) setSampleLightboxPath(null);
+        },
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "lora-sample-lightbox",
+            onMouseDown: (e) => e.stopPropagation(),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-sample-lightbox-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-sample-lightbox-title", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                    "Prompt ",
+                    samplePromptIndex(sampleLightboxItem),
+                    " ·",
+                    " ",
+                    sampleStepLabel(sampleLightboxItem)
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-sample-lightbox-count", children: [
+                    sampleLightboxGroupIndex + 1,
+                    " / ",
+                    sampleLightboxGroupItems.length
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "lora-sample-lightbox-close",
+                    "aria-label": "Close preview",
+                    onClick: () => setSampleLightboxPath(null),
+                    children: "×"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-sample-lightbox-body", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "lora-sample-lightbox-nav",
+                    "aria-label": "Previous sample in prompt",
+                    disabled: sampleLightboxGroupItems.length <= 1,
+                    onClick: () => {
+                      if (sampleLightboxGroupItems.length === 0) return;
+                      const next = sampleLightboxGroupIndex <= 0 ? sampleLightboxGroupItems.length - 1 : sampleLightboxGroupIndex - 1;
+                      setSampleLightboxPath(sampleLightboxGroupItems[next].path);
+                    },
+                    children: "‹"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "img",
+                  {
+                    src: window.api.toLocalUrl(sampleLightboxItem.path),
+                    alt: `${sampleStepLabel(sampleLightboxItem)} sample`,
+                    className: "lora-sample-lightbox-image"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "lora-sample-lightbox-nav",
+                    "aria-label": "Next sample in prompt",
+                    disabled: sampleLightboxGroupItems.length <= 1,
+                    onClick: () => {
+                      if (sampleLightboxGroupItems.length === 0) return;
+                      const next = sampleLightboxGroupIndex >= sampleLightboxGroupItems.length - 1 ? 0 : sampleLightboxGroupIndex + 1;
+                      setSampleLightboxPath(sampleLightboxGroupItems[next].path);
+                    },
+                    children: "›"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-sample-lightbox-name", title: sampleLightboxItem.name, children: sampleLightboxItem.name }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-sample-lightbox-hint", children: "← → step · ↑ ↓ prompt · Esc" })
+            ]
+          }
+        )
+      }
+    ) : null
+  ] });
+}
+function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCancel }) {
+  const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
+  const focusRef = reactExports.useRef("cancel");
+  focusRef.current = focusBtn;
+  const onConfirmRef = reactExports.useRef(onConfirm);
+  const onCancelRef = reactExports.useRef(onCancel);
+  onConfirmRef.current = onConfirm;
+  onCancelRef.current = onCancel;
+  reactExports.useEffect(() => {
+    if (!open) return;
+    setFocusBtn("cancel");
+  }, [open]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancelRef.current();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        setFocusBtn((prev) => prev === "cancel" ? "delete" : "cancel");
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (focusRef.current === "delete") onConfirmRef.current();
+        else onCancelRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
+  if (!open) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onCancel();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal",
+          role: "dialog",
+          "aria-labelledby": "missing-dataset-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "missing-dataset-title", children: "Dataset folder not found" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+              'The dataset folder "',
+              folderName,
+              '" does not exist. Delete this preset from the list?'
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: focusBtn === "cancel" ? "kbd-focus" : void 0,
+                  onClick: onCancel,
+                  onMouseEnter: () => setFocusBtn("cancel"),
+                  children: "Cancel"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `danger${focusBtn === "delete" ? " kbd-focus" : ""}`,
+                  onClick: onConfirm,
+                  onMouseEnter: () => setFocusBtn("delete"),
+                  children: "Delete"
+                }
+              )
+            ] })
+          ]
+        }
+      )
+    }
+  );
 }
 function RemoveDatasetFolderDialog({ open, folderName, onConfirm, onCancel }) {
   const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
@@ -13208,46 +20481,174 @@ function RemoveDatasetFolderDialog({ open, folderName, onConfirm, onCancel }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
   if (!open) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "modal",
-      role: "dialog",
-      "aria-labelledby": "remove-dataset-title",
-      onClick: (e) => e.stopPropagation(),
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "remove-dataset-title", children: "Remove dataset folder" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
-          'Remove "',
-          folderName,
-          '" from the dataset list? Files on disk will not be deleted.'
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: focusBtn === "cancel" ? "kbd-focus" : void 0,
-              onClick: onCancel,
-              onMouseEnter: () => setFocusBtn("cancel"),
-              children: "Cancel"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: `danger${focusBtn === "remove" ? " kbd-focus" : ""}`,
-              onClick: onConfirm,
-              onMouseEnter: () => setFocusBtn("remove"),
-              children: "Remove"
-            }
-          )
-        ] })
-      ]
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onCancel();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal",
+          role: "dialog",
+          "aria-labelledby": "remove-dataset-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "remove-dataset-title", children: "Remove dataset folder" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+              'Remove "',
+              folderName,
+              '" from the dataset list? Files on disk will not be deleted.'
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: focusBtn === "cancel" ? "kbd-focus" : void 0,
+                  onClick: onCancel,
+                  onMouseEnter: () => setFocusBtn("cancel"),
+                  children: "Cancel"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `danger${focusBtn === "remove" ? " kbd-focus" : ""}`,
+                  onClick: onConfirm,
+                  onMouseEnter: () => setFocusBtn("remove"),
+                  children: "Remove"
+                }
+              )
+            ] })
+          ]
+        }
+      )
     }
-  ) });
+  );
+}
+function RemoveLoraJobDialog({ open, jobName, onConfirm, onCancel }) {
+  const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
+  const focusRef = reactExports.useRef("cancel");
+  focusRef.current = focusBtn;
+  const onConfirmRef = reactExports.useRef(onConfirm);
+  const onCancelRef = reactExports.useRef(onCancel);
+  onConfirmRef.current = onConfirm;
+  onCancelRef.current = onCancel;
+  reactExports.useEffect(() => {
+    if (!open) return;
+    setFocusBtn("cancel");
+  }, [open]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancelRef.current();
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        setFocusBtn((prev) => prev === "cancel" ? "remove" : "cancel");
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (focusRef.current === "remove") onConfirmRef.current();
+        else onCancelRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
+  if (!open) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onCancel();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal",
+          role: "dialog",
+          "aria-labelledby": "remove-lora-job-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "remove-lora-job-title", children: "Remove job preset" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "modal-text", children: [
+              'Remove "',
+              jobName,
+              '" from the job list? Training files on disk will not be deleted.'
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: focusBtn === "cancel" ? "kbd-focus" : void 0,
+                  onClick: onCancel,
+                  onMouseEnter: () => setFocusBtn("cancel"),
+                  children: "Cancel"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: `danger${focusBtn === "remove" ? " kbd-focus" : ""}`,
+                  onClick: onConfirm,
+                  onMouseEnter: () => setFocusBtn("remove"),
+                  children: "Remove"
+                }
+              )
+            ] })
+          ]
+        }
+      )
+    }
+  );
+}
+const CANCEL_MESSAGES = /* @__PURE__ */ new Set(["Translation cancelled", "Caption cancelled"]);
+const NETWORK_RE = /failed to fetch|networkerror|network error|load failed|econnrefused|err_connection|enotfound|econnreset/i;
+function hostPortFromBaseUrl(baseUrl) {
+  try {
+    const u = new URL(baseUrl);
+    if (u.port) return `${u.hostname}:${u.port}`;
+    if (u.protocol === "https:") return `${u.hostname}:443`;
+    if (u.protocol === "http:") return `${u.hostname}:80`;
+    return u.hostname;
+  } catch {
+    return baseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "") || baseUrl;
+  }
+}
+function providerLabel(settings) {
+  return settings.provider === "lmstudio" ? "LM Studio" : "Ollama";
+}
+function localAiEndpoint(settings) {
+  const base = settings.provider === "lmstudio" ? settings.lmStudioBaseUrl : settings.ollamaBaseUrl;
+  return hostPortFromBaseUrl(base);
+}
+function formatLocalAiError(err, settings) {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (CANCEL_MESSAGES.has(raw)) return raw;
+  const host = localAiEndpoint(settings);
+  const provider = providerLabel(settings);
+  const model = settings.model.trim() || "(none)";
+  if (NETWORK_RE.test(raw)) {
+    return `Failed to connect to [${host}] ${provider} model [${model}]`;
+  }
+  return `${raw} (${provider} [${host}] model [${model}])`;
 }
 const TRANSLATE_TIMEOUT_MS = 12e4;
 const CACHE_MAX = 80;
@@ -13403,23 +20804,27 @@ async function translateText(settings, text, direction, signal) {
   const targetName = languageName(settings.targetLanguage);
   const sourceLang = direction === "en-to-target" ? "English" : targetName;
   const targetLang = direction === "en-to-target" ? targetName : "English";
-  const result = settings.provider === "lmstudio" ? await translateWithLmStudio(
-    settings.lmStudioBaseUrl,
-    settings.model,
-    trimmed,
-    sourceLang,
-    targetLang,
-    signal
-  ) : await translateWithOllama(
-    settings.ollamaBaseUrl,
-    settings.model,
-    trimmed,
-    sourceLang,
-    targetLang,
-    signal
-  );
-  cacheSet(key, result);
-  return result;
+  try {
+    const result = settings.provider === "lmstudio" ? await translateWithLmStudio(
+      settings.lmStudioBaseUrl,
+      settings.model,
+      trimmed,
+      sourceLang,
+      targetLang,
+      signal
+    ) : await translateWithOllama(
+      settings.ollamaBaseUrl,
+      settings.model,
+      trimmed,
+      sourceLang,
+      targetLang,
+      signal
+    );
+    cacheSet(key, result);
+    return result;
+  } catch (err) {
+    throw new Error(formatLocalAiError(err, settings));
+  }
 }
 async function listModels(settings) {
   if (settings.provider === "lmstudio") {
@@ -13441,13 +20846,100 @@ async function listModels(settings) {
 }
 async function testConnection(settings) {
   const models = await listModels(settings);
-  const providerLabel = settings.provider === "lmstudio" ? "LM Studio" : "Ollama";
+  const providerLabel2 = settings.provider === "lmstudio" ? "LM Studio" : "Ollama";
   if (models.length === 0) {
-    return `Connected to ${providerLabel} (no models detected)`;
+    return `Connected to ${providerLabel2} (no models detected)`;
   }
   const preview = models.slice(0, 5).join(", ");
   const more = models.length > 5 ? "…" : "";
-  return `Connected to ${providerLabel}, ${models.length} model(s): ${preview}${more}`;
+  return `Connected to ${providerLabel2}, ${models.length} model(s): ${preview}${more}`;
+}
+const HF_MODELS_URL = "https://huggingface.co/api/models?author=SmilingWolf&search=tagger&limit=100&full=true";
+const FETCH_TIMEOUT_MS = 2e4;
+const FALLBACK_WD14_MODEL_REPOS = [
+  "SmilingWolf/wd-swinv2-tagger-v3",
+  "SmilingWolf/wd-vit-tagger-v3",
+  "SmilingWolf/wd-convnext-tagger-v3",
+  "SmilingWolf/wd-vit-large-tagger-v3",
+  "SmilingWolf/wd-eva02-large-tagger-v3",
+  "SmilingWolf/wd-v1-4-moat-tagger-v2",
+  "SmilingWolf/wd-v1-4-swinv2-tagger-v2",
+  "SmilingWolf/wd-v1-4-convnext-tagger-v2",
+  "SmilingWolf/wd-v1-4-convnextv2-tagger-v2",
+  "SmilingWolf/wd-v1-4-vit-tagger-v2"
+];
+function hasOnnxTaggerFiles(entry) {
+  const files = new Set(
+    (entry.siblings ?? []).map((s) => (s.rfilename || "").replace(/\\/g, "/").toLowerCase()).filter(Boolean)
+  );
+  if (files.size === 0) {
+    const id = (entry.id || entry.modelId || "").toLowerCase();
+    const tags = (entry.tags || []).map((t) => t.toLowerCase());
+    return id.includes("tagger") && tags.includes("onnx");
+  }
+  return files.has("model.onnx") && files.has("selected_tags.csv");
+}
+function sortRepoIds(ids) {
+  const score = (id) => {
+    const lower = id.toLowerCase();
+    let s = 0;
+    if (lower.includes("-v3")) s += 300;
+    if (lower.includes("-v2")) s += 200;
+    if (lower.includes("swinv2")) s += 40;
+    if (lower.includes("eva02")) s += 30;
+    if (lower.includes("vit-large")) s += 25;
+    if (lower.includes("vit")) s += 15;
+    if (lower.includes("convnext")) s += 10;
+    if (lower.includes("moat")) s += 5;
+    return s;
+  };
+  return [...ids].sort((a, b) => score(b) - score(a) || a.localeCompare(b));
+}
+async function listWd14ModelRepos(signal) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort("timeout"), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(HF_MODELS_URL, { signal: ctrl.signal });
+    if (!res.ok) {
+      throw new Error(`Hugging Face API error ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected Hugging Face API response");
+    }
+    const ids = data.filter(hasOnnxTaggerFiles).map((e) => (e.id || e.modelId || "").trim()).filter((id) => /^SmilingWolf\/wd-.+-tagger/i.test(id));
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) {
+      throw new Error("No ONNX WD14 tagger models found");
+    }
+    return sortRepoIds(unique);
+  } catch (err) {
+    const reason = ctrl.signal.reason;
+    if (reason === "cancel") throw new Error("Cancelled");
+    if (reason === "timeout") {
+      throw new Error("Timed out while listing WD14 models from Hugging Face");
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function listWd14ModelReposOrFallback(signal) {
+  try {
+    const repos = await listWd14ModelRepos(signal);
+    const withDefault = repos.includes(DEFAULT_WD14_SETTINGS.modelRepoId) ? repos : sortRepoIds([DEFAULT_WD14_SETTINGS.modelRepoId, ...repos]);
+    return { repos: withDefault, fromNetwork: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "Cancelled") {
+      return { repos: [...FALLBACK_WD14_MODEL_REPOS], fromNetwork: false, error: message };
+    }
+    return {
+      repos: [...FALLBACK_WD14_MODEL_REPOS],
+      fromNetwork: false,
+      error: message
+    };
+  }
 }
 function newPresetId() {
   return `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -13457,11 +20949,16 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
   const [models, setModels] = reactExports.useState([]);
   const [loadingModels, setLoadingModels] = reactExports.useState(false);
   const [modelsError, setModelsError] = reactExports.useState(null);
+  const [wd14Repos, setWd14Repos] = reactExports.useState([...FALLBACK_WD14_MODEL_REPOS]);
+  const [loadingWd14Repos, setLoadingWd14Repos] = reactExports.useState(false);
+  const [wd14ReposError, setWd14ReposError] = reactExports.useState(null);
+  const [wd14ReposFromNetwork, setWd14ReposFromNetwork] = reactExports.useState(false);
   const [testing, setTesting] = reactExports.useState(false);
   const [testResult, setTestResult] = reactExports.useState(null);
   const [testError, setTestError] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
   const fetchId = reactExports.useRef(0);
+  const wd14FetchId = reactExports.useRef(0);
   const urlDebounce = reactExports.useRef(null);
   const promptDebounce = reactExports.useRef(null);
   const skipUrlFetch = reactExports.useRef(false);
@@ -13472,6 +20969,13 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
   const activePreset = reactExports.useMemo(() => {
     return draft.captionPresets.find((p) => p.id === draft.activeCaptionPresetId) ?? draft.captionPresets[0] ?? null;
   }, [draft.captionPresets, draft.activeCaptionPresetId]);
+  const wd14RepoOptions = reactExports.useMemo(() => {
+    const current = draft.wd14.modelRepoId.trim();
+    if (current && !wd14Repos.includes(current)) {
+      return [current, ...wd14Repos];
+    }
+    return wd14Repos;
+  }, [draft.wd14.modelRepoId, wd14Repos]);
   const fetchModels = reactExports.useCallback(async (next) => {
     const id = ++fetchId.current;
     setLoadingModels(true);
@@ -13501,6 +21005,22 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       if (id === fetchId.current) setLoadingModels(false);
     }
   }, []);
+  const fetchWd14Repos = reactExports.useCallback(async () => {
+    const id = ++wd14FetchId.current;
+    setLoadingWd14Repos(true);
+    setWd14ReposError(null);
+    try {
+      const { repos, fromNetwork, error } = await listWd14ModelReposOrFallback();
+      if (id !== wd14FetchId.current) return;
+      setWd14Repos(repos);
+      setWd14ReposFromNetwork(fromNetwork);
+      if (error && !fromNetwork) {
+        setWd14ReposError(`Using offline list: ${error}`);
+      }
+    } finally {
+      if (id === wd14FetchId.current) setLoadingWd14Repos(false);
+    }
+  }, []);
   reactExports.useEffect(() => {
     if (!open) return;
     skipUrlFetch.current = true;
@@ -13509,8 +21029,10 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
     setTestResult(null);
     setTestError(null);
     setModelsError(null);
+    setWd14ReposError(null);
     void fetchModels(normalizeSettings(settings));
-  }, [open, settings, fetchModels]);
+    void fetchWd14Repos();
+  }, [open, settings, fetchModels, fetchWd14Repos]);
   reactExports.useEffect(() => {
     if (!open) return;
     if (skipUrlFetch.current) {
@@ -13622,203 +21144,333 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       datasetFolders: draft.datasetFolders,
       captionPresets: draft.captionPresets,
       activeCaptionPresetId: draft.activeCaptionPresetId,
+      captionFormat: draft.captionFormat,
+      wd14: draft.wd14,
       sidebarWidth: draft.sidebarWidth,
       rightPaneWidth: draft.rightPaneWidth,
       listViewMode: draft.listViewMode,
-      thumbnailWidth: draft.thumbnailWidth
+      thumbnailWidth: draft.thumbnailWidth,
+      bucketPreview: draft.bucketPreview,
+      activeView: draft.activeView,
+      loraTrainJobs: draft.loraTrainJobs,
+      activeLoraTrainJobId: draft.activeLoraTrainJobId,
+      loraTrainApp: draft.loraTrainApp
     });
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "modal modal-wide",
-      role: "dialog",
-      "aria-labelledby": "settings-title",
-      onClick: (e) => e.stopPropagation(),
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "settings-title", children: "Settings" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Translation provider" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "radio-row", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "radio",
-                  name: "provider",
-                  checked: draft.provider === "lmstudio",
-                  onChange: () => setProvider("lmstudio")
-                }
-              ),
-              "LM Studio"
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onClose();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal modal-wide",
+          role: "dialog",
+          "aria-labelledby": "settings-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "settings-title", children: "Settings" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Translation provider" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "radio-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "radio",
+                      name: "provider",
+                      checked: draft.provider === "lmstudio",
+                      onChange: () => setProvider("lmstudio")
+                    }
+                  ),
+                  "LM Studio"
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "radio",
+                      name: "provider",
+                      checked: draft.provider === "ollama",
+                      onChange: () => setProvider("ollama")
+                    }
+                  ),
+                  "Ollama"
+                ] })
+              ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+            draft.provider === "lmstudio" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LM Studio Base URL" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "input",
                 {
-                  type: "radio",
-                  name: "provider",
-                  checked: draft.provider === "ollama",
-                  onChange: () => setProvider("ollama")
+                  type: "text",
+                  value: draft.lmStudioBaseUrl,
+                  onChange: (e) => setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
                 }
-              ),
-              "Ollama"
-            ] })
-          ] })
-        ] }),
-        draft.provider === "lmstudio" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LM Studio Base URL" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              value: draft.lmStudioBaseUrl,
-              onChange: (e) => setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
-            }
-          )
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Ollama Base URL" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "text",
-                value: draft.ollamaBaseUrl,
-                onChange: (e) => setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
-            "Interactive translation / captioning has priority; analysis pauses until idle. Optional: ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "OLLAMA_NUM_PARALLEL=2" }),
-            " for hard concurrency (restart Ollama)."
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "select",
-              {
-                value: draft.model,
-                onChange: (e) => setDraft((prev) => ({ ...prev, model: e.target.value })),
-                disabled: loadingModels && modelOptions.length === 0,
-                "aria-label": "Select model",
-                children: modelOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingModels ? "Detecting…" : "No models available" }) : modelOptions.map((name) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: name, children: name }, name))
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: () => void fetchModels(draft),
-                disabled: loadingModels,
-                children: loadingModels ? "Detecting…" : "Refresh"
-              }
-            )
-          ] }),
-          modelsError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: modelsError }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used for translation, Auto Caption, and reCaption." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field checkbox-field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "checkbox-row", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: draft.autoAnalysis,
-                onChange: (e) => setDraft((prev) => ({ ...prev, autoAnalysis: e.target.checked }))
-              }
-            ),
-            "Auto analysis"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "On: analyze captions in the background. Off: only while the Analyze dialog is open." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Auto Caption prompt" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+              )
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Ollama Base URL" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    value: draft.ollamaBaseUrl,
+                    onChange: (e) => setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+                "Interactive translation / captioning has priority; analysis pauses until idle. Optional: ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "OLLAMA_NUM_PARALLEL=2" }),
+                " for hard concurrency (restart Ollama)."
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "select",
+                  {
+                    value: draft.model,
+                    onChange: (e) => setDraft((prev) => ({ ...prev, model: e.target.value })),
+                    disabled: loadingModels && modelOptions.length === 0,
+                    "aria-label": "Select model",
+                    children: modelOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingModels ? "Detecting…" : "No models available" }) : modelOptions.map((name) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: name, children: name }, name))
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: () => void fetchModels(draft),
+                    disabled: loadingModels,
+                    children: loadingModels ? "Detecting…" : "Refresh"
+                  }
+                )
+              ] }),
+              modelsError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: modelsError }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used for translation, Natural Auto Caption / reCaption, and analysis." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field checkbox-field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "checkbox-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: draft.autoAnalysis,
+                    onChange: (e) => setDraft((prev) => ({ ...prev, autoAnalysis: e.target.checked }))
+                  }
+                ),
+                "Auto analysis"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "On: analyze captions in the background. Off: only while the Analyze dialog is open." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "WD14 Tagging" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "select",
+                DownloadFolderField,
                 {
-                  value: draft.activeCaptionPresetId,
-                  onChange: (e) => setDraft((prev) => ({ ...prev, activeCaptionPresetId: e.target.value })),
-                  "aria-label": "Caption prompt preset",
-                  children: draft.captionPresets.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.id, children: p.name }, p.id))
+                  value: draft.loraTrainApp.downloadFolder,
+                  onChange: (downloadFolder) => setDraft((prev) => ({
+                    ...prev,
+                    loraTrainApp: { ...prev.loraTrainApp, downloadFolder }
+                  }))
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: addPreset, children: "Add" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: deletePreset, children: "Delete" })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset name" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "text",
-                value: activePreset?.name ?? "",
-                onChange: (e) => updateActivePreset({ name: e.target.value })
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Prompt (auto-saved; PNG Info is appended at runtime)" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "textarea",
-              {
-                className: "prompt-textarea",
-                value: activePreset?.prompt ?? "",
-                onChange: (e) => updateActivePreset({ prompt: e.target.value }),
-                spellCheck: false
-              }
-            )
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetDefaults, children: "Reset default URLs" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleTest, disabled: testing, children: testing ? "Testing…" : "Test connection" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: handleSave, disabled: saving, children: saving ? "Saving…" : "Save" })
-        ] }),
-        testResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: testResult }),
-        testError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: testError })
-      ]
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                PythonExecutableField,
+                {
+                  value: draft.loraTrainApp.pythonPath,
+                  onChange: (pythonPath) => setDraft((prev) => ({
+                    ...prev,
+                    loraTrainApp: { ...prev.loraTrainApp, pythonPath }
+                  })),
+                  downloadFolder: draft.loraTrainApp.downloadFolder,
+                  enabled: open
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used when Caption format is set to Danbooru Tags(SD/XL). Download installs WD14 + training packages into the download folder's python venv." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model repo" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "select",
+                    {
+                      value: draft.wd14.modelRepoId,
+                      onChange: (e) => setDraft((prev) => ({
+                        ...prev,
+                        wd14: { ...prev.wd14, modelRepoId: e.target.value }
+                      })),
+                      disabled: loadingWd14Repos && wd14RepoOptions.length === 0,
+                      "aria-label": "WD14 model repo",
+                      children: wd14RepoOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingWd14Repos ? "Loading…" : "No models available" }) : wd14RepoOptions.map((repo) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: repo, children: repo.replace(/^SmilingWolf\//, "") }, repo))
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: () => void fetchWd14Repos(),
+                      disabled: loadingWd14Repos,
+                      children: loadingWd14Repos ? "Loading…" : "Refresh"
+                    }
+                  )
+                ] }),
+                wd14ReposError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: wd14ReposError }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+                  wd14ReposFromNetwork ? "Listed from Hugging Face (ONNX + selected_tags.csv)." : "Offline fallback list — click Refresh when online.",
+                  " ",
+                  "Full id: ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: draft.wd14.modelRepoId || "—" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", style: { flex: 1 }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Threshold" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.05,
+                      value: draft.wd14.threshold,
+                      onChange: (e) => setDraft((prev) => ({
+                        ...prev,
+                        wd14: {
+                          ...prev.wd14,
+                          threshold: Number(e.target.value)
+                        }
+                      }))
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", style: { flex: 1 }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Character threshold" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.05,
+                      value: draft.wd14.characterThreshold,
+                      onChange: (e) => setDraft((prev) => ({
+                        ...prev,
+                        wd14: {
+                          ...prev.wd14,
+                          characterThreshold: Number(e.target.value)
+                        }
+                      }))
+                    }
+                  )
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Auto Caption prompt" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used only for Natural Language(Flux/Krea2) format. Danbooru Tags ignores these prompts." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "select",
+                    {
+                      value: draft.activeCaptionPresetId,
+                      onChange: (e) => setDraft((prev) => ({ ...prev, activeCaptionPresetId: e.target.value })),
+                      "aria-label": "Caption prompt preset",
+                      children: draft.captionPresets.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.id, children: p.name }, p.id))
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: addPreset, children: "Add" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: deletePreset, children: "Delete" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset name" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    value: activePreset?.name ?? "",
+                    onChange: (e) => updateActivePreset({ name: e.target.value })
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Prompt (auto-saved; PNG Info is appended at runtime)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "textarea",
+                  {
+                    className: "prompt-textarea",
+                    value: activePreset?.prompt ?? "",
+                    onChange: (e) => updateActivePreset({ prompt: e.target.value }),
+                    spellCheck: false
+                  }
+                )
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetDefaults, children: "Reset default URLs" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleTest, disabled: testing, children: testing ? "Testing…" : "Test connection" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, children: "Cancel" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: handleSave, disabled: saving, children: saving ? "Saving…" : "Save" })
+            ] }),
+            testResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: testResult }),
+            testError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: testError })
+          ]
+        }
+      )
     }
-  ) });
+  );
 }
 function UnsavedDialog({ open, onSave, onDiscard, onCancel }) {
   if (!open) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modal-backdrop", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "modal",
-      role: "dialog",
-      "aria-labelledby": "unsaved-title",
-      onClick: (e) => e.stopPropagation(),
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "unsaved-title", children: "Unsaved changes" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "The English caption has not been written to the .txt file. What would you like to do?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onCancel, children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onDiscard, children: "Discard" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: onSave, children: "Save" })
-        ] })
-      ]
+      className: "modal-backdrop",
+      onMouseDown: (e) => {
+        if (e.target === e.currentTarget) onCancel();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "modal",
+          role: "dialog",
+          "aria-labelledby": "unsaved-title",
+          onMouseDown: (e) => e.stopPropagation(),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "unsaved-title", children: "Unsaved changes" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "modal-text", children: "The English caption has not been written to the .txt file. What would you like to do?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onCancel, children: "Cancel" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onDiscard, children: "Discard" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: onSave, children: "Save" })
+            ] })
+          ]
+        }
+      )
     }
-  ) });
+  );
 }
 const DEBOUNCE_MS = 700;
 function useBidirectionalTranslate({
   settings,
+  selectedPath,
   setEnglish,
   setTranslated,
   enabled
 }) {
   const [translating, setTranslating] = reactExports.useState(false);
+  const [translatingPath, setTranslatingPath] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
   const requestId = reactExports.useRef(0);
   const enTimer = reactExports.useRef(null);
@@ -13826,6 +21478,8 @@ function useBidirectionalTranslate({
   const abortRef = reactExports.useRef(null);
   const settingsRef = reactExports.useRef(settings);
   settingsRef.current = settings;
+  const selectedPathRef = reactExports.useRef(selectedPath);
+  selectedPathRef.current = selectedPath;
   const clearTimers = reactExports.useCallback(() => {
     if (enTimer.current) clearTimeout(enTimer.current);
     if (trTimer.current) clearTimeout(trTimer.current);
@@ -13838,14 +21492,18 @@ function useBidirectionalTranslate({
     abortRef.current = null;
     requestId.current += 1;
     setTranslating(false);
+    setTranslatingPath(null);
   }, [clearTimers]);
   const runTranslate = reactExports.useCallback(
-    async (text, direction) => {
+    async (text, direction, imagePath) => {
+      if (settingsRef.current.activeView !== "datasetEdit") return;
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
       const id = ++requestId.current;
+      const pathForRequest = imagePath !== void 0 ? imagePath : selectedPathRef.current;
       setTranslating(true);
+      setTranslatingPath(pathForRequest);
       setError(null);
       try {
         const result = await translateText(settingsRef.current, text, direction, ac.signal);
@@ -13861,7 +21519,10 @@ function useBidirectionalTranslate({
         if (message === "Translation cancelled") return;
         setError(message);
       } finally {
-        if (id === requestId.current) setTranslating(false);
+        if (id === requestId.current) {
+          setTranslating(false);
+          setTranslatingPath(null);
+        }
       }
     },
     [setEnglish, setTranslated]
@@ -13870,8 +21531,9 @@ function useBidirectionalTranslate({
     (text) => {
       if (!enabled) return;
       if (enTimer.current) clearTimeout(enTimer.current);
+      const pathAtSchedule = selectedPathRef.current;
       enTimer.current = setTimeout(() => {
-        void runTranslate(text, "en-to-target");
+        void runTranslate(text, "en-to-target", pathAtSchedule);
       }, DEBOUNCE_MS);
     },
     [enabled, runTranslate]
@@ -13880,16 +21542,17 @@ function useBidirectionalTranslate({
     (text) => {
       if (!enabled) return;
       if (trTimer.current) clearTimeout(trTimer.current);
+      const pathAtSchedule = selectedPathRef.current;
       trTimer.current = setTimeout(() => {
-        void runTranslate(text, "target-to-en");
+        void runTranslate(text, "target-to-en", pathAtSchedule);
       }, DEBOUNCE_MS);
     },
     [enabled, runTranslate]
   );
   const translateEnglishToTargetNow = reactExports.useCallback(
-    (text) => {
+    (text, imagePath) => {
       clearTimers();
-      void runTranslate(text, "en-to-target");
+      void runTranslate(text, "en-to-target", imagePath);
     },
     [clearTimers, runTranslate]
   );
@@ -13911,6 +21574,7 @@ function useBidirectionalTranslate({
   }, [langKey, enabled, translateEnglishToTargetNow]);
   return {
     translating,
+    translatingPath,
     error,
     setError,
     cancelInFlight,
@@ -14906,31 +22570,130 @@ async function captionWithOllama(settings, fullPrompt, base64, signal) {
 async function generateCaptionForImage(settings, imagePath, signal) {
   const presetPrompt = activePresetPrompt(settings);
   if (!presetPrompt) throw new Error("No caption prompt preset selected");
-  const [{ positivePrompt }, { mimeType, base64 }] = await Promise.all([
-    window.api.readImageMeta(imagePath),
-    window.api.readImageBase64(imagePath)
-  ]);
-  const pngInfo = positivePrompt.trim() || "(no PNG Info / positive prompt found in image metadata)";
-  const fullPrompt = `${presetPrompt}
+  try {
+    const [{ positivePrompt }, { mimeType, base64 }] = await Promise.all([
+      window.api.readImageMeta(imagePath),
+      window.api.readImageBase64(imagePath)
+    ]);
+    const pngInfo = positivePrompt.trim() || "(no PNG Info / positive prompt found in image metadata)";
+    const fullPrompt = `${presetPrompt}
 ${pngInfo}`;
-  if (settings.provider === "lmstudio") {
-    return captionWithLmStudio(settings, fullPrompt, mimeType, base64, signal);
+    if (settings.provider === "lmstudio") {
+      return await captionWithLmStudio(settings, fullPrompt, mimeType, base64, signal);
+    }
+    return await captionWithOllama(settings, fullPrompt, base64, signal);
+  } catch (err) {
+    throw new Error(formatLocalAiError(err, settings));
   }
-  return captionWithOllama(settings, fullPrompt, base64, signal);
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw new Error("Caption cancelled");
+}
+async function ensureWd14ModelReady(settings, signal) {
+  throwIfAborted(signal);
+  const onAbort = () => {
+    void window.api.cancelWd14();
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const res = await window.api.ensureWd14Model({
+      pythonPath: settings.loraTrainApp.pythonPath || void 0,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.loraTrainApp.downloadFolder),
+      token: settings.loraTrainApp.huggingfaceToken || void 0,
+      repoId: settings.wd14.modelRepoId
+    });
+    throwIfAborted(signal);
+    if (!res.ok || !res.modelDir) {
+      throw new Error(res.error || "Failed to prepare WD14 model");
+    }
+    return res.modelDir;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+async function generateWd14TagsForImages(settings, imagePaths, signal) {
+  if (imagePaths.length === 0) return /* @__PURE__ */ new Map();
+  throwIfAborted(signal);
+  const onAbort = () => {
+    void window.api.cancelWd14();
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const modelDir = await ensureWd14ModelReady(settings, signal);
+    throwIfAborted(signal);
+    const res = await window.api.tagWd14({
+      pythonPath: settings.loraTrainApp.pythonPath || void 0,
+      modelDir,
+      threshold: settings.wd14.threshold,
+      characterThreshold: settings.wd14.characterThreshold,
+      imagePaths,
+      ensure: true,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.loraTrainApp.downloadFolder),
+      token: settings.loraTrainApp.huggingfaceToken || void 0,
+      repoId: settings.wd14.modelRepoId
+    });
+    throwIfAborted(signal);
+    if (!res.ok && res.results.length === 0) {
+      throw new Error(res.error || "WD14 tagging failed");
+    }
+    const out = /* @__PURE__ */ new Map();
+    const byLower = /* @__PURE__ */ new Map();
+    for (const item of res.results) {
+      if (item.tags != null && item.tags !== "" && !item.error) {
+        out.set(item.path, item.tags);
+        byLower.set(item.path.replace(/\\/g, "/").toLowerCase(), item.tags);
+      }
+    }
+    for (const asked of imagePaths) {
+      if (out.has(asked)) continue;
+      const hit = byLower.get(asked.replace(/\\/g, "/").toLowerCase());
+      if (hit) out.set(asked, hit);
+    }
+    if (imagePaths.length === 1) {
+      const only = imagePaths[0];
+      const tags = out.get(only);
+      if (!tags) {
+        const itemErr = res.results.find(
+          (r) => r.path.replace(/\\/g, "/").toLowerCase() === only.replace(/\\/g, "/").toLowerCase()
+        );
+        throw new Error(itemErr?.error || res.error || "WD14 returned empty tags");
+      }
+    }
+    return out;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+async function generateWd14TagsForImage(settings, imagePath, signal) {
+  const map = await generateWd14TagsForImages(settings, [imagePath], signal);
+  const tags = map.get(imagePath);
+  if (!tags) {
+    const first = map.values().next().value;
+    if (first) return first;
+    throw new Error("WD14 returned empty tags");
+  }
+  return tags;
+}
+async function generateCaptionByFormat(settings, imagePath, signal) {
+  if (settings.captionFormat === "wd14") {
+    return generateWd14TagsForImage(settings, imagePath, signal);
+  }
+  return generateCaptionForImage(settings, imagePath, signal);
 }
 function folderLabel(dir) {
   return dir.split(/[/\\]/).pop() ?? dir;
 }
 function getThumbnailColumns() {
-  const items = document.querySelectorAll(".image-list.thumbnails > li");
-  if (items.length === 0) return 1;
-  const firstTop = items[0].offsetTop;
-  let cols = 0;
-  for (const el of items) {
-    if (el.offsetTop !== firstTop) break;
-    cols++;
-  }
-  return Math.max(1, cols);
+  const list = document.querySelector(".sidebar-list .image-list.thumbnails");
+  if (!list) return 1;
+  const cs = getComputedStyle(list);
+  const thumbW = parseFloat(cs.getPropertyValue("--thumb-w")) || 96;
+  const gap = parseFloat(cs.columnGap || cs.gap) || 0;
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padR = parseFloat(cs.paddingRight) || 0;
+  const inner = list.clientWidth - padL - padR;
+  if (inner <= 0 || thumbW <= 0) return 1;
+  return Math.max(1, Math.floor((inner + gap) / (thumbW + gap)));
 }
 function App() {
   const [folder, setFolder] = reactExports.useState(null);
@@ -14941,19 +22704,28 @@ function App() {
   const [translated, setTranslated] = reactExports.useState("");
   const [settings, setSettings] = reactExports.useState(() => normalizeSettings(null));
   const [settingsOpen, setSettingsOpen] = reactExports.useState(false);
+  const [loraSettingsOpen, setLoraSettingsOpen] = reactExports.useState(false);
   const [analysisOpen, setAnalysisOpen] = reactExports.useState(false);
   const [unsavedOpen, setUnsavedOpen] = reactExports.useState(false);
   const [deleteOpen, setDeleteOpen] = reactExports.useState(false);
   const [removeDatasetOpen, setRemoveDatasetOpen] = reactExports.useState(false);
+  const [removeLoraJobOpen, setRemoveLoraJobOpen] = reactExports.useState(false);
+  const [missingDatasetOpen, setMissingDatasetOpen] = reactExports.useState(false);
+  const [missingDatasetPath, setMissingDatasetPath] = reactExports.useState(null);
   const [datasetMenuOpen, setDatasetMenuOpen] = reactExports.useState(false);
+  const [jobMenuOpen, setJobMenuOpen] = reactExports.useState(false);
+  const [loraTraining, setLoraTraining] = reactExports.useState(false);
   const [status, setStatus] = reactExports.useState("");
   const [batchCaptioning, setBatchCaptioning] = reactExports.useState(false);
   const [singleCaptioning, setSingleCaptioning] = reactExports.useState(false);
+  const [captioningPath, setCaptioningPath] = reactExports.useState(null);
   const [draggingPane, setDraggingPane] = reactExports.useState(null);
   const unsavedResolver = reactExports.useRef(null);
   const captionAbortRef = reactExports.useRef(null);
   const batchCancelRef = reactExports.useRef(false);
+  const statusClearTimerRef = reactExports.useRef(null);
   const datasetMenuRef = reactExports.useRef(null);
+  const jobMenuRef = reactExports.useRef(null);
   const settingsRef = reactExports.useRef(settings);
   settingsRef.current = settings;
   const selectedPathRef = reactExports.useRef(selectedPath);
@@ -14975,6 +22747,7 @@ function App() {
   }, [selectedPath]);
   const {
     translating,
+    translatingPath,
     error,
     setError,
     cancelInFlight,
@@ -14984,15 +22757,22 @@ function App() {
     setEnglishSnapshot
   } = useBidirectionalTranslate({
     settings,
+    selectedPath,
     setEnglish: (value) => {
       setEnglish(value);
       setEnglishSnapshot(value);
     },
     setTranslated,
-    enabled: Boolean(selectedPath)
+    enabled: settings.activeView === "datasetEdit" && Boolean(selectedPath)
   });
+  const busyPaths = reactExports.useMemo(() => {
+    const s = /* @__PURE__ */ new Set();
+    if (captioningPath) s.add(captioningPath);
+    if (translating && translatingPath) s.add(translatingPath);
+    return s;
+  }, [captioningPath, translating, translatingPath]);
   const aiBusy = captionBusy || translating;
-  const analysisEnabled = settings.autoAnalysis || analysisOpen;
+  const analysisEnabled = (settings.autoAnalysis || analysisOpen) && settings.activeView === "datasetEdit";
   const {
     result: analysisResult,
     analyzing: analysisAnalyzing,
@@ -15012,7 +22792,9 @@ function App() {
         setSavedEnglish(caption);
         setEnglishSnapshot(caption);
         setTranslated("");
-        if (caption.trim()) translateEnglishToTargetNow(caption);
+        if (caption.trim() && settingsRef.current.activeView === "datasetEdit") {
+          translateEnglishToTargetNow(caption, imagePath);
+        }
       }
     },
     [invalidateAnalysis, setEnglishSnapshot, translateEnglishToTargetNow]
@@ -15021,14 +22803,15 @@ function App() {
     async (imagePath) => {
       cancelInFlight();
       const caption = await window.api.readCaption(imagePath);
+      selectedPathRef.current = imagePath;
       setSelectedPath(imagePath);
       setEnglish(caption);
       setSavedEnglish(caption);
       setTranslated("");
       setEnglishSnapshot(caption);
       setError(null);
-      if (caption.trim()) {
-        translateEnglishToTargetNow(caption);
+      if (caption.trim() && settingsRef.current.activeView === "datasetEdit") {
+        translateEnglishToTargetNow(caption, imagePath);
       }
     },
     [cancelInFlight, setEnglishSnapshot, setError, translateEnglishToTargetNow]
@@ -15071,12 +22854,24 @@ function App() {
   reactExports.useEffect(() => {
     void window.api.getSettings().then(async (s) => {
       const next = normalizeSettings(s);
+      settingsRef.current = next;
       setSettings(next);
+      if (next.activeView === "loraTrain") return;
       if (next.lastFolder) {
         await loadFolder(next.lastFolder, false);
       }
     });
   }, []);
+  const prevActiveViewRef = reactExports.useRef(settings.activeView);
+  reactExports.useEffect(() => {
+    const prev = prevActiveViewRef.current;
+    prevActiveViewRef.current = settings.activeView;
+    if (prev === settings.activeView) return;
+    if (settings.activeView !== "datasetEdit") return;
+    if (folder && selectedPath && english.trim()) {
+      translateEnglishToTargetNow(english, selectedPath);
+    }
+  }, [settings.activeView, folder, selectedPath, english, translateEnglishToTargetNow]);
   reactExports.useEffect(() => {
     setEnglishSnapshot(english);
   }, [english, setEnglishSnapshot]);
@@ -15098,6 +22893,24 @@ function App() {
       window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [datasetMenuOpen]);
+  reactExports.useEffect(() => {
+    if (!jobMenuOpen) return;
+    const onPointerDown = (e) => {
+      const root2 = jobMenuRef.current;
+      if (!root2) return;
+      if (e.target instanceof Node && root2.contains(e.target)) return;
+      setJobMenuOpen(false);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setJobMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [jobMenuOpen]);
   const askUnsaved = reactExports.useCallback(() => {
     return new Promise((resolve) => {
       unsavedResolver.current = resolve;
@@ -15147,7 +22960,31 @@ function App() {
     setDatasetMenuOpen(false);
     if (!dir || dir === folder) return;
     if (!await ensureCanLeave()) return;
-    await loadFolder(dir, true);
+    const ok = await loadFolder(dir, true);
+    if (!ok) {
+      setMissingDatasetPath(dir);
+      setMissingDatasetOpen(true);
+    }
+  };
+  const cancelMissingDatasetFolder = () => {
+    setMissingDatasetOpen(false);
+    setMissingDatasetPath(null);
+  };
+  const confirmDeleteMissingDatasetFolder = () => {
+    const removing = missingDatasetPath;
+    setMissingDatasetOpen(false);
+    setMissingDatasetPath(null);
+    if (!removing) return;
+    setSettings((prev) => {
+      const remaining = prev.datasetFolders.filter((f) => f !== removing);
+      const next = normalizeSettings({
+        ...prev,
+        datasetFolders: remaining,
+        lastFolder: prev.lastFolder === removing ? remaining[0] ?? null : prev.lastFolder
+      });
+      void window.api.setSettings(next);
+      return next;
+    });
   };
   const requestRemoveDatasetFolder = () => {
     if (!folder) return;
@@ -15207,20 +23044,151 @@ function App() {
   };
   const onAutoSaveSettings = reactExports.useCallback(async (next) => {
     const normalized = normalizeSettings(next);
+    settingsRef.current = normalized;
     setSettings(normalized);
     await window.api.setSettings(normalized);
+  }, []);
+  const persistSettingsPatch = reactExports.useCallback((patch) => {
+    const next = normalizeSettings({ ...settingsRef.current, ...patch });
+    settingsRef.current = next;
+    setSettings(next);
+    void window.api.setSettings(next);
   }, []);
   const stopBatchCaption = () => {
     batchCancelRef.current = true;
     captionAbortRef.current?.abort();
     captionAbortRef.current = null;
+    void window.api.cancelWd14();
   };
+  const stopAllLocalAi = reactExports.useCallback(() => {
+    stopBatchCaption();
+    cancelInFlight();
+    setBatchCaptioning(false);
+    setSingleCaptioning(false);
+    setCaptioningPath(null);
+  }, [cancelInFlight]);
+  const setActiveView = (view) => {
+    if (settingsRef.current.activeView === view) return;
+    if (view === "datasetEdit" && loraTraining) {
+      setStatus("Cannot switch to DatasetEdit while training");
+      setError(null);
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current);
+        statusClearTimerRef.current = null;
+      }
+      statusClearTimerRef.current = setTimeout(() => setStatus(""), 4e3);
+      return;
+    }
+    if (view === "loraTrain") {
+      stopAllLocalAi();
+      setStatus("Local AI stopped");
+      setError(null);
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current);
+        statusClearTimerRef.current = null;
+      }
+      statusClearTimerRef.current = setTimeout(() => setStatus(""), 4e3);
+    }
+    persistSettingsPatch({ activeView: view });
+    if (view === "datasetEdit") {
+      const last = settingsRef.current.lastFolder;
+      if (last && !folder) {
+        void loadFolder(last, false);
+      }
+    }
+  };
+  const onLoraJobChange = reactExports.useCallback(
+    (job) => {
+      const id = settingsRef.current.activeLoraTrainJobId;
+      const jobs = settingsRef.current.loraTrainJobs.map(
+        (p) => p.id === id ? { ...p, job } : p
+      );
+      persistSettingsPatch({ loraTrainJobs: jobs });
+    },
+    [persistSettingsPatch]
+  );
+  const activeLoraJob = settings.loraTrainJobs.find((p) => p.id === settings.activeLoraTrainJobId) ?? settings.loraTrainJobs[0] ?? createDefaultLoraTrainJobPreset();
+  const switchLoraJob = (id) => {
+    setJobMenuOpen(false);
+    if (!id || id === settingsRef.current.activeLoraTrainJobId || loraTraining) return;
+    persistSettingsPatch({ activeLoraTrainJobId: id });
+  };
+  const addLoraJob = () => {
+    if (loraTraining) return;
+    const current = settingsRef.current.loraTrainJobs.find(
+      (p) => p.id === settingsRef.current.activeLoraTrainJobId
+    ) ?? settingsRef.current.loraTrainJobs[0];
+    if (!current) return;
+    const n = settingsRef.current.loraTrainJobs.length + 1;
+    const preset = {
+      id: createLoraTrainJobId(),
+      job: {
+        ...structuredClone(current.job),
+        name: `Job ${n}`
+      }
+    };
+    persistSettingsPatch({
+      loraTrainJobs: [...settingsRef.current.loraTrainJobs, preset],
+      activeLoraTrainJobId: preset.id
+    });
+  };
+  const requestRemoveLoraJob = () => {
+    if (loraTraining || !activeLoraJob) return;
+    setRemoveLoraJobOpen(true);
+  };
+  const confirmRemoveLoraJob = () => {
+    setRemoveLoraJobOpen(false);
+    if (loraTraining) return;
+    const removing = settingsRef.current.activeLoraTrainJobId;
+    const remaining = settingsRef.current.loraTrainJobs.filter((p) => p.id !== removing);
+    if (remaining.length === 0) {
+      const fallback = createDefaultLoraTrainJobPreset();
+      persistSettingsPatch({
+        loraTrainJobs: [fallback],
+        activeLoraTrainJobId: fallback.id
+      });
+      return;
+    }
+    persistSettingsPatch({
+      loraTrainJobs: remaining,
+      activeLoraTrainJobId: remaining[0].id
+    });
+  };
+  const onSaveLoraTrainApp = async (loraTrainApp) => {
+    const next = normalizeSettings({ ...settingsRef.current, loraTrainApp });
+    await window.api.setSettings(next);
+    setSettings(next);
+  };
+  const onLoraStatus = reactExports.useCallback(
+    (message, isError, options) => {
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current);
+        statusClearTimerRef.current = null;
+      }
+      if (isError) {
+        setError(message);
+        setStatus("");
+        return;
+      }
+      setStatus(message);
+      setError(null);
+      if (!options?.sticky) {
+        statusClearTimerRef.current = setTimeout(() => setStatus(""), 4e3);
+      }
+    },
+    [setError]
+  );
   const runCaptionForPath = async (imagePath) => {
     captionAbortRef.current?.abort();
     const ac = new AbortController();
     captionAbortRef.current = ac;
-    const caption = await generateCaptionForImage(settingsRef.current, imagePath, ac.signal);
-    await applyCaptionToUi(imagePath, caption);
+    setCaptioningPath(imagePath);
+    try {
+      const caption = await generateCaptionByFormat(settingsRef.current, imagePath, ac.signal);
+      await applyCaptionToUi(imagePath, caption);
+    } finally {
+      setCaptioningPath(null);
+    }
   };
   const startAutoCaption = async () => {
     const targets = images.filter((img) => !img.hasCaption);
@@ -15235,17 +23203,57 @@ function App() {
     let done = 0;
     let failed = 0;
     try {
-      for (const img of targets) {
-        if (batchCancelRef.current) break;
-        setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`);
+      const format = settingsRef.current.captionFormat;
+      if (format === "wd14") {
+        captionAbortRef.current?.abort();
+        const ac = new AbortController();
+        captionAbortRef.current = ac;
+        setStatus(`WD14 tagging 0/${targets.length}…`);
         try {
-          await runCaptionForPath(img.path);
-          done += 1;
+          const tagMap = await generateWd14TagsForImages(
+            settingsRef.current,
+            targets.map((t) => t.path),
+            ac.signal
+          );
+          for (const img of targets) {
+            if (batchCancelRef.current) break;
+            const tags = tagMap.get(img.path);
+            if (!tags) {
+              failed += 1;
+              setError(`${img.name}: WD14 returned no tags`);
+              continue;
+            }
+            setCaptioningPath(img.path);
+            setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`);
+            try {
+              await applyCaptionToUi(img.path, tags);
+              done += 1;
+            } catch (err) {
+              failed += 1;
+              setError(`${img.name}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (msg === "Caption cancelled") break;
-          failed += 1;
-          setError(`${img.name}: ${msg}`);
+          if (msg !== "Caption cancelled") {
+            setError(msg);
+          }
+        } finally {
+          setCaptioningPath(null);
+        }
+      } else {
+        for (const img of targets) {
+          if (batchCancelRef.current) break;
+          setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`);
+          try {
+            await runCaptionForPath(img.path);
+            done += 1;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg === "Caption cancelled") break;
+            failed += 1;
+            setError(`${img.name}: ${msg}`);
+          }
         }
       }
       if (batchCancelRef.current) {
@@ -15273,7 +23281,10 @@ function App() {
       window.setTimeout(() => setStatus(""), 2e3);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg !== "Caption cancelled") setError(msg);
+      if (msg !== "Caption cancelled") {
+        setStatus("");
+        setError(msg);
+      }
     } finally {
       setSingleCaptioning(false);
       captionAbortRef.current = null;
@@ -15332,7 +23343,8 @@ function App() {
       }
       if (isCaptionFocused()) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen) return;
+      if (deleteOpen || unsavedOpen || settingsOpen || loraSettingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return;
+      if (settingsRef.current.activeView !== "datasetEdit") return;
       if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
         e.preventDefault();
         return;
@@ -15381,10 +23393,14 @@ function App() {
     deleteOpen,
     unsavedOpen,
     settingsOpen,
-    removeDatasetOpen
+    loraSettingsOpen,
+    removeDatasetOpen,
+    removeLoraJobOpen,
+    missingDatasetOpen
   ]);
   const imageUrl = selectedPath ? window.api.toLocalUrl(selectedPath) : null;
-  const toolbarStatus = status || (translating ? "Translating…" : analysisAnalyzing ? analysisProgress ? `Analyzing ${analysisProgress.done}/${analysisProgress.total}…` : "Analyzing…" : "");
+  const toolbarStatus = status || error || (translating ? "Translating…" : analysisAnalyzing ? analysisProgress ? `Analyzing ${analysisProgress.done}/${analysisProgress.total}…` : "Analyzing…" : "");
+  const toolbarStatusIsError = Boolean(error && !status);
   const persistPaneWidths = reactExports.useCallback((next) => {
     const normalized = normalizeSettings(next);
     setSettings(normalized);
@@ -15401,6 +23417,10 @@ function App() {
   const setListViewMode = (mode) => {
     if (settings.listViewMode === mode) return;
     persistListView({ listViewMode: mode });
+  };
+  const setBucketPreview = (value) => {
+    if (settings.bucketPreview === value) return;
+    persistListView({ bucketPreview: value });
   };
   const onThumbnailWidthChange = (value) => {
     const thumbnailWidth = clampThumbnailWidth(value);
@@ -15449,8 +23469,9 @@ function App() {
     target.addEventListener("pointerup", onUp);
     target.addEventListener("pointercancel", onUp);
   };
+  const isDatasetEdit = settings.activeView === "datasetEdit";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "header",
       {
         className: "toolbar",
@@ -15459,236 +23480,273 @@ function App() {
           if (!(target instanceof Element)) return;
           if (target.closest("button")) e.preventDefault();
         },
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-left", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-dataset", ref: datasetMenuRef, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
-              {
-                type: "button",
-                className: "toolbar-dataset-trigger",
-                disabled: settings.datasetFolders.length === 0,
-                title: folder ?? "No dataset folder",
-                "aria-label": "Dataset folder",
-                "aria-haspopup": "listbox",
-                "aria-expanded": datasetMenuOpen,
-                onClick: () => setDatasetMenuOpen((open) => !open),
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "toolbar-dataset-label", children: folder ? folderLabel(folder) : "No dataset folder" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "10", height: "10", viewBox: "0 0 10 10", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fill: "currentColor", d: "M2 3.5h6L5 7.5 2 3.5z" }) })
-                ]
-              }
-            ),
-            datasetMenuOpen && settings.datasetFolders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "toolbar-dataset-menu", role: "listbox", "aria-label": "Dataset folders", children: settings.datasetFolders.map((dir) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { role: "presentation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                role: "option",
-                className: dir === folder ? "toolbar-dataset-option active" : "toolbar-dataset-option",
-                "aria-selected": dir === folder,
-                title: dir,
-                onClick: () => void switchDatasetFolder(dir),
-                children: folderLabel(dir)
-              }
-            ) }, dir)) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: "primary toolbar-icon-btn",
-              title: "Add Dataset Folder",
-              "aria-label": "Add Dataset Folder",
-              onClick: () => void addDatasetFolder(),
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "path",
-                {
-                  fill: "currentColor",
-                  d: "M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
-                }
-              ) })
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: "toolbar-icon-btn danger",
-              disabled: !folder,
-              title: "Remove dataset folder",
-              "aria-label": "Remove dataset folder",
-              onClick: requestRemoveDatasetFolder,
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "path",
-                {
-                  fill: "currentColor",
-                  d: "M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
-                }
-              ) })
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setSettingsOpen(true), children: "Settings" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              disabled: !folder || images.length === 0,
-              onClick: () => setAnalysisOpen(true),
-              children: "Analyze"
-            }
-          )
-        ] })
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "main",
-        style: {
-          "--sidebar-width": `${settings.sidebarWidth}px`,
-          "--right-pane-width": `${settings.rightPaneWidth}px`
-        },
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "sidebar", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-toolbar", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "list-toolbar-left", children: batchCaptioning ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: stopBatchCaption, children: "Cancel Auto Caption" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "toolbar-left", children: isDatasetEdit ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-dataset", ref: datasetMenuRef, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
                 {
                   type: "button",
-                  onClick: () => void startAutoCaption(),
-                  disabled: !folder || missingCount === 0 || captionBusy,
-                  title: missingCount === 0 ? "All images already have .txt captions" : `Caption ${missingCount} image(s) without .txt`,
+                  className: "toolbar-dataset-trigger",
+                  disabled: settings.datasetFolders.length === 0,
+                  title: folder ?? "No dataset folder",
+                  "aria-label": "Dataset folder",
+                  "aria-haspopup": "listbox",
+                  "aria-expanded": datasetMenuOpen,
+                  onClick: () => setDatasetMenuOpen((open) => !open),
                   children: [
-                    "Auto Caption",
-                    missingCount > 0 ? ` (${missingCount})` : ""
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "toolbar-dataset-label", children: folder ? folderLabel(folder) : "No dataset folder" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "10", height: "10", viewBox: "0 0 10 10", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fill: "currentColor", d: "M2 3.5h6L5 7.5 2 3.5z" }) })
                   ]
                 }
-              ) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-toolbar-right", children: [
+              ),
+              datasetMenuOpen && settings.datasetFolders.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "toolbar-dataset-menu", role: "listbox", "aria-label": "Dataset folders", children: settings.datasetFolders.map((dir) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { role: "presentation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  role: "option",
+                  className: dir === folder ? "toolbar-dataset-option active" : "toolbar-dataset-option",
+                  "aria-selected": dir === folder,
+                  title: dir,
+                  onClick: () => void switchDatasetFolder(dir),
+                  children: folderLabel(dir)
+                }
+              ) }, dir)) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "primary toolbar-icon-btn",
+                title: "Add Dataset Folder",
+                "aria-label": "Add Dataset Folder",
+                onClick: () => void addDatasetFolder(),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    fill: "currentColor",
+                    d: "M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                  }
+                ) })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-icon-btn danger",
+                disabled: !folder,
+                title: "Remove dataset folder",
+                "aria-label": "Remove dataset folder",
+                onClick: requestRemoveDatasetFolder,
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    fill: "currentColor",
+                    d: "M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                  }
+                ) })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "toolbar-caption-format", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Caption format" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "select",
+                {
+                  value: settings.captionFormat,
+                  "aria-label": "Caption format",
+                  title: "Caption format for Auto Caption / reCaption",
+                  onChange: (e) => {
+                    const captionFormat = e.target.value;
+                    persistSettingsPatch({ captionFormat });
+                  },
+                  children: CAPTION_FORMAT_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.id, children: opt.label }, opt.id))
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setSettingsOpen(true), children: "Settings" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: analysisAnalyzing ? "analyze-btn is-analyzing" : "analyze-btn",
+                disabled: !folder || images.length === 0,
+                onClick: () => setAnalysisOpen(true),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "analyze-btn-label", children: "Analyze" })
+              }
+            )
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-dataset", ref: jobMenuRef, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  className: "toolbar-dataset-trigger",
+                  disabled: settings.loraTrainJobs.length === 0 || loraTraining,
+                  title: activeLoraJob?.job.name || "No job preset",
+                  "aria-label": "Job preset",
+                  "aria-haspopup": "listbox",
+                  "aria-expanded": jobMenuOpen,
+                  onClick: () => setJobMenuOpen((open) => !open),
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "toolbar-dataset-label", children: activeLoraJob?.job.name || "No job preset" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "10", height: "10", viewBox: "0 0 10 10", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fill: "currentColor", d: "M2 3.5h6L5 7.5 2 3.5z" }) })
+                  ]
+                }
+              ),
+              jobMenuOpen && settings.loraTrainJobs.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "toolbar-dataset-menu", role: "listbox", "aria-label": "Job presets", children: settings.loraTrainJobs.map((preset) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { role: "presentation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  role: "option",
+                  className: preset.id === settings.activeLoraTrainJobId ? "toolbar-dataset-option active" : "toolbar-dataset-option",
+                  "aria-selected": preset.id === settings.activeLoraTrainJobId,
+                  title: preset.job.name,
+                  disabled: loraTraining,
+                  onClick: () => switchLoraJob(preset.id),
+                  children: preset.job.name || "Untitled job"
+                }
+              ) }, preset.id)) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "primary toolbar-icon-btn",
+                title: "Add job preset",
+                "aria-label": "Add job preset",
+                disabled: loraTraining,
+                onClick: addLoraJob,
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    fill: "currentColor",
+                    d: "M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                  }
+                ) })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-icon-btn danger",
+                disabled: !activeLoraJob || loraTraining,
+                title: "Remove job preset",
+                "aria-label": "Remove job preset",
+                onClick: requestRemoveLoraJob,
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    fill: "currentColor",
+                    d: "M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                  }
+                ) })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setLoraSettingsOpen(true), children: "Settings" })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "toolbar-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
+            {
+              className: "view-switch",
+              role: "tablist",
+              "aria-label": "Main view",
+              children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
                     type: "button",
-                    className: `list-toolbar-btn${settings.listViewMode === "list" ? " active" : ""}`,
-                    "aria-pressed": settings.listViewMode === "list",
-                    title: "List view",
-                    onClick: () => setListViewMode("list"),
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "path",
-                      {
-                        fill: "currentColor",
-                        d: "M1 2.5h12v1.5H1V2.5zm0 4h12V8H1V6.5zm0 4h12V12H1v-1.5z"
-                      }
-                    ) })
+                    role: "tab",
+                    className: `view-switch-seg${isDatasetEdit ? " active" : ""}`,
+                    "aria-selected": isDatasetEdit,
+                    disabled: loraTraining,
+                    title: loraTraining ? "Unavailable while training" : void 0,
+                    onClick: () => setActiveView("datasetEdit"),
+                    children: "DatasetEdit"
                   }
                 ),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
                     type: "button",
-                    className: `list-toolbar-btn${settings.listViewMode === "thumbnails" ? " active" : ""}`,
-                    "aria-pressed": settings.listViewMode === "thumbnails",
-                    title: "Thumbnail view",
-                    onClick: () => setListViewMode("thumbnails"),
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "path",
-                      {
-                        fill: "currentColor",
-                        d: "M1 1h5v5H1V1zm7 0h5v5H8V1zM1 8h5v5H1V8zm7 0h5v5H8V8z"
-                      }
-                    ) })
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "range",
-                    className: "list-toolbar-slider",
-                    min: 48,
-                    max: 160,
-                    step: 4,
-                    value: settings.thumbnailWidth,
-                    disabled: settings.listViewMode !== "thumbnails",
-                    title: "Thumbnail width",
-                    "aria-label": "Thumbnail width",
-                    onChange: (e) => onThumbnailWidthChange(Number(e.target.value)),
-                    onPointerUp: (e) => {
-                      onThumbnailWidthCommit(Number(e.currentTarget.value));
-                      e.currentTarget.blur();
-                    },
-                    onKeyUp: (e) => {
-                      onThumbnailWidthCommit(Number(e.currentTarget.value));
-                      e.currentTarget.blur();
-                    }
+                    role: "tab",
+                    className: `view-switch-seg${!isDatasetEdit ? " active" : ""}`,
+                    "aria-selected": !isDatasetEdit,
+                    onClick: () => setActiveView("loraTrain"),
+                    children: "LoraTrain"
                   }
                 )
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sidebar-list", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              ImageList,
-              {
-                images,
-                selectedPath,
-                dirtyPaths,
-                viewMode: settings.listViewMode,
-                thumbnailWidth: settings.thumbnailWidth,
-                onSelect: (path) => void selectImage(path)
-              }
-            ) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: `pane-resizer${draggingPane === "sidebar" ? " dragging" : ""}`,
-              "aria-label": "Resize image list",
-              title: "Drag to resize",
-              onPointerDown: startPaneResize("sidebar")
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "center-pane", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ImagePreview, { imagePath: selectedPath, imageUrl }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: `pane-resizer${draggingPane === "right" ? " dragging" : ""}`,
-              "aria-label": "Resize caption pane",
-              title: "Drag to resize",
-              onPointerDown: startPaneResize("right")
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "right-pane", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            CaptionEditor,
-            {
-              english,
-              translated,
-              targetLanguage: settings.targetLanguage,
-              translating,
-              captioning: captionBusy,
-              error,
-              canSave: Boolean(selectedPath) && dirty && !captionBusy,
-              canRecaption: Boolean(selectedPath) && !captionBusy,
-              onEnglishChange,
-              onTranslatedChange,
-              onLanguageChange: (code) => void onLanguageChange(code),
-              onDismissError: () => setError(null),
-              onSave: () => void saveCurrent(),
-              onRecaption: () => void reCaptionCurrent()
+              ]
             }
           ) })
         ]
       }
     ),
+    isDatasetEdit ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      DatasetEditView,
+      {
+        settings,
+        images,
+        selectedPath,
+        dirtyPaths,
+        busyPaths,
+        folder,
+        missingCount,
+        batchCaptioning,
+        captionBusy,
+        english,
+        translated,
+        translating,
+        translatingPath,
+        captioningPath,
+        dirty,
+        imageUrl,
+        trainResolutions: activeLoraJob.job.datasets[0]?.resolution?.length ? activeLoraJob.job.datasets[0].resolution : [1024],
+        draggingPane,
+        onStopBatchCaption: stopBatchCaption,
+        onStartAutoCaption: () => void startAutoCaption(),
+        onSetListViewMode: setListViewMode,
+        onThumbnailWidthChange,
+        onThumbnailWidthCommit,
+        onBucketPreviewChange: setBucketPreview,
+        onSelectImage: (path) => void selectImage(path),
+        onStartPaneResize: startPaneResize,
+        onEnglishChange,
+        onTranslatedChange,
+        onLanguageChange: (code) => void onLanguageChange(code),
+        onSave: () => void saveCurrent(),
+        onRecaption: () => void reCaptionCurrent()
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoraTrainView,
+      {
+        job: activeLoraJob.job,
+        appSettings: settings.loraTrainApp,
+        datasetFolders: settings.datasetFolders,
+        onChange: onLoraJobChange,
+        onStatus: onLoraStatus,
+        onTrainingChange: setLoraTraining
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "system-bar", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "system-bar-left", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "system-bar-left", children: isDatasetEdit ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         folder && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "folder-path", title: folder, children: folder }),
         folder && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-count", children: [
           images.length,
           " image(s)"
         ] })
-      ] }),
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "folder-path", title: activeLoraJob.job.datasets[0]?.folder_path, children: activeLoraJob.job.datasets[0]?.folder_path || "No train dataset" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-count", children: [
+          activeLoraJob.job.train.steps,
+          " steps · lr ",
+          activeLoraJob.job.train.lr
+        ] })
+      ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "system-bar-right", children: [
-        toolbarStatus && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "status-msg", children: toolbarStatus }),
-        dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "dirty-flag", children: "Unsaved" })
+        toolbarStatus && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `status-msg${toolbarStatusIsError ? " is-error" : ""}`, children: toolbarStatus }),
+        isDatasetEdit && dirty && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "dirty-flag", children: "Unsaved" })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -15699,6 +23757,15 @@ function App() {
         onClose: () => setSettingsOpen(false),
         onSave: onSaveSettings,
         onAutoSave: onAutoSaveSettings
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoraTrainSettingsDialog,
+      {
+        open: loraSettingsOpen,
+        settings: settings.loraTrainApp,
+        onClose: () => setLoraSettingsOpen(false),
+        onSave: onSaveLoraTrainApp
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -15738,6 +23805,24 @@ function App() {
         folderName: folder ? folderLabel(folder) : "",
         onConfirm: () => void confirmRemoveDatasetFolder(),
         onCancel: () => setRemoveDatasetOpen(false)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      RemoveLoraJobDialog,
+      {
+        open: removeLoraJobOpen,
+        jobName: activeLoraJob?.job.name || "Untitled job",
+        onConfirm: confirmRemoveLoraJob,
+        onCancel: () => setRemoveLoraJobOpen(false)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      MissingDatasetFolderDialog,
+      {
+        open: missingDatasetOpen,
+        folderName: missingDatasetPath ? folderLabel(missingDatasetPath) : "",
+        onConfirm: confirmDeleteMissingDatasetFolder,
+        onCancel: cancelMissingDatasetFolder
       }
     )
   ] });

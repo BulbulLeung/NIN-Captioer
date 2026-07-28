@@ -2429,14 +2429,26 @@ export function LoraTrainView({
                   }
                 />
               </Field>
-              <ToggleField
+              <Field
                 label="Quantize"
-                checked={draft.model.quantize}
-                disabled={training}
-                onChange={(v) =>
-                  patch((p) => ({ ...p, model: { ...p.model, quantize: v } }))
-                }
-              />
+                hint="Choose -NONE- to disable quantization, or apply qfloat8/float8/INT8 to both the DiT transformer and text encoder."
+              >
+                <select
+                  value={draft.model.quantize}
+                  disabled={training}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      model: { ...p.model, quantize: e.target.value as typeof p.model.quantize }
+                    }))
+                  }
+                >
+                  <option value="none">-NONE-</option>
+                  <option value="qfloat8">qfloat8</option>
+                  <option value="float8">float8</option>
+                  <option value="int8">INT8</option>
+                </select>
+              </Field>
               <ToggleField
                 label="Low VRAM mode"
                 hint="On: stage TE/VAE off GPU when DiT is busy + force gradient checkpointing. Does not control DiT layer offload."

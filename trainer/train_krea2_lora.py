@@ -589,6 +589,118 @@ def can_place_on_gpu(needed_bytes: int, margin_bytes: int = VRAM_SAFETY_MARGIN_B
     return free >= int(needed_bytes) + int(margin_bytes)
 
 
+def apply_weight_only_quantization(
+    model,
+    *,
+    device,
+    quant_mode: str,
+    label: str,
+    skip_adapter_names: bool = True,
+) -> tuple[int, int, int, bool]:
+    """Apply the selected torchao weight-only quantization to Linear layers."""
+    import torch
+
+    if model is None:
+        return 0, 0, 0, False
+    if quant_mode == "none":
+        return estimate_module_bytes(model), estimate_module_bytes(model), 0, False
+
+    before = estimate_module_bytes(model)
+    n_q = 0
+    skipped_adapter = 0
+    changed = False
+
+    try:
+        from torchao.quantization.quant_api import (
+            Float8WeightOnlyConfig,
+            Int8WeightOnlyConfig,
+            quantize_,
+        )
+
+        quant_label = "Int8WeightOnly"
+        if quant_mode == "int8":
+            try:
+                # version=2 avoids deprecation warning; older torchao may lack it.
+                ao_cfg = Int8WeightOnlyConfig(version=2)
+            except TypeError:
+                ao_cfg = Int8WeightOnlyConfig()
+        elif quant_mode == "float8":
+            try:
+                ao_cfg = Float8WeightOnlyConfig(
+                    weight_dtype=torch.float8_e4m3fn,
+                    version=2,
+                )
+            except TypeError:
+                ao_cfg = Float8WeightOnlyConfig(weight_dtype=torch.float8_e4m3fn)
+            quant_label = "Float8WeightOnly[e4m3fn]"
+        elif quant_mode == "qfloat8":
+            qfloat8_dtype = getattr(torch, "float8_e4m3fnuz", None)
+            if qfloat8_dtype is None:
+                raise RuntimeError("torch.float8_e4m3fnuz is not available in this torch build")
+            try:
+                ao_cfg = Float8WeightOnlyConfig(weight_dtype=qfloat8_dtype, version=2)
+            except TypeError:
+                ao_cfg = Float8WeightOnlyConfig(weight_dtype=qfloat8_dtype)
+            quant_label = "Float8WeightOnly[e4m3fnuz]"
+        else:
+            raise RuntimeError(f"unsupported quant_mode={quant_mode!r}")
+
+        log(
+            f"Quantizing {label} Linear weights with torchao {quant_label} "
+            f"(mode={quant_mode}) "
+            f"(pre-quant estimate={before / 1e9:.2f}GB)"
+        )
+
+        def _woq_linear(lin: torch.nn.Linear) -> bool:
+            if lin.weight.numel() < 64 * 64:
+                return False
+            if "torchao" in type(lin.weight).__module__:
+                return False
+            lin.to(device)
+            quantize_(lin, ao_cfg)
+            for p in lin.parameters(recurse=False):
+                p.requires_grad_(False)
+            lin.to("cpu")
+            return True
+
+        for mod_name, mod in model.named_modules():
+            lower = mod_name.lower()
+            if skip_adapter_names and any(x in lower for x in ("lora_", "hada_", "lokr_")):
+                if isinstance(mod, torch.nn.Linear):
+                    skipped_adapter += 1
+                continue
+            base = getattr(mod, "base_layer", None)
+            if base is not None and isinstance(base, torch.nn.Linear):
+                if _woq_linear(base):
+                    n_q += 1
+                    changed = True
+            elif isinstance(mod, torch.nn.Linear):
+                if _woq_linear(mod):
+                    n_q += 1
+                    changed = True
+        flush()
+    except Exception as e:
+        log(
+            f"WARNING: torchao quantize failed for {label} "
+            f"(mode={quant_mode}, {e}); continuing without WOQ"
+        )
+        return before, before, 0, False
+
+    after = estimate_module_bytes(model)
+    log(
+        f"torchao quant applied to {label}: {n_q} Linear layers "
+        f"(mode={quant_mode}; skipped {skipped_adapter} adapter linears); "
+        f"post-quant estimate={after / 1e9:.2f}GB "
+        f"(was {before / 1e9:.2f}GB)"
+    )
+    if n_q == 0:
+        log(
+            f"WARNING: Quantize enabled for {label} (mode={quant_mode}) but 0 layers quantized; "
+            "VRAM estimate will still look like full bf16"
+        )
+    return before, after, n_q, changed
+
+
 # Soft hint for Auto offload % only (never overrides manual %).
 def activation_reserve_bytes(max_res: int) -> int:
     if max_res >= 1536:
@@ -606,6 +718,19 @@ def find_krea2_dit(root):
         if type(mod).__name__ == "Krea2Transformer2DModel":
             return mod
     return None
+
+
+def normalize_quantize_mode(raw) -> str:
+    if isinstance(raw, bool):
+        return "int8" if raw else "none"
+    text = str(raw or "").strip().lower()
+    if text in ("", "none", "-none-", "off", "false", "0"):
+        return "none"
+    if text in ("qfloat8", "float8", "int8"):
+        return text
+    if text in ("true", "1"):
+        return "int8"
+    return "none"
 
 
 def enable_krea_gradient_checkpointing(root) -> tuple[bool, str]:
@@ -1240,6 +1365,7 @@ def run_midtrain_samples(
     num_inference_steps: int,
     neg: str,
     trigger: str,
+    quant_mode: str = "none",
     low_vram: bool = True,
     auto_stage: bool = False,
     stream_offload: bool = False,
@@ -1297,6 +1423,19 @@ def run_midtrain_samples(
         te_reloaded = True
         if te is None:
             raise RuntimeError("No text encoder available for mid-train sampling")
+        if quant_mode != "none" and device.type == "cuda":
+            _te_before, _te_after, te_q, te_changed = apply_weight_only_quantization(
+                te,
+                device=device,
+                quant_mode=quant_mode,
+                label="text_encoder_reload",
+                skip_adapter_names=True,
+            )
+            if not te_changed and te_q == 0:
+                log(
+                    f"Sampling reload: text encoder quantize produced no changes "
+                    f"(mode={quant_mode})"
+                )
 
     mode = (
         "stream offload"
@@ -1335,7 +1474,9 @@ def run_midtrain_samples(
                 log("  stage encode: TE on GPU...")
             te.to(device, dtype=weight_dtype)
             pipe.text_encoder = te
-            with torch.inference_mode():
+            # torchao Float8WeightOnly .t() fails under inference_mode
+            # ("Cannot set version_counter for inference tensor"); use no_grad.
+            with torch.no_grad():
                 enc = pipe.encode_prompt(
                     prompt=[prompt],
                     device=device,
@@ -1385,7 +1526,7 @@ def run_midtrain_samples(
                 call_kwargs["negative_prompt_embeds"] = neg_embeds
                 call_kwargs["negative_prompt_embeds_mask"] = neg_mask
 
-            with torch.inference_mode():
+            with torch.no_grad():
                 try:
                     latents_out = pipe(
                         **call_kwargs,
@@ -1405,7 +1546,7 @@ def run_midtrain_samples(
                 log("  stage decode: VAE on GPU...")
             vae.to(device, dtype=weight_dtype)
             pipe.vae = vae
-            with torch.inference_mode():
+            with torch.no_grad():
                 packed = latents
                 if not torch.is_tensor(packed):
                     packed = packed[0]
@@ -1555,7 +1696,8 @@ def main() -> int:
         log(f"WARNING: unknown network.type={network_type!r}; using lora")
         network_type = "lora"
     low_vram = bool(model_cfg.get("low_vram", False))
-    use_quant = bool(model_cfg.get("quantize", False))
+    quant_mode = normalize_quantize_mode(model_cfg.get("quantize", "none"))
+    use_quant = quant_mode != "none"
     layer_offload = bool(model_cfg.get("layer_offload", False))
     try:
         layer_offload_percent_cfg = float(model_cfg.get("layer_offload_percent", 0))
@@ -1617,7 +1759,7 @@ def main() -> int:
         f"resolutions={resolutions} shuffle_tokens={shuffle_tokens} "
         f"ar_bucketing=always step={bucket_step} min_res={bucket_min_res} "
         f"cache_latents={cache_latents} cache_text={cache_text} "
-        f"quantize={use_quant} low_vram={low_vram} "
+        f"quantize={quant_mode} low_vram={low_vram} "
         f"layer_offload={layer_offload} "
         f"offload_pct={'auto' if (not layer_offload or layer_offload_percent_cfg <= 0) else int(round(layer_offload_percent_cfg))} "
         f"checkpoint={grad_ckpt} ema={use_ema} save_every={save_every} "
@@ -1998,67 +2140,41 @@ def main() -> int:
 
     transformer = get_peft_model(transformer, adapter_config)
 
+    te_n_q = 0
     dit_est_before_quant = estimate_module_bytes(transformer)
     n_q = 0
     if use_quant and device.type == "cuda":
-        try:
-            from torchao.quantization.quant_api import Int8WeightOnlyConfig, quantize_
-
-            try:
-                # version=2 avoids deprecation warning; older torchao may lack it.
-                ao_cfg = Int8WeightOnlyConfig(version=2)
-            except TypeError:
-                ao_cfg = Int8WeightOnlyConfig()
-            skipped_adapter = 0
-            log(
-                f"Quantizing transformer Linear weights with torchao Int8WeightOnly... "
-                f"(pre-quant estimate={dit_est_before_quant / 1e9:.2f}GB)"
-            )
-
-            def _woq_linear(lin: torch.nn.Linear) -> bool:
-                if lin.weight.numel() < 64 * 64:
-                    return False
-                if "torchao" in type(lin.weight).__module__:
-                    return False
-                lin.to(device)
-                quantize_(lin, ao_cfg)
-                for p in lin.parameters(recurse=False):
-                    p.requires_grad_(False)
-                lin.to("cpu")
-                return True
-
-            for mod_name, mod in transformer.named_modules():
-                lower = mod_name.lower()
-                if any(x in lower for x in ("lora_", "hada_", "lokr_")):
-                    if isinstance(mod, torch.nn.Linear):
-                        skipped_adapter += 1
-                    continue
-                base = getattr(mod, "base_layer", None)
-                if base is not None and isinstance(base, torch.nn.Linear):
-                    if _woq_linear(base):
-                        n_q += 1
-                elif isinstance(mod, torch.nn.Linear):
-                    if _woq_linear(mod):
-                        n_q += 1
-            flush()
-            dit_est_after = estimate_module_bytes(transformer)
-            log(
-                f"torchao WOQ applied to {n_q} Linear layers "
-                f"(skipped {skipped_adapter} adapter linears); "
-                f"post-quant estimate={dit_est_after / 1e9:.2f}GB "
-                f"(was {dit_est_before_quant / 1e9:.2f}GB)"
-            )
-            if n_q == 0:
-                log(
-                    "WARNING: Quantize enabled but 0 layers quantized; "
-                    "VRAM estimate will still look like full bf16"
-                )
-        except Exception as e:
-            log(f"WARNING: torchao quantize failed ({e}); continuing without WOQ")
+        te_before, te_after, te_n_q, te_changed = apply_weight_only_quantization(
+            text_encoder,
+            device=device,
+            quant_mode=quant_mode,
+            label="text_encoder",
+            skip_adapter_names=True,
+        )
+        dit_est_before_quant, dit_est_after, n_q, dit_changed = apply_weight_only_quantization(
+            transformer,
+            device=device,
+            quant_mode=quant_mode,
+            label="transformer",
+            skip_adapter_names=True,
+        )
+        if not te_changed and not dit_changed:
             use_quant = False
+            te_n_q = 0
             n_q = 0
+            dit_est_after = dit_est_before_quant
+        elif te_changed and te_before > 0:
+            log(
+                f"VRAM budget: text encoder estimate={te_after / 1e9:.2f}GB "
+                f"(was {te_before / 1e9:.2f}GB; layers={te_n_q})"
+            )
     elif not use_quant:
-        log("Quantize disabled (respecting UI)")
+        log("Quantize disabled (mode=none)")
+        dit_est_after = dit_est_before_quant
+    else:
+        dit_est_after = dit_est_before_quant
+
+    active_quant_mode = quant_mode if use_quant else "none"
 
     for n, p in transformer.named_parameters():
         lower = n.lower()
@@ -2086,19 +2202,24 @@ def main() -> int:
             return 3
 
     dit_est = estimate_module_bytes(transformer)
-    # Fallback: if WOQ ran but estimate barely moved (torchao still reports bf16
-    # element_size), assume ~int8 for the quantized fraction of the pre-quant size.
+    # Fallback: if weight-only quant ran but estimate barely moved (torchao may still
+    # report logical bf16/float sizes), use a 1-byte-per-weight-style approximation.
     if use_quant and n_q > 0 and dit_est > dit_est_before_quant * 0.85:
-        # Most DiT mass is Linear weights; int8 WOQ ~= half of bf16 for those.
+        # Most DiT mass is Linear weights; int8/float8 weight-only formats are close
+        # to 1 byte per stored weight plus small scale metadata.
         dit_est_adj = int(dit_est_before_quant * 0.55)
         log(
             f"VRAM budget: post-quant estimate still {dit_est / 1e9:.2f}GB "
-            f"(torchao may misreport dtype); using adjusted~={dit_est_adj / 1e9:.2f}GB"
+            f"(torchao may misreport dtype for mode={quant_mode}); "
+            f"using adjusted~={dit_est_adj / 1e9:.2f}GB"
         )
         dit_est = dit_est_adj
 
     log(vram_log("pre_dit_to_gpu"))
-    log(f"VRAM budget: DiT estimate={dit_est / 1e9:.2f}GB (quantize={use_quant} layers={n_q})")
+    log(
+        f"VRAM budget: DiT estimate={dit_est / 1e9:.2f}GB "
+        f"(quantize={active_quant_mode} layers={n_q}; TE layers={te_n_q})"
+    )
     if device.type == "cuda":
         free_pre = vram_free_bytes() or 0
         if free_pre < dit_est:
@@ -2515,6 +2636,7 @@ def main() -> int:
                 num_inference_steps=sample_steps_n,
                 neg=sample_neg,
                 trigger=trigger,
+                quant_mode=active_quant_mode,
                 low_vram=low_vram,
                 auto_stage=auto_stage,
                 stream_offload=dit_stream_offload,

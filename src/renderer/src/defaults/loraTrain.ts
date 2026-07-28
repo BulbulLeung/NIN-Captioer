@@ -5,6 +5,7 @@ import { join } from '../utils/pathJoin'
 export type ActiveView = 'datasetEdit' | 'loraTrain'
 
 export type LoraTrainArch = 'krea2'
+export type LoraTrainQuantizeMode = 'none' | 'qfloat8' | 'float8' | 'int8'
 
 export interface LoraTrainEmaConfig {
   use_ema: boolean
@@ -57,7 +58,7 @@ export interface LoraTrainModelConfig {
   name_or_path: string
   train_name_or_path: string
   arch: LoraTrainArch
-  quantize: boolean
+  quantize: LoraTrainQuantizeMode
   low_vram: boolean
   /**
    * Stream DiT transformer blocks CPU↔GPU (independent of low_vram).
@@ -194,7 +195,7 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     name_or_path: KREA2_RAW,
     train_name_or_path: KREA2_RAW,
     arch: 'krea2',
-    quantize: false,
+    quantize: 'none',
     low_vram: false,
     layer_offload: false,
     layer_offload_percent: 0
@@ -284,6 +285,19 @@ function normalizeNetworkType(value: unknown, fallback: string): string {
 
 function normalizeArch(value: unknown): LoraTrainArch {
   return value === 'krea2' || value === 'flux' ? 'krea2' : 'krea2'
+}
+
+function normalizeQuantizeMode(
+  value: unknown,
+  fallback: LoraTrainQuantizeMode
+): LoraTrainQuantizeMode {
+  if (typeof value === 'boolean') return value ? 'int8' : 'none'
+  const raw = asString(value, fallback).toLowerCase()
+  if (raw === 'none' || raw === '-none-' || raw === 'off' || raw === 'false') return 'none'
+  if (raw === 'qfloat8') return 'qfloat8'
+  if (raw === 'float8') return 'float8'
+  if (raw === 'int8' || raw === 'true') return 'int8'
+  return fallback
 }
 
 function normalizeSamplePrompts(
@@ -404,7 +418,7 @@ export function normalizeLoraTrainJob(
       name_or_path: trainPath,
       train_name_or_path: trainPath,
       arch: normalizeArch(model.arch),
-      quantize: asBool(model.quantize, d.model.quantize),
+      quantize: normalizeQuantizeMode(model.quantize, d.model.quantize),
       low_vram: asBool(model.low_vram, d.model.low_vram),
       layer_offload: asBool(model.layer_offload, d.model.layer_offload),
       layer_offload_percent: (() => {
