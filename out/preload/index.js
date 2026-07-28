@@ -12,6 +12,7 @@ const api = {
   readImageBase64: (imagePath) => electron.ipcRenderer.invoke("fs:readImageBase64", imagePath),
   getSettings: () => electron.ipcRenderer.invoke("settings:get"),
   setSettings: (settings) => electron.ipcRenderer.invoke("settings:set", settings),
+  relaunchApp: () => electron.ipcRenderer.invoke("app:relaunch"),
   listGpuDevices: () => electron.ipcRenderer.invoke("gpu:listDevices"),
   getResourceStats: (deviceId) => electron.ipcRenderer.invoke("system:getResourceStats", deviceId),
   killProcess: (pid) => electron.ipcRenderer.invoke("system:killProcess", pid),

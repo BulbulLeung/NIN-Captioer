@@ -40,6 +40,9 @@ export interface AppSettings {
   activeView?: string
   loraTrainJob?: unknown
   loraTrainApp?: unknown
+  uiGpuMode?: 'auto' | 'onboard' | 'software'
+  /** @deprecated Prefer uiGpuMode; kept for reading older settings.json */
+  disableUiGpu?: boolean
 }
 
 const api = {
@@ -73,6 +76,7 @@ const api = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
   setSettings: (settings: AppSettings): Promise<boolean> =>
     ipcRenderer.invoke('settings:set', settings),
+  relaunchApp: (): Promise<boolean> => ipcRenderer.invoke('app:relaunch'),
   listGpuDevices: (): Promise<{ id: string; label: string }[]> =>
     ipcRenderer.invoke('gpu:listDevices'),
   getResourceStats: (deviceId?: string): Promise<{

@@ -59,6 +59,9 @@ export {
 
 export type TranslationProvider = 'lmstudio' | 'ollama'
 
+/** Electron UI GPU preference. Requires restart to apply. */
+export type UiGpuMode = 'auto' | 'onboard' | 'software'
+
 export interface ResourceGpuVramApp {
   pid: number
   name: string
@@ -130,6 +133,11 @@ export interface AppSettings {
   loraTrainJobs: LoraTrainJobPreset[]
   activeLoraTrainJobId: string
   loraTrainApp: LoraTrainAppSettings
+  /**
+   * Electron UI GPU preference. Requires restart.
+   * auto = OS/driver; onboard = integrated GPU; software = CPU/RAM (no VRAM).
+   */
+  uiGpuMode: UiGpuMode
 }
 
 export interface ImageItem {
@@ -180,7 +188,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   activeView: 'datasetEdit',
   loraTrainJobs: [createDefaultLoraTrainJobPreset()],
   activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
-  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP }
+  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP },
+  uiGpuMode: 'auto'
 }
 
 const SIDEBAR_MIN = 160
@@ -209,6 +218,14 @@ export function clampThumbnailWidth(n: number): number {
 
 export function normalizeListViewMode(value: unknown): ListViewMode {
   return value === 'thumbnails' ? 'thumbnails' : 'list'
+}
+
+export function normalizeUiGpuMode(raw: Record<string, unknown> | null | undefined): UiGpuMode {
+  const mode = raw?.uiGpuMode
+  if (mode === 'auto' || mode === 'onboard' || mode === 'software') return mode
+  // Legacy boolean from earlier builds
+  if (raw?.disableUiGpu === true) return 'software'
+  return 'auto'
 }
 
 function normalizeDatasetFolders(raw: unknown, lastFolder: string | null): string[] {
@@ -288,7 +305,8 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     activeView: normalizeActiveView(merged.activeView),
     loraTrainJobs,
     activeLoraTrainJobId,
-    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp)
+    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp),
+    uiGpuMode: normalizeUiGpuMode(rawRecord)
   }
 }
 
@@ -319,6 +337,7 @@ declare global {
       readImageBase64: (imagePath: string) => Promise<{ mimeType: string; base64: string }>
       getSettings: () => Promise<AppSettings>
       setSettings: (settings: AppSettings) => Promise<boolean>
+      relaunchApp: () => Promise<boolean>
       listGpuDevices: () => Promise<{ id: string; label: string }[]>
       getResourceStats: (deviceId?: string) => Promise<ResourceStats>
       killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>

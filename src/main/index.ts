@@ -194,6 +194,8 @@ interface WindowState {
   isMaximized: boolean
 }
 
+type UiGpuMode = 'auto' | 'onboard' | 'software'
+
 interface AppSettings {
   provider: TranslationProvider
   lmStudioBaseUrl: string
@@ -213,6 +215,15 @@ interface AppSettings {
   activeView?: string
   loraTrainJob?: unknown
   loraTrainApp?: unknown
+  /**
+   * Electron UI GPU preference. Requires restart.
+   * - auto: OS/driver chooses
+   * - onboard: force integrated GPU (force_low_power_gpu)
+   * - software: CPU/RAM rendering (no GPU / VRAM)
+   */
+  uiGpuMode: UiGpuMode
+  /** Legacy mirror of uiGpuMode === 'software' for older builds. */
+  disableUiGpu: boolean
   windowWidth: number
   windowHeight: number
   windowX: number | null
@@ -228,6 +239,13 @@ const DEFAULT_WINDOW: WindowState = {
   isMaximized: false
 }
 
+function normalizeUiGpuMode(raw: Record<string, unknown> | null | undefined): UiGpuMode {
+  const mode = raw?.uiGpuMode
+  if (mode === 'auto' || mode === 'onboard' || mode === 'software') return mode
+  if (raw?.disableUiGpu === true) return 'software'
+  return 'auto'
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   provider: 'lmstudio',
   lmStudioBaseUrl: 'http://localhost:1234/v1',
@@ -241,6 +259,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   sidebarWidth: 260,
   rightPaneWidth: 380,
   autoAnalysis: true,
+  uiGpuMode: 'auto',
+  disableUiGpu: false,
   windowWidth: DEFAULT_WINDOW.width,
   windowHeight: DEFAULT_WINDOW.height,
   windowX: null,
@@ -252,10 +272,35 @@ function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')
 }
 
+/** Must run before app.whenReady(); Chromium GPU flags cannot change after that. */
+function readUiGpuModeSync(): UiGpuMode {
+  try {
+    const raw = readFileSync(settingsPath(), 'utf-8')
+    return normalizeUiGpuMode(JSON.parse(raw) as Record<string, unknown>)
+  } catch {
+    return 'auto'
+  }
+}
+
+const earlyUiGpuMode = readUiGpuModeSync()
+if (earlyUiGpuMode === 'software') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+} else if (earlyUiGpuMode === 'onboard') {
+  app.commandLine.appendSwitch('force_low_power_gpu')
+}
+
 async function loadSettings(): Promise<AppSettings> {
   try {
     const raw = await readFile(settingsPath(), 'utf-8')
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const uiGpuMode = normalizeUiGpuMode(parsed)
+    return {
+      ...DEFAULT_SETTINGS,
+      ...(parsed as Partial<AppSettings>),
+      uiGpuMode,
+      disableUiGpu: uiGpuMode === 'software'
+    }
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -2086,9 +2131,12 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('settings:set', async (_event, settings: Partial<AppSettings>) => {
     const current = await loadSettings()
+    const merged = { ...current, ...settings }
+    const uiGpuMode = normalizeUiGpuMode(merged as unknown as Record<string, unknown>)
     await saveSettings({
-      ...current,
-      ...settings,
+      ...merged,
+      uiGpuMode,
+      disableUiGpu: uiGpuMode === 'software',
       // Window geometry is owned by main; never let renderer wipe it
       windowWidth: current.windowWidth,
       windowHeight: current.windowHeight,
@@ -2096,6 +2144,12 @@ app.whenReady().then(async () => {
       windowY: current.windowY,
       windowMaximized: current.windowMaximized
     })
+    return true
+  })
+
+  ipcMain.handle('app:relaunch', async () => {
+    app.relaunch()
+    app.quit()
     return true
   })
 

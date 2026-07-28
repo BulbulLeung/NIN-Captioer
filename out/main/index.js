@@ -754,6 +754,12 @@ const DEFAULT_WINDOW = {
   width: 1280,
   height: 840
 };
+function normalizeUiGpuMode(raw) {
+  const mode = raw?.uiGpuMode;
+  if (mode === "auto" || mode === "onboard" || mode === "software") return mode;
+  if (raw?.disableUiGpu === true) return "software";
+  return "auto";
+}
 const DEFAULT_SETTINGS = {
   provider: "lmstudio",
   lmStudioBaseUrl: "http://localhost:1234/v1",
@@ -767,6 +773,8 @@ const DEFAULT_SETTINGS = {
   sidebarWidth: 260,
   rightPaneWidth: 380,
   autoAnalysis: true,
+  uiGpuMode: "auto",
+  disableUiGpu: false,
   windowWidth: DEFAULT_WINDOW.width,
   windowHeight: DEFAULT_WINDOW.height,
   windowX: null,
@@ -776,10 +784,32 @@ const DEFAULT_SETTINGS = {
 function settingsPath() {
   return path.join(electron.app.getPath("userData"), "settings.json");
 }
+function readUiGpuModeSync() {
+  try {
+    const raw = fs.readFileSync(settingsPath(), "utf-8");
+    return normalizeUiGpuMode(JSON.parse(raw));
+  } catch {
+    return "auto";
+  }
+}
+const earlyUiGpuMode = readUiGpuModeSync();
+if (earlyUiGpuMode === "software") {
+  electron.app.disableHardwareAcceleration();
+  electron.app.commandLine.appendSwitch("disable-gpu");
+} else if (earlyUiGpuMode === "onboard") {
+  electron.app.commandLine.appendSwitch("force_low_power_gpu");
+}
 async function loadSettings() {
   try {
     const raw = await promises.readFile(settingsPath(), "utf-8");
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const uiGpuMode = normalizeUiGpuMode(parsed);
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      uiGpuMode,
+      disableUiGpu: uiGpuMode === "software"
+    };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -2284,9 +2314,12 @@ ${stderr || ""}`;
   electron.ipcMain.handle("settings:get", async () => loadSettings());
   electron.ipcMain.handle("settings:set", async (_event, settings) => {
     const current = await loadSettings();
+    const merged = { ...current, ...settings };
+    const uiGpuMode = normalizeUiGpuMode(merged);
     await saveSettings({
-      ...current,
-      ...settings,
+      ...merged,
+      uiGpuMode,
+      disableUiGpu: uiGpuMode === "software",
       // Window geometry is owned by main; never let renderer wipe it
       windowWidth: current.windowWidth,
       windowHeight: current.windowHeight,
@@ -2294,6 +2327,11 @@ ${stderr || ""}`;
       windowY: current.windowY,
       windowMaximized: current.windowMaximized
     });
+    return true;
+  });
+  electron.ipcMain.handle("app:relaunch", async () => {
+    electron.app.relaunch();
+    electron.app.quit();
     return true;
   });
   await createWindow();

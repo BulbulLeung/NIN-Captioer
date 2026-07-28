@@ -231,7 +231,18 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await onSave(normalizeSettings(draft))
+      const next = normalizeSettings(draft)
+      const needsRestart = next.uiGpuMode !== settings.uiGpuMode
+      await onSave(next)
+      if (needsRestart) {
+        const restart = window.confirm(
+          'UI GPU rendering setting changed. Restart Captioer now for it to take effect?'
+        )
+        if (restart) {
+          await window.api.relaunchApp()
+          return
+        }
+      }
       onClose()
     } finally {
       setSaving(false)
@@ -257,7 +268,8 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       activeView: draft.activeView,
       loraTrainJobs: draft.loraTrainJobs,
       activeLoraTrainJobId: draft.activeLoraTrainJobId,
-      loraTrainApp: draft.loraTrainApp
+      loraTrainApp: draft.loraTrainApp,
+      uiGpuMode: draft.uiGpuMode
     })
   }
 
@@ -380,6 +392,47 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
             open.
           </p>
         </label>
+
+        <div className="settings-section">
+          <h3>Display</h3>
+          <label className="field">
+            <span>UI GPU rendering</span>
+            <div className="radio-row">
+              <label>
+                <input
+                  type="radio"
+                  name="uiGpuMode"
+                  checked={draft.uiGpuMode === 'auto'}
+                  onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'auto' }))}
+                />
+                Auto
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="uiGpuMode"
+                  checked={draft.uiGpuMode === 'onboard'}
+                  onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'onboard' }))}
+                />
+                Onboard GPU
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="uiGpuMode"
+                  checked={draft.uiGpuMode === 'software'}
+                  onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'software' }))}
+                />
+                Software
+              </label>
+            </div>
+            <p className="field-hint">
+              Auto: OS/driver chooses. Onboard: force integrated GPU (frees dedicated VRAM when
+              dual-GPU). Software: CPU/RAM only. Does not affect training or AI. Requires
+              restart. Windows Graphics settings for Captioer may override Onboard.
+            </p>
+          </label>
+        </div>
 
         <div className="settings-section">
           <h3>WD14 Tagging</h3>
@@ -530,7 +583,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
             />
           </label>
           <label className="field">
-            <span>Prompt (auto-saved)</span>
+            <span>Caption Prompt</span>
             <textarea
               className="prompt-textarea"
               value={activePreset?.prompt ?? ''}
