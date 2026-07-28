@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import type { LoraTrainAppSettings, LoraTrainJobConfig } from '../types'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { LoraTrainAppSettings, LoraTrainJobConfig, TrainSampleItem } from '../types'
 import { KREA2_RAW, modelDownloadPathFromDownloadFolder, normalizeLoraTrainJob } from '../types'
 import { serializeTrainConfig } from '../services/trainConfig'
 import { GpuDeviceSelect } from './GpuDeviceSelect'
@@ -7,6 +7,7 @@ import { RestartTrainWarningDialog } from './RestartTrainWarningDialog'
 import { ResourceMonitorPane } from './ResourceMonitorPane'
 
 type SectionId = 'basics' | 'dataset' | 'train' | 'lora' | 'sample' | 'advanced'
+type ResultsTabId = 'loss' | 'sample'
 
 type ModelStatusKind = 'missing' | 'ready' | 'updateAvailable' | 'local' | 'error'
 
@@ -77,6 +78,78 @@ function formatHms(ms: number): string {
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function sampleStepLabel(item: TrainSampleItem): string {
+  return typeof item.step === 'number' && Number.isFinite(item.step) ? `Step ${item.step}` : 'Unknown step'
+}
+
+function samplePromptIndex(item: TrainSampleItem): number {
+  const n = item.promptIndex
+  return typeof n === 'number' && Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1
+}
+
+/** Fixed preview card width used to compute how many fit without horizontal scroll. */
+const SAMPLE_CARD_WIDTH_PX = 160
+const SAMPLE_CARD_GAP_PX = 10.4
+
+function SamplePromptStrip({
+  items,
+  onOpen
+}: {
+  items: TrainSampleItem[]
+  onOpen: (path: string) => void
+}) {
+  const stripRef = useRef<HTMLDivElement | null>(null)
+  const [visibleCount, setVisibleCount] = useState(items.length)
+
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    const update = () => {
+      const width = el.clientWidth
+      if (width <= 0) {
+        setVisibleCount(1)
+        return
+      }
+      const stride = SAMPLE_CARD_WIDTH_PX + SAMPLE_CARD_GAP_PX
+      const fit = Math.max(1, Math.floor((width + SAMPLE_CARD_GAP_PX) / stride))
+      setVisibleCount(Math.min(items.length, fit))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [items.length])
+
+  const visible = items.slice(0, visibleCount)
+
+  return (
+    <div className="lora-train-sample-strip" ref={stripRef}>
+      {visible.map((item) => (
+        <button
+          key={item.path}
+          type="button"
+          className="lora-train-sample-card"
+          onClick={() => onOpen(item.path)}
+          title={`Open ${item.name}`}
+        >
+          <img
+            src={window.api.toLocalUrl(item.path)}
+            alt={`${sampleStepLabel(item)} sample`}
+            className="lora-train-sample-thumb"
+            loading="lazy"
+          />
+          <span className="lora-train-sample-meta">
+            <span className="lora-train-sample-step">{sampleStepLabel(item)}</span>
+            <span className="lora-train-sample-name" title={item.name}>
+              {item.name}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
 }
 
 const SECTIONS: { id: SectionId; label: string; hint: string }[] = [
@@ -424,6 +497,12 @@ export function LoraTrainView({
   const [lossHistory, setLossHistory] = useState<{ step: number; loss: number }[]>([])
   const [showLossCurve, setShowLossCurve] = useState(true)
   const [showAvgLossCurve, setShowAvgLossCurve] = useState(true)
+  const [resultsTab, setResultsTab] = useState<ResultsTabId>('loss')
+  const [trainSamples, setTrainSamples] = useState<TrainSampleItem[]>([])
+  const [sampleLoading, setSampleLoading] = useState(false)
+  const [sampleError, setSampleError] = useState<string | null>(null)
+  /** Open sample lightbox by image path; null = closed. */
+  const [sampleLightboxPath, setSampleLightboxPath] = useState<string | null>(null)
   const [trainStartedAt, setTrainStartedAt] = useState<number | null>(null)
   const [finalElapsedMs, setFinalElapsedMs] = useState<number | null>(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
@@ -458,6 +537,7 @@ export function LoraTrainView({
   const draftRef = useRef(draft)
   draftRef.current = draft
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sampleRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const modelStatusesRef = useRef(modelStatuses)
   modelStatusesRef.current = modelStatuses
   const dlQueueRef = useRef<string[]>([])
@@ -505,6 +585,42 @@ export function LoraTrainView({
   const patch = useCallback((updater: (prev: LoraTrainJobConfig) => LoraTrainJobConfig) => {
     setDraft((prev) => updater(prev))
   }, [])
+
+  const refreshTrainSamples = useCallback(async () => {
+    const d = draftRef.current
+    const trainingFolder = (d.training_folder || '').trim()
+    const jobName = (d.name || '').trim()
+    if (!trainingFolder || !jobName) {
+      setTrainSamples([])
+      setSampleError(null)
+      setSampleLoading(false)
+      return
+    }
+    setSampleLoading(true)
+    try {
+      const result = await window.api.listTrainSamples({ trainingFolder, jobName })
+      if (!result.ok) {
+        setTrainSamples([])
+        setSampleError(result.error || 'Failed to load sample images')
+        return
+      }
+      setTrainSamples(result.samples || [])
+      setSampleError(null)
+    } catch (err) {
+      setTrainSamples([])
+      setSampleError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSampleLoading(false)
+    }
+  }, [])
+
+  const queueRefreshTrainSamples = useCallback((delayMs = 300) => {
+    if (sampleRefreshTimer.current) clearTimeout(sampleRefreshTimer.current)
+    sampleRefreshTimer.current = setTimeout(() => {
+      sampleRefreshTimer.current = null
+      void refreshTrainSamples()
+    }, delayMs)
+  }, [refreshTrainSamples])
 
   const refreshResumeTarget = useCallback(async () => {
     const d = draftRef.current
@@ -709,6 +825,7 @@ export function LoraTrainView({
         false,
         { sticky: true }
       )
+      queueRefreshTrainSamples(250)
     })
     const offLog = window.api.onTrainLog(({ line }) => {
       setTrainLogs((prev) => {
@@ -716,6 +833,9 @@ export function LoraTrainView({
         next.push(line)
         return next
       })
+      if (/saved .*_Sampling_\d{6}/i.test(line) || /sample complete at step/i.test(line)) {
+        queueRefreshTrainSamples(150)
+      }
     })
     const offDone = window.api.onTrainDone(({ path }) => {
       userStoppedTrainRef.current = false
@@ -728,6 +848,7 @@ export function LoraTrainView({
       setTrainComplete(true)
       setTrainFailed(false)
       onStatus(`Training done: ${path}`)
+      queueRefreshTrainSamples(0)
       void refreshResumeTarget()
     })
     const offErr = window.api.onTrainError(({ message }) => {
@@ -748,6 +869,7 @@ export function LoraTrainView({
       setTrainComplete(false)
       setTrainFailed(true)
       onStatus(message, true)
+      queueRefreshTrainSamples(0)
       void refreshResumeTarget()
     })
     const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
@@ -796,7 +918,7 @@ export function LoraTrainView({
       offDlDone()
       offDlErr()
     }
-  }, [onStatus, applyDownloadedPath, pumpDownloadQueue, refreshModelStatus, refreshResumeTarget, recordStepTiming, resetStepTiming])
+  }, [onStatus, applyDownloadedPath, pumpDownloadQueue, queueRefreshTrainSamples, refreshModelStatus, refreshResumeTarget, recordStepTiming, resetStepTiming])
 
   useEffect(() => {
     if (!training) return
@@ -809,6 +931,26 @@ export function LoraTrainView({
     if (!training) return
     logEndRef.current?.scrollIntoView({ block: 'end' })
   }, [trainLogs, training])
+
+  useEffect(() => {
+    if (showTrainSession) {
+      void refreshTrainSamples()
+      return
+    }
+    setSampleLoading(false)
+    setSampleError(null)
+    setTrainSamples([])
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current)
+      sampleRefreshTimer.current = null
+    }
+  }, [showTrainSession, refreshTrainSamples])
+
+  useEffect(() => {
+    return () => {
+      if (sampleRefreshTimer.current) clearTimeout(sampleRefreshTimer.current)
+    }
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -991,6 +1133,8 @@ export function LoraTrainView({
     setShowTrainSession(false)
     setTrainComplete(false)
     setTrainFailed(false)
+    setResultsTab('loss')
+    setSampleLightboxPath(null)
     setFinalElapsedMs(null)
     setTrainStartedAt(null)
     trainStartedAtRef.current = null
@@ -998,6 +1142,13 @@ export function LoraTrainView({
     setLossHistory([])
     setTrainLogs([])
     setProgress(null)
+    setSampleLoading(false)
+    setSampleError(null)
+    setTrainSamples([])
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current)
+      sampleRefreshTimer.current = null
+    }
   }
 
   const requestRestartTrain = () => {
@@ -1099,6 +1250,170 @@ export function LoraTrainView({
   const stepsLabel = progress
     ? `${progress.step}/${progress.total}`
     : `0/${draft.train.steps || 0}`
+  const sampleItems = useMemo(
+    () =>
+      [...trainSamples].sort((a, b) => {
+        const promptA = samplePromptIndex(a)
+        const promptB = samplePromptIndex(b)
+        const stepA = typeof a.step === 'number' ? a.step : -1
+        const stepB = typeof b.step === 'number' ? b.step : -1
+        // Within prompt: newest → oldest (step high → low)
+        return (
+          promptA - promptB ||
+          stepB - stepA ||
+          b.mtimeMs - a.mtimeMs ||
+          a.name.localeCompare(b.name)
+        )
+      }),
+    [trainSamples]
+  )
+  const sampleGroups = useMemo(() => {
+    const map = new Map<number, TrainSampleItem[]>()
+    for (const item of sampleItems) {
+      const idx = samplePromptIndex(item)
+      const list = map.get(idx)
+      if (list) list.push(item)
+      else map.set(idx, [item])
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([promptIndex, items]) => ({ promptIndex, items }))
+  }, [sampleItems])
+  const sampleLightboxIndex = sampleLightboxPath
+    ? sampleItems.findIndex((item) => item.path === sampleLightboxPath)
+    : -1
+  const sampleLightboxItem =
+    sampleLightboxIndex >= 0 ? sampleItems[sampleLightboxIndex] : null
+  const sampleLightboxGroupItems = useMemo(() => {
+    if (!sampleLightboxItem) return []
+    const idx = samplePromptIndex(sampleLightboxItem)
+    return sampleItems.filter((item) => samplePromptIndex(item) === idx)
+  }, [sampleLightboxItem, sampleItems])
+  const sampleLightboxGroupIndex = sampleLightboxItem
+    ? sampleLightboxGroupItems.findIndex((item) => item.path === sampleLightboxItem.path)
+    : -1
+
+  const pickSampleInPromptGroup = useCallback(
+    (
+      targetItems: TrainSampleItem[],
+      fromItem: TrainSampleItem,
+      fromGroupIndex: number
+    ): TrainSampleItem | null => {
+      if (targetItems.length === 0) return null
+      const fromStep =
+        typeof fromItem.step === 'number' && Number.isFinite(fromItem.step)
+          ? fromItem.step
+          : null
+      if (fromStep !== null) {
+        const exact = targetItems.find((item) => item.step === fromStep)
+        if (exact) return exact
+        let best = targetItems[0]
+        let bestDist = Number.POSITIVE_INFINITY
+        for (const item of targetItems) {
+          if (typeof item.step !== 'number' || !Number.isFinite(item.step)) continue
+          const dist = Math.abs(item.step - fromStep)
+          if (dist < bestDist) {
+            bestDist = dist
+            best = item
+          }
+        }
+        if (bestDist !== Number.POSITIVE_INFINITY) return best
+      }
+      if (fromGroupIndex >= 0 && fromGroupIndex < targetItems.length) {
+        return targetItems[fromGroupIndex]
+      }
+      return targetItems[0]
+    },
+    []
+  )
+
+  const openAdjacentPromptGroup = useCallback(
+    (direction: -1 | 1) => {
+      if (!sampleLightboxItem || sampleGroups.length <= 1) return
+      const currentPrompt = samplePromptIndex(sampleLightboxItem)
+      const groupPos = sampleGroups.findIndex((g) => g.promptIndex === currentPrompt)
+      if (groupPos < 0) return
+      const nextPos =
+        (groupPos + direction + sampleGroups.length) % sampleGroups.length
+      const target = sampleGroups[nextPos]
+      const picked = pickSampleInPromptGroup(
+        target.items,
+        sampleLightboxItem,
+        sampleLightboxGroupIndex
+      )
+      if (picked) setSampleLightboxPath(picked.path)
+    },
+    [
+      sampleLightboxItem,
+      sampleGroups,
+      sampleLightboxGroupIndex,
+      pickSampleInPromptGroup
+    ]
+  )
+
+  useEffect(() => {
+    if (resultsTab !== 'sample') setSampleLightboxPath(null)
+  }, [resultsTab])
+
+  useEffect(() => {
+    if (!sampleLightboxPath) return
+    if (sampleLightboxIndex >= 0) return
+    if (sampleItems.length > 0) {
+      setSampleLightboxPath(sampleItems[0].path)
+    } else {
+      setSampleLightboxPath(null)
+    }
+  }, [sampleLightboxPath, sampleLightboxIndex, sampleItems])
+
+  useEffect(() => {
+    if (!sampleLightboxItem || sampleLightboxGroupItems.length === 0) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSampleLightboxPath(null)
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        const next =
+          sampleLightboxGroupIndex <= 0
+            ? sampleLightboxGroupItems.length - 1
+            : sampleLightboxGroupIndex - 1
+        setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        const next =
+          sampleLightboxGroupIndex >= sampleLightboxGroupItems.length - 1
+            ? 0
+            : sampleLightboxGroupIndex + 1
+        setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        openAdjacentPromptGroup(-1)
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        openAdjacentPromptGroup(1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [
+    sampleLightboxItem,
+    sampleLightboxGroupIndex,
+    sampleLightboxGroupItems,
+    openAdjacentPromptGroup
+  ])
+
+  const promptTextForIndex = (promptIndex: number): string => {
+    const entry = draft.sample.prompts[promptIndex - 1]
+    return entry?.prompt?.trim() || ''
+  }
 
   const sectionTitle = SECTIONS.find((s) => s.id === activeSection)?.label ?? ''
   const trainSessionTitle = trainComplete
@@ -1213,47 +1528,120 @@ export function LoraTrainView({
           <div className="lora-train-mid">
             <div className="lora-train-loss-panel">
               <div className="lora-train-loss-header">
-                <h3 className="lora-panel-title">Loss</h3>
-                <div className="lora-train-loss-legend">
-                  <label
-                    className={`lora-train-loss-legend-item${showLossCurve ? '' : ' is-off'}`}
+                <div className="lora-train-results-tabs" role="tablist" aria-label="Training results view">
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`lora-train-results-tab${resultsTab === 'loss' ? ' active' : ''}`}
+                    aria-selected={resultsTab === 'loss'}
+                    onClick={() => setResultsTab('loss')}
                   >
-                    <input
-                      type="checkbox"
-                      className="lora-train-loss-check"
-                      checked={showLossCurve}
-                      onChange={(e) => setShowLossCurve(e.target.checked)}
-                      aria-label="Show loss curve"
-                    />
-                    <span className="lora-train-loss-swatch is-raw" />
-                    loss
-                    {lossHistory.length > 0
-                      ? `=${lossHistory[lossHistory.length - 1].loss.toFixed(4)}`
-                      : ''}
-                  </label>
-                  <label
-                    className={`lora-train-loss-legend-item${showAvgLossCurve ? '' : ' is-off'}`}
+                    Loss graph
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`lora-train-results-tab${resultsTab === 'sample' ? ' active' : ''}`}
+                    aria-selected={resultsTab === 'sample'}
+                    onClick={() => setResultsTab('sample')}
                   >
-                    <input
-                      type="checkbox"
-                      className="lora-train-loss-check"
-                      checked={showAvgLossCurve}
-                      onChange={(e) => setShowAvgLossCurve(e.target.checked)}
-                      aria-label="Show avg. loss curve"
-                    />
-                    <span className="lora-train-loss-swatch is-avg" />
-                    avg. loss
-                    {lossHistory.length > 0
-                      ? `=${cumulativeAvgLoss(lossHistory, lossHistory.length - 1).toFixed(4)}`
-                      : ''}
-                  </label>
+                    Sample image
+                    {sampleItems.length > 0 ? ` (${sampleItems.length})` : ''}
+                  </button>
                 </div>
+                {resultsTab === 'loss' ? (
+                  <div className="lora-train-loss-legend">
+                    <label
+                      className={`lora-train-loss-legend-item${showLossCurve ? '' : ' is-off'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="lora-train-loss-check"
+                        checked={showLossCurve}
+                        onChange={(e) => setShowLossCurve(e.target.checked)}
+                        aria-label="Show loss curve"
+                      />
+                      <span className="lora-train-loss-swatch is-raw" />
+                      loss
+                      {lossHistory.length > 0
+                        ? `=${lossHistory[lossHistory.length - 1].loss.toFixed(4)}`
+                        : ''}
+                    </label>
+                    <label
+                      className={`lora-train-loss-legend-item${showAvgLossCurve ? '' : ' is-off'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="lora-train-loss-check"
+                        checked={showAvgLossCurve}
+                        onChange={(e) => setShowAvgLossCurve(e.target.checked)}
+                        aria-label="Show avg. loss curve"
+                      />
+                      <span className="lora-train-loss-swatch is-avg" />
+                      avg. loss
+                      {lossHistory.length > 0
+                        ? `=${cumulativeAvgLoss(lossHistory, lossHistory.length - 1).toFixed(4)}`
+                        : ''}
+                    </label>
+                  </div>
+                ) : (
+                  <div className="lora-train-sample-summary">
+                    {sampleLoading
+                      ? 'Loading samples…'
+                      : sampleItems.length > 0
+                        ? `${sampleItems.length} sample${sampleItems.length === 1 ? '' : 's'} · ${sampleGroups.length} prompt${sampleGroups.length === 1 ? '' : 's'}`
+                        : 'No samples yet'}
+                  </div>
+                )}
               </div>
-              <LossChart
-                points={lossHistory}
-                showLoss={showLossCurve}
-                showAvgLoss={showAvgLossCurve}
-              />
+              {resultsTab === 'loss' ? (
+                <LossChart
+                  points={lossHistory}
+                  showLoss={showLossCurve}
+                  showAvgLoss={showAvgLossCurve}
+                />
+              ) : (
+                <div className="lora-train-sample-panel">
+                  {sampleError ? <p className="test-err">{sampleError}</p> : null}
+                  {!sampleError && sampleItems.length === 0 ? (
+                    <div className="lora-train-sample-empty">
+                      {sampleLoading ? 'Loading sample images…' : 'No samples yet'}
+                    </div>
+                  ) : sampleGroups.length > 0 ? (
+                    <div className="lora-train-sample-groups" role="list" aria-label="Training samples by prompt">
+                      {sampleGroups.map((group) => {
+                        const promptText = promptTextForIndex(group.promptIndex)
+                        return (
+                          <section
+                            key={group.promptIndex}
+                            className="lora-train-sample-group"
+                            role="listitem"
+                            aria-label={`Prompt ${group.promptIndex}`}
+                          >
+                            <header className="lora-train-sample-group-header">
+                              <span className="lora-train-sample-group-title">
+                                Prompt {group.promptIndex}
+                              </span>
+                              {promptText ? (
+                                <span className="lora-train-sample-group-prompt" title={promptText}>
+                                  {promptText}
+                                </span>
+                              ) : null}
+                              <span className="lora-train-sample-group-count">
+                                {group.items.length} step{group.items.length === 1 ? '' : 's'}
+                              </span>
+                            </header>
+                            <SamplePromptStrip
+                              items={group.items}
+                              onOpen={setSampleLightboxPath}
+                            />
+                          </section>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
             <div className="lora-train-log-panel">
               <h3 className="lora-panel-title">Log</h3>
@@ -2113,6 +2501,87 @@ export function LoraTrainView({
         onCancel={() => setShowRestartWarning(false)}
         onConfirm={confirmRestartTrain}
       />
+      {sampleLightboxItem ? (
+        <div
+          className="modal-backdrop lora-sample-lightbox-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sample image preview"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSampleLightboxPath(null)
+          }}
+        >
+          <div
+            className="lora-sample-lightbox"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="lora-sample-lightbox-header">
+              <div className="lora-sample-lightbox-title">
+                <span>
+                  Prompt {samplePromptIndex(sampleLightboxItem)} ·{' '}
+                  {sampleStepLabel(sampleLightboxItem)}
+                </span>
+                <span className="lora-sample-lightbox-count">
+                  {sampleLightboxGroupIndex + 1} / {sampleLightboxGroupItems.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="lora-sample-lightbox-close"
+                aria-label="Close preview"
+                onClick={() => setSampleLightboxPath(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="lora-sample-lightbox-body">
+              <button
+                type="button"
+                className="lora-sample-lightbox-nav"
+                aria-label="Previous sample in prompt"
+                disabled={sampleLightboxGroupItems.length <= 1}
+                onClick={() => {
+                  if (sampleLightboxGroupItems.length === 0) return
+                  const next =
+                    sampleLightboxGroupIndex <= 0
+                      ? sampleLightboxGroupItems.length - 1
+                      : sampleLightboxGroupIndex - 1
+                  setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+                }}
+              >
+                ‹
+              </button>
+              <img
+                src={window.api.toLocalUrl(sampleLightboxItem.path)}
+                alt={`${sampleStepLabel(sampleLightboxItem)} sample`}
+                className="lora-sample-lightbox-image"
+              />
+              <button
+                type="button"
+                className="lora-sample-lightbox-nav"
+                aria-label="Next sample in prompt"
+                disabled={sampleLightboxGroupItems.length <= 1}
+                onClick={() => {
+                  if (sampleLightboxGroupItems.length === 0) return
+                  const next =
+                    sampleLightboxGroupIndex >= sampleLightboxGroupItems.length - 1
+                      ? 0
+                      : sampleLightboxGroupIndex + 1
+                  setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+                }}
+              >
+                ›
+              </button>
+            </div>
+            <p className="lora-sample-lightbox-name" title={sampleLightboxItem.name}>
+              {sampleLightboxItem.name}
+            </p>
+            <p className="lora-sample-lightbox-hint">
+              ← → step · ↑ ↓ prompt · Esc
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

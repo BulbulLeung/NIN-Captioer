@@ -56,6 +56,79 @@ async function listStepLoraCheckpoints(
   return found.map(({ step, path }) => ({ step, path }))
 }
 
+function parseSampleStepAndIndex(name: string, jobName: string): { step: number; promptIndex: number } | null {
+  const safeName = safeJobName(jobName)
+  const escaped = safeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = name.match(new RegExp(`^${escaped}_Sampling_(\\d{6})(?:_(\\d+))?\\.png$`, 'i'))
+  if (!match) return null
+  return {
+    step: Number(match[1]),
+    // No `_N` suffix → single-prompt job, treat as prompt 1
+    promptIndex: match[2] ? Number(match[2]) : 1
+  }
+}
+
+async function listTrainSamples(
+  trainingFolder: string,
+  jobName: string
+): Promise<{ path: string; name: string; mtimeMs: number; step?: number; promptIndex: number }[]> {
+  const sampleDir = join(trainingFolder, jobName, 'samples')
+  try {
+    await access(sampleDir, constants.R_OK)
+  } catch {
+    return []
+  }
+
+  const entries = await readdir(sampleDir, { withFileTypes: true })
+  const found: {
+    path: string
+    name: string
+    mtimeMs: number
+    step?: number
+    promptIndex: number
+  }[] = []
+
+  for (const ent of entries) {
+    if (!ent.isFile()) continue
+    const full = join(sampleDir, ent.name)
+    const ext = extname(ent.name).toLowerCase()
+    if (!IMAGE_EXTS.has(ext)) continue
+    let mtimeMs = 0
+    try {
+      mtimeMs = (await stat(full)).mtimeMs
+    } catch {
+      mtimeMs = 0
+    }
+    const parsed = parseSampleStepAndIndex(ent.name, jobName)
+    found.push({
+      path: full,
+      name: ent.name,
+      mtimeMs,
+      step: parsed?.step,
+      promptIndex: parsed?.promptIndex ?? 1
+    })
+  }
+
+  found.sort((a, b) => {
+    const stepA = a.step ?? -1
+    const stepB = b.step ?? -1
+    return (
+      a.promptIndex - b.promptIndex ||
+      stepA - stepB ||
+      a.mtimeMs - b.mtimeMs ||
+      a.name.localeCompare(b.name)
+    )
+  })
+
+  return found.map(({ path, name, mtimeMs, step, promptIndex }) => ({
+    path,
+    name,
+    mtimeMs,
+    step,
+    promptIndex
+  }))
+}
+
 // Avoid Chromium HTTP disk-cache corruption (Critical error -8) when loading many
 // local-file:// dataset thumbnails. Wipe any leftover Cache before NetworkService starts.
 app.commandLine.appendSwitch('disable-http-cache')
@@ -1141,6 +1214,34 @@ app.whenReady().then(async () => {
           ok: false,
           error: err instanceof Error ? err.message : String(err),
           checkpoints: []
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'train:listSamples',
+    async (
+      _event,
+      opts: { trainingFolder?: string; jobName?: string }
+    ): Promise<{
+      ok: boolean
+      error?: string
+      samples: { path: string; name: string; mtimeMs: number; step?: number; promptIndex: number }[]
+    }> => {
+      const trainingFolder = (opts?.trainingFolder || '').trim()
+      const jobName = (opts?.jobName || '').trim()
+      if (!trainingFolder || !jobName) {
+        return { ok: true, samples: [] }
+      }
+      try {
+        const samples = await listTrainSamples(trainingFolder, jobName)
+        return { ok: true, samples }
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          samples: []
         }
       }
     }

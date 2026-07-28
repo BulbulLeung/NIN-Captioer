@@ -86,6 +86,15 @@ export interface ResourceStats {
   gpu: ResourceGpuStats | null
 }
 
+export interface TrainSampleItem {
+  path: string
+  name: string
+  mtimeMs: number
+  step?: number
+  /** 1-based prompt group from filename (`_N` suffix; missing → 1). */
+  promptIndex: number
+}
+
 export interface CaptionPreset {
   id: string
   name: string
@@ -340,6 +349,14 @@ declare global {
         ok: boolean
         error?: string
         checkpoints: { step: number; path: string }[]
+      }>
+      listTrainSamples: (opts: {
+        trainingFolder: string
+        jobName: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        samples: TrainSampleItem[]
       }>
       onTrainLog: (
         cb: (payload: { line: string; stream: string }) => void

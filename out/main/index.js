@@ -659,6 +659,59 @@ async function listStepLoraCheckpoints(trainingFolder, jobName) {
   found.sort((a, b) => a.step - b.step || a.mtime - b.mtime);
   return found.map(({ step, path: path2 }) => ({ step, path: path2 }));
 }
+function parseSampleStepAndIndex(name, jobName) {
+  const safeName = safeJobName(jobName);
+  const escaped = safeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = name.match(new RegExp(`^${escaped}_Sampling_(\\d{6})(?:_(\\d+))?\\.png$`, "i"));
+  if (!match) return null;
+  return {
+    step: Number(match[1]),
+    // No `_N` suffix → single-prompt job, treat as prompt 1
+    promptIndex: match[2] ? Number(match[2]) : 1
+  };
+}
+async function listTrainSamples(trainingFolder, jobName) {
+  const sampleDir = path.join(trainingFolder, jobName, "samples");
+  try {
+    await promises.access(sampleDir, promises.constants.R_OK);
+  } catch {
+    return [];
+  }
+  const entries = await promises.readdir(sampleDir, { withFileTypes: true });
+  const found = [];
+  for (const ent of entries) {
+    if (!ent.isFile()) continue;
+    const full = path.join(sampleDir, ent.name);
+    const ext = path.extname(ent.name).toLowerCase();
+    if (!IMAGE_EXTS.has(ext)) continue;
+    let mtimeMs = 0;
+    try {
+      mtimeMs = (await promises.stat(full)).mtimeMs;
+    } catch {
+      mtimeMs = 0;
+    }
+    const parsed = parseSampleStepAndIndex(ent.name, jobName);
+    found.push({
+      path: full,
+      name: ent.name,
+      mtimeMs,
+      step: parsed?.step,
+      promptIndex: parsed?.promptIndex ?? 1
+    });
+  }
+  found.sort((a, b) => {
+    const stepA = a.step ?? -1;
+    const stepB = b.step ?? -1;
+    return a.promptIndex - b.promptIndex || stepA - stepB || a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name);
+  });
+  return found.map(({ path: path2, name, mtimeMs, step, promptIndex }) => ({
+    path: path2,
+    name,
+    mtimeMs,
+    step,
+    promptIndex
+  }));
+}
 electron.app.commandLine.appendSwitch("disable-http-cache");
 electron.app.commandLine.appendSwitch("disk-cache-size", "0");
 try {
@@ -1511,6 +1564,26 @@ electron.app.whenReady().then(async () => {
           ok: false,
           error: err instanceof Error ? err.message : String(err),
           checkpoints: []
+        };
+      }
+    }
+  );
+  electron.ipcMain.handle(
+    "train:listSamples",
+    async (_event, opts) => {
+      const trainingFolder = (opts?.trainingFolder || "").trim();
+      const jobName = (opts?.jobName || "").trim();
+      if (!trainingFolder || !jobName) {
+        return { ok: true, samples: [] };
+      }
+      try {
+        const samples = await listTrainSamples(trainingFolder, jobName);
+        return { ok: true, samples };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          samples: []
         };
       }
     }

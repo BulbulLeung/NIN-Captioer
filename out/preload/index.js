@@ -28,6 +28,7 @@ const api = {
   stopTrain: () => electron.ipcRenderer.invoke("train:stop"),
   trainStatus: () => electron.ipcRenderer.invoke("train:status"),
   listTrainCheckpoints: (opts) => electron.ipcRenderer.invoke("train:listCheckpoints", opts),
+  listTrainSamples: (opts) => electron.ipcRenderer.invoke("train:listSamples", opts),
   onTrainLog: (cb) => {
     const listener = (_e, payload) => cb(payload);
     electron.ipcRenderer.on("train:log", listener);

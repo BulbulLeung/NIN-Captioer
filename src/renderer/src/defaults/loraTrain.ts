@@ -124,16 +124,12 @@ export interface LoraTrainAppSettings {
 export const KREA2_RAW = 'krea/Krea-2-Raw'
 
 export const DEFAULT_SAMPLE_PROMPTS: string[] = [
-  'woman with red hair, playing chess at the park, bomb going off in the background',
-  'a woman holding a coffee cup, in a beanie, sitting at a cafe',
-  'a horse is a DJ at a night club, fish eye lens, smoke machine, lazer lights, holding a martini',
-  'a man showing off his cool new t shirt at the beach, a shark is jumping out of the water in the background',
-  'a bear building a log cabin in the snow covered mountains',
-  'woman playing the guitar, on stage, singing a song, laser lights, punk rocker',
-  'hipster man with a beard, building a chair, in a wood shop',
-  'photo of a man, white background, medium shot, modeling clothing, studio lighting, white backdrop',
-  "a man holding a sign that says, 'this is a sign'",
-  'a bulldog, in a post apocalyptic world, with a shotgun, in a leather jacket, in a desert, with a motorcycle'
+  `A striking, high-contrast waist-up front-facing portrait of an otherworldly, ethereal girl looking directly at the viewer. She has translucent, glowing alabaster skin and long, weightless hair of pure white starlight floating around her. Her large, serene eyes gaze straight forward, staring directly into the viewer's eyes like pools of liquid silver, shining brightly against a deep, pitch-black cosmic abyss.
+The background is a stark, midnight-black void filled with thousands of sharp, highly-reflective crystal particles and shattered gemstone shards hovering frozen in space. These crystalline particles act as tiny prisms, catching a hidden light source and exploding with brilliant, high-contrast flares of electric blue, magenta, and sharp white.
+Cutting sharply across the entire composition from the top-right corner to the bottom-left corner is a rigid band of five taut, parallel straight lines of humming, pure white light. These five luminous geometric lines slash through the space, casting intense, bright highlights onto her symmetrical face, collarbones, and shoulder.
+Her slender, pale hands are held in a gentle, graceful gesture in front of her chest; her long fingers hover millimeters away from the five rigid straight light lines, guiding her hands along the diagonal path with absolute focus.
+At the chords' vibration, nearby floating crystal particles ripple and spin, scattering a dazzling storm of sharp, starry lens flares and microscopic glowing dust around her cheek and shoulders.
+She wears a high-collared gown crafted from layers of woven starlight and transparent diamond-veil fabric, which reflects the intense contrasting light and projects intricate, glittering caustic patterns across her serene front-facing neck and face.`
 ]
 
 const DEFAULT_SAMPLE_WIDTH = 1024

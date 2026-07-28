@@ -138,6 +138,14 @@ const api = {
     error?: string
     checkpoints: { step: number; path: string }[]
   }> => ipcRenderer.invoke('train:listCheckpoints', opts),
+  listTrainSamples: (opts: {
+    trainingFolder: string
+    jobName: string
+  }): Promise<{
+    ok: boolean
+    error?: string
+    samples: { path: string; name: string; mtimeMs: number; step?: number; promptIndex: number }[]
+  }> => ipcRenderer.invoke('train:listSamples', opts),
   onTrainLog: (cb: (payload: { line: string; stream: string }) => void) => {
     const listener = (_e: IpcRendererEvent, payload: { line: string; stream: string }) =>
       cb(payload)
