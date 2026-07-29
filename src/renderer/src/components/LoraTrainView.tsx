@@ -2313,20 +2313,21 @@ export function LoraTrainView({
                     <option value="fp32">fp32</option>
                   </select>
                 </Field>
-                <Field label="Save weights dtype">
+                <Field label="Quantize">
                   <select
-                    value={draft.save.dtype}
+                    value={draft.model.quantize}
                     disabled={training}
                     onChange={(e) =>
                       patch((p) => ({
                         ...p,
-                        save: { ...p.save, dtype: e.target.value }
+                        model: { ...p.model, quantize: e.target.value as typeof p.model.quantize }
                       }))
                     }
                   >
-                    <option value="bf16">bf16</option>
-                    <option value="fp16">fp16</option>
-                    <option value="fp32">fp32</option>
+                    <option value="none">-NONE-</option>
+                    <option value="qfloat8">qfloat8</option>
+                    <option value="float8">float8</option>
+                    <option value="int8">INT8</option>
                   </select>
                 </Field>
               </div>
@@ -2344,26 +2345,6 @@ export function LoraTrainView({
                   <option value="flowmatch">flowmatch</option>
                   <option value="ddpm">ddpm</option>
                   <option value="euler">euler</option>
-                </select>
-              </Field>
-              <Field
-                label="Quantize"
-                hint="Choose -NONE- to disable quantization, or apply qfloat8/float8/INT8 to both the DiT transformer and text encoder."
-              >
-                <select
-                  value={draft.model.quantize}
-                  disabled={training}
-                  onChange={(e) =>
-                    patch((p) => ({
-                      ...p,
-                      model: { ...p.model, quantize: e.target.value as typeof p.model.quantize }
-                    }))
-                  }
-                >
-                  <option value="none">-NONE-</option>
-                  <option value="qfloat8">qfloat8</option>
-                  <option value="float8">float8</option>
-                  <option value="int8">INT8</option>
                 </select>
               </Field>
               <div className="lora-field-row">
@@ -2389,6 +2370,22 @@ export function LoraTrainView({
                   }
                 />
               </div>
+              <Field label="Save weights dtype">
+                <select
+                  value={draft.save.dtype}
+                  disabled={training}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      save: { ...p.save, dtype: e.target.value }
+                    }))
+                  }
+                >
+                  <option value="bf16">bf16</option>
+                  <option value="fp16">fp16</option>
+                  <option value="fp32">fp32</option>
+                </select>
+              </Field>
               <div className="lora-field-row">
                 <Field label="Save every N steps">
                   <NumberField
