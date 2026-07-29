@@ -1706,11 +1706,19 @@ def main() -> int:
     elif lr_scheduler_name != "cosine":
         log(f"WARNING: unknown lr_scheduler={lr_scheduler_name!r}; using constant_with_warmup")
         lr_scheduler_name = "constant_with_warmup"
-    try:
-        warmup_steps = int(train_cfg.get("warmup_steps") or 100)
-    except (TypeError, ValueError):
-        warmup_steps = 100
-    warmup_steps = max(0, warmup_steps)
+    if "warmup_percent" in train_cfg:
+        try:
+            warmup_percent = float(train_cfg.get("warmup_percent"))
+        except (TypeError, ValueError):
+            warmup_percent = 5.0
+    else:
+        # Legacy absolute warmup_steps → treat 0 as off, else ~5%.
+        try:
+            legacy_wu = int(train_cfg.get("warmup_steps") or 0)
+        except (TypeError, ValueError):
+            legacy_wu = 0
+        warmup_percent = 0.0 if legacy_wu <= 0 else 5.0
+    warmup_percent = max(0.0, min(100.0, warmup_percent))
     dtype_name = (train_cfg.get("dtype") or "bf16").lower()
     optimizer_name = (train_cfg.get("optimizer") or "adamw8bit").lower()
     noise_scheduler = (train_cfg.get("noise_scheduler") or "flowmatch").lower()
@@ -1785,7 +1793,7 @@ def main() -> int:
         log(f"resume_from={resume_path} step={resume_step}")
     log(
         f"steps={steps} batch={batch_size} lr={lr} lr_scheduler={lr_scheduler_name} "
-        f"warmup_steps={warmup_steps} rank={rank} alpha={alpha} "
+        f"warmup_percent={warmup_percent:g} rank={rank} alpha={alpha} "
         f"network={network_type} scheduler={noise_scheduler} optimizer={optimizer_name} "
         f"resolutions={resolutions} shuffle_tokens={shuffle_tokens} "
         f"ar_bucketing=always step={bucket_step} min_res={bucket_min_res} "
@@ -2532,7 +2540,11 @@ def main() -> int:
         return 5
 
     num_training_steps = max(1, (steps + grad_accum - 1) // grad_accum)
-    num_warmup = min(warmup_steps, max(0, num_training_steps - 1))
+    if warmup_percent <= 0:
+        num_warmup = 0
+    else:
+        num_warmup = int(round(num_training_steps * (warmup_percent / 100.0)))
+        num_warmup = min(num_warmup, max(0, num_training_steps - 1))
     lr_scheduler = get_scheduler(
         name=lr_scheduler_name,
         optimizer=optimizer,
@@ -2545,12 +2557,13 @@ def main() -> int:
             lr_scheduler.step()
         log(
             f"LR scheduler={lr_scheduler_name} warmup={num_warmup} "
-            f"total_updates={num_training_steps} resume_fast_forward={resume_updates}"
+            f"({warmup_percent:g}% of {num_training_steps} updates) "
+            f"resume_fast_forward={resume_updates}"
         )
     else:
         log(
             f"LR scheduler={lr_scheduler_name} warmup={num_warmup} "
-            f"total_updates={num_training_steps}"
+            f"({warmup_percent:g}% of {num_training_steps} updates)"
         )
 
     ema: AdapterEma | None = None

@@ -1614,24 +1614,6 @@ export function LoraTrainView({
                   <span className="lora-nav-hint">{s.hint}</span>
                 </button>
               ))}
-              <p className="lora-nav-note">
-                Required: DatasetEdit preset + Train base (Raw)
-                {!hasDataset ? (
-                  <>
-                    {' '}
-                    ·{' '}
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => setActiveSection('dataset')}
-                    >
-                      Set dataset
-                    </button>
-                  </>
-                ) : filledDatasets.length > 1 ? (
-                  <> · {filledDatasets.length} datasets</>
-                ) : null}
-              </p>
             </div>
           )}
           <div className="lora-nav-actions">
@@ -2270,19 +2252,48 @@ export function LoraTrainView({
                     <option value="cosine">cosine</option>
                   </select>
                 </Field>
-                <Field label="Warmup steps" hint="Optimizer updates spent ramping LR from 0">
-                  <NumberField
-                    min={0}
-                    value={draft.train.warmup_steps}
-                    emptyFallback={0}
-                    disabled={training}
-                    onChange={(n) =>
-                      patch((p) => ({
-                        ...p,
-                        train: { ...p.train, warmup_steps: Math.max(0, Math.round(n)) }
-                      }))
-                    }
-                  />
+                <Field
+                  label="Warmup %"
+                  hint={(() => {
+                    const updates = Math.ceil(
+                      Math.max(1, draft.train.steps) /
+                        Math.max(1, draft.train.gradient_accumulation_steps)
+                    )
+                    if (draft.train.warmup_percent <= 0) return '0% = off'
+                    const n = Math.min(
+                      Math.max(0, Math.round(updates * (draft.train.warmup_percent / 100))),
+                      Math.max(0, updates - 1)
+                    )
+                    return `≈ ${n} / ${updates} optimizer updates`
+                  })()}
+                >
+                  <div className="lora-offload-pct">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={draft.train.warmup_percent}
+                      disabled={training}
+                      onChange={(e) =>
+                        patch((p) => ({
+                          ...p,
+                          train: {
+                            ...p.train,
+                            warmup_percent: Math.min(
+                              100,
+                              Math.max(0, Math.round(Number(e.target.value) / 5) * 5)
+                            )
+                          }
+                        }))
+                      }
+                    />
+                    <span className="lora-offload-pct-value" aria-label="Warmup percent">
+                      {draft.train.warmup_percent <= 0
+                        ? 'Off'
+                        : `${draft.train.warmup_percent}%`}
+                    </span>
+                  </div>
                 </Field>
               </div>
               <div className="lora-field-row">

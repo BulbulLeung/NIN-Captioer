@@ -53,7 +53,8 @@ export interface LoraTrainTrainConfig {
   lr: number
   /** Warmup then hold peak LR, or warmup then cosine decay. */
   lr_scheduler: LoraTrainLrScheduler
-  warmup_steps: number
+  /** 0–100: fraction of optimizer updates used for LR warmup; 0 = off. */
+  warmup_percent: number
   dtype: string
   skip_first_sample: boolean
   disable_sampling: boolean
@@ -192,7 +193,7 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     optimizer: 'adamw8bit',
     lr: 1e-4,
     lr_scheduler: 'constant_with_warmup',
-    warmup_steps: 100,
+    warmup_percent: 5,
     dtype: 'bf16',
     skip_first_sample: false,
     disable_sampling: true,
@@ -271,6 +272,14 @@ function normalizeLrScheduler(value: unknown, fallback: LoraTrainLrScheduler): L
   if (raw === 'cosine') return 'cosine'
   if (raw === 'constant_with_warmup' || raw === 'constant') return 'constant_with_warmup'
   return fallback
+}
+
+/** Snap to 0–100 in 5% steps. */
+function normalizeWarmupPercent(value: unknown, fallback: number): number {
+  const n = Math.round(asNumber(value, fallback))
+  if (!Number.isFinite(n)) return fallback
+  const clamped = Math.min(100, Math.max(0, n))
+  return Math.round(clamped / 5) * 5
 }
 
 function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraTrainDatasetConfig {
@@ -442,7 +451,15 @@ export function normalizeLoraTrainJob(
       optimizer: asString(train.optimizer, d.train.optimizer),
       lr: asNumber(train.lr, d.train.lr),
       lr_scheduler: normalizeLrScheduler(train.lr_scheduler, d.train.lr_scheduler),
-      warmup_steps: Math.max(0, Math.round(asNumber(train.warmup_steps, d.train.warmup_steps))),
+      warmup_percent: (() => {
+        if (train.warmup_percent !== undefined) {
+          return normalizeWarmupPercent(train.warmup_percent, d.train.warmup_percent)
+        }
+        // Legacy absolute warmup_steps: 0 → off; otherwise default 5%.
+        const legacy = asNumber(train.warmup_steps, -1)
+        if (legacy === 0) return 0
+        return d.train.warmup_percent
+      })(),
       dtype: asString(train.dtype, d.train.dtype),
       skip_first_sample: asBool(train.skip_first_sample, d.train.skip_first_sample),
       disable_sampling: asBool(train.disable_sampling, d.train.disable_sampling),
