@@ -167,6 +167,16 @@ const api = {
     ipcRenderer.on('train:progress', listener)
     return () => ipcRenderer.removeListener('train:progress', listener)
   },
+  onTrainLossSpike: (
+    cb: (payload: { step: number; loss: number; path: string }) => void
+  ) => {
+    const listener = (
+      _e: IpcRendererEvent,
+      payload: { step: number; loss: number; path: string }
+    ) => cb(payload)
+    ipcRenderer.on('train:lossSpike', listener)
+    return () => ipcRenderer.removeListener('train:lossSpike', listener)
+  },
   onTrainDone: (cb: (payload: { path: string }) => void) => {
     const listener = (_e: IpcRendererEvent, payload: { path: string }) => cb(payload)
     ipcRenderer.on('train:done', listener)

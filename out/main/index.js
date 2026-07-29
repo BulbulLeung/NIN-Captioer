@@ -1675,6 +1675,17 @@ electron.app.whenReady().then(async () => {
             const line = raw.trimEnd();
             if (!line) continue;
             if (/MatMul8bitLt:/i.test(line)) continue;
+            const spike = line.match(
+              /^CAPTIOER_LOSS_SPIKE\s+step=(\d+)\s+loss=([0-9.eE+-]+)\s+path=(.+)$/
+            );
+            if (spike) {
+              emitTrain("train:lossSpike", {
+                step: Number(spike[1]),
+                loss: Number(spike[2]),
+                path: spike[3].trim()
+              });
+              continue;
+            }
             recentLines.push(`[${stream}] ${line}`);
             if (recentLines.length > 40) recentLines.shift();
             const trainErr = line.match(/^CAPTIOER_TRAIN_ERROR\s+message=(.+)$/);

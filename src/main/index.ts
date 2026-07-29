@@ -1365,6 +1365,17 @@ app.whenReady().then(async () => {
             if (!line) continue
             // bitsandbytes spams this once per Linear per step — hide from UI log
             if (/MatMul8bitLt:/i.test(line)) continue
+            const spike = line.match(
+              /^CAPTIOER_LOSS_SPIKE\s+step=(\d+)\s+loss=([0-9.eE+-]+)\s+path=(.+)$/
+            )
+            if (spike) {
+              emitTrain('train:lossSpike', {
+                step: Number(spike[1]),
+                loss: Number(spike[2]),
+                path: spike[3].trim()
+              })
+              continue
+            }
             recentLines.push(`[${stream}] ${line}`)
             if (recentLines.length > 40) recentLines.shift()
             const trainErr = line.match(/^CAPTIOER_TRAIN_ERROR\s+message=(.+)$/)

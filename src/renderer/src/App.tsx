@@ -1195,6 +1195,7 @@ export default function App() {
       ) : (
         <LoraTrainView
           job={activeLoraJob.job}
+          jobId={activeLoraJob.id}
           appSettings={settings.loraTrainApp}
           datasetFolders={settings.datasetFolders}
           onChange={onLoraJobChange}
@@ -1216,11 +1217,27 @@ export default function App() {
             </>
           ) : (
             <>
-              <span className="folder-path" title={activeLoraJob.job.datasets[0]?.folder_path}>
-                {activeLoraJob.job.datasets[0]?.folder_path || 'No train dataset'}
-              </span>
+              {(() => {
+                const folders = activeLoraJob.job.datasets
+                  .map((ds) => ds.folder_path?.trim() || '')
+                  .filter(Boolean)
+                const first = folders[0]
+                const extra = folders.length > 1 ? ` +${folders.length - 1}` : ''
+                const title = folders.join('\n') || undefined
+                return (
+                  <span className="folder-path" title={title}>
+                    {first
+                      ? `${first}${extra}`
+                      : folders.length === 0
+                        ? 'No train dataset'
+                        : `${folders.length} datasets`}
+                  </span>
+                )
+              })()}
               <span className="image-count">
-                {activeLoraJob.job.train.steps} steps · lr {activeLoraJob.job.train.lr}
+                {activeLoraJob.job.datasets.filter((ds) => ds.folder_path?.trim()).length || 0}{' '}
+                dataset(s) · {activeLoraJob.job.train.steps} steps · lr{' '}
+                {activeLoraJob.job.train.lr}
               </span>
             </>
           )}

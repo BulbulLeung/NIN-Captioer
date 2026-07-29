@@ -1931,6 +1931,75 @@ button.danger.kbd-focus {
   stroke-width: 1.5;
 }
 
+.lora-train-loss-spike-dot {
+  fill: #e23;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.lora-train-loss-spike-thumb {
+  position: absolute;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  border: 1.5px solid #e23;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg-elevated);
+  z-index: 2;
+}
+
+.lora-train-loss-spike-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.lora-spike-lightbox-backdrop {
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.lora-spike-lightbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(92vw, 960px);
+  max-height: 92vh;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+.lora-spike-lightbox-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(92vh - 3rem);
+  object-fit: contain;
+  border-radius: 8px;
+  border: 2px solid #e23;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 45%);
+  background: var(--bg-elevated);
+}
+
+.lora-spike-lightbox-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 100%;
+  word-break: break-all;
+}
+
 .lora-train-loss-empty {
   position: absolute;
   inset: 0;
@@ -2408,6 +2477,10 @@ button.danger.kbd-focus {
   align-items: start;
 }
 
+.lora-field-row-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 .lora-field-row > .field {
   margin: 0;
   min-width: 0;
@@ -2415,6 +2488,44 @@ button.danger.kbd-focus {
 
 .lora-folder-pick {
   width: 100%;
+}
+
+.lora-datasets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 36rem;
+}
+
+.lora-datasets-header span {
+  display: block;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.lora-datasets-header .field-hint {
+  margin: 0.25rem 0 0;
+}
+
+.lora-dataset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem auto;
+  gap: 0.55rem;
+  align-items: end;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel, transparent);
+}
+
+.lora-dataset-row > .field {
+  margin: 0;
+  min-width: 0;
+}
+
+.lora-dataset-row > .lora-prompt-remove {
+  align-self: end;
+  margin-bottom: 0.05rem;
 }
 
 .lora-prompt-groups {
@@ -2643,6 +2754,7 @@ button.danger.kbd-focus {
   }
 
   .lora-field-row,
+  .lora-field-row-3,
   .lora-prompt-meta {
     grid-template-columns: 1fr;
   }

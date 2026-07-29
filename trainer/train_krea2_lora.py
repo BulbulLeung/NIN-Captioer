@@ -10,6 +10,7 @@ Train strategy mirrors AI-Toolkit (24GB path):
 
 Progress protocol (stdout):
   CAPTIOER_PROGRESS step=N total=T loss=X.XXXX
+  CAPTIOER_LOSS_SPIKE step=N loss=X.XXXXXX path=...
   CAPTIOER_DONE path=...
 """
 
@@ -27,6 +28,10 @@ import sys
 from pathlib import Path
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+
+# High-loss spike: current loss >= 1.0, OR >= 5× previous step loss.
+LOSS_SPIKE_MULT = 5.0
+LOSS_SPIKE_FLOOR = 1.0
 
 # Must be set before the first CUDA allocator init.
 # expandable_segments is unsupported on Windows and can worsen shared-RAM spill.
@@ -337,6 +342,13 @@ def load_adapter_weights_for_resume(
 
 def progress(step: int, total: int, loss: float) -> None:
     print(f"CAPTIOER_PROGRESS step={step} total={total} loss={loss:.6f}", flush=True)
+
+
+def loss_spike(step: int, loss: float, path: Path | str) -> None:
+    print(
+        f"CAPTIOER_LOSS_SPIKE step={int(step)} loss={float(loss):.6f} path={path}",
+        flush=True,
+    )
 
 
 def done(path: str) -> None:
@@ -1626,7 +1638,8 @@ def main() -> int:
     save_cfg = cfg.get("save") or {}
     sample_cfg = cfg.get("sample") or {}
     datasets = cfg.get("datasets") or [{}]
-    ds0 = datasets[0] if datasets else {}
+    if not isinstance(datasets, list) or not datasets:
+        datasets = [{}]
     ema_cfg = train_cfg.get("ema_config") or {}
 
     arch = model_cfg.get("arch") or "krea2"
@@ -1660,12 +1673,19 @@ def main() -> int:
     latent_cache_dir.mkdir(parents=True, exist_ok=True)
     text_cache_dir.mkdir(parents=True, exist_ok=True)
 
-    folder = Path(ds0.get("folder_path") or "")
-    caption_ext = ds0.get("caption_ext") or "txt"
+    # Shared dataset settings from the first entry with a folder path (else first entry).
+    shared_ds = next(
+        (d for d in datasets if isinstance(d, dict) and str(d.get("folder_path") or "").strip()),
+        datasets[0] if isinstance(datasets[0], dict) else {},
+    )
+    if not isinstance(shared_ds, dict):
+        shared_ds = {}
+
+    caption_ext = shared_ds.get("caption_ext") or "txt"
     trigger = (cfg.get("trigger_word") or "").strip()
-    dropout = float(ds0.get("caption_dropout_rate") or 0.0)
-    shuffle_tokens = bool(ds0.get("shuffle_tokens", False))
-    resolutions = parse_resolutions(ds0.get("resolution"))
+    dropout = float(shared_ds.get("caption_dropout_rate") or 0.0)
+    shuffle_tokens = bool(shared_ds.get("shuffle_tokens", False))
+    resolutions = parse_resolutions(shared_ds.get("resolution"))
     from ar_buckets import BUCKET_STEP, buckets_fingerprint, normalize_resolutions
 
     resolutions = normalize_resolutions(resolutions)
@@ -1673,13 +1693,24 @@ def main() -> int:
     bucket_min_res = min(resolutions)
     max_res = max(resolutions)
 
-    cache_latents = bool(ds0.get("cache_latents_to_disk", True))
+    cache_latents = bool(shared_ds.get("cache_latents_to_disk", True))
     cache_text = bool(train_cfg.get("cache_text_embeddings", True))
 
     steps = int(train_cfg.get("steps") or 1000)
     batch_size = int(train_cfg.get("batch_size") or 1)
     grad_accum = int(train_cfg.get("gradient_accumulation_steps") or 1)
     lr = float(train_cfg.get("lr") or 1e-4)
+    lr_scheduler_name = (train_cfg.get("lr_scheduler") or "constant_with_warmup").lower()
+    if lr_scheduler_name in ("constant", "constant_with_warmup"):
+        lr_scheduler_name = "constant_with_warmup"
+    elif lr_scheduler_name != "cosine":
+        log(f"WARNING: unknown lr_scheduler={lr_scheduler_name!r}; using constant_with_warmup")
+        lr_scheduler_name = "constant_with_warmup"
+    try:
+        warmup_steps = int(train_cfg.get("warmup_steps") or 100)
+    except (TypeError, ValueError):
+        warmup_steps = 100
+    warmup_steps = max(0, warmup_steps)
     dtype_name = (train_cfg.get("dtype") or "bf16").lower()
     optimizer_name = (train_cfg.get("optimizer") or "adamw8bit").lower()
     noise_scheduler = (train_cfg.get("noise_scheduler") or "flowmatch").lower()
@@ -1749,12 +1780,12 @@ def main() -> int:
 
     log("Captioer Krea2 trainer starting")
     log(f"train_base={train_path}")
-    log(f"dataset={folder}")
     log(f"output={out_dir}")
     if resume_path is not None and resume_step is not None:
         log(f"resume_from={resume_path} step={resume_step}")
     log(
-        f"steps={steps} batch={batch_size} lr={lr} rank={rank} alpha={alpha} "
+        f"steps={steps} batch={batch_size} lr={lr} lr_scheduler={lr_scheduler_name} "
+        f"warmup_steps={warmup_steps} rank={rank} alpha={alpha} "
         f"network={network_type} scheduler={noise_scheduler} optimizer={optimizer_name} "
         f"resolutions={resolutions} shuffle_tokens={shuffle_tokens} "
         f"ar_bucketing=always step={bucket_step} min_res={bucket_min_res} "
@@ -1789,8 +1820,46 @@ def main() -> int:
         log(f"detail: {e}")
         return 4
 
-    samples = collect_samples(folder, caption_ext, trigger)
-    log(f"loaded {len(samples)} image/caption pairs")
+    samples: list[tuple[Path, str]] = []
+    dataset_summaries: list[dict] = []
+    for di, ds in enumerate(datasets):
+        if not isinstance(ds, dict):
+            continue
+        folder_raw = str(ds.get("folder_path") or "").strip()
+        if not folder_raw:
+            continue
+        folder = Path(folder_raw)
+        try:
+            reps = int(ds.get("num_repeats") or 1)
+        except (TypeError, ValueError):
+            reps = 1
+        reps = max(1, reps)
+        try:
+            pairs = collect_samples(folder, caption_ext, trigger)
+        except Exception as e:
+            log(f"WARNING: dataset[{di}] {folder}: {e}")
+            continue
+        unique_n = len(pairs)
+        for _ in range(reps):
+            samples.extend(pairs)
+        dataset_summaries.append(
+            {
+                "index": di,
+                "folder": str(folder),
+                "unique_images": unique_n,
+                "num_repeats": reps,
+                "effective_images": unique_n * reps,
+            }
+        )
+        log(
+            f"dataset[{di}] folder={folder} unique={unique_n} "
+            f"repeats={reps} effective={unique_n * reps}"
+        )
+
+    log(
+        f"loaded {len(samples)} effective image/caption pairs "
+        f"from {len(dataset_summaries)} dataset(s)"
+    )
     if not samples:
         log("ERROR: no training images found")
         return 3
@@ -1839,6 +1908,7 @@ def main() -> int:
                     "step": bucket_step,
                     "fingerprint": ar_fp,
                     "image_count": len(samples),
+                    "datasets": dataset_summaries,
                     "forced_upscale": ar_forced_up,
                     "tier_counts": {str(k): v for k, v in ar_tier_counts.items()},
                     "counts": {
@@ -2455,6 +2525,34 @@ def main() -> int:
         log(f"ERROR: unsupported optimizer={optimizer_name!r}")
         return 5
 
+    try:
+        from transformers import get_scheduler
+    except Exception as e:
+        log(f"ERROR: transformers.get_scheduler unavailable ({e})")
+        return 5
+
+    num_training_steps = max(1, (steps + grad_accum - 1) // grad_accum)
+    num_warmup = min(warmup_steps, max(0, num_training_steps - 1))
+    lr_scheduler = get_scheduler(
+        name=lr_scheduler_name,
+        optimizer=optimizer,
+        num_warmup_steps=num_warmup,
+        num_training_steps=num_training_steps,
+    )
+    if resume_step is not None and resume_step > 0:
+        resume_updates = resume_step // grad_accum
+        for _ in range(resume_updates):
+            lr_scheduler.step()
+        log(
+            f"LR scheduler={lr_scheduler_name} warmup={num_warmup} "
+            f"total_updates={num_training_steps} resume_fast_forward={resume_updates}"
+        )
+    else:
+        log(
+            f"LR scheduler={lr_scheduler_name} warmup={num_warmup} "
+            f"total_updates={num_training_steps}"
+        )
+
     ema: AdapterEma | None = None
     if use_ema:
         ema = AdapterEma(params, ema_decay)
@@ -2503,8 +2601,8 @@ def main() -> int:
         )
         return result["pe"], result["pm"]
 
-    def sample_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int]:
-        """Return latents, embeds, mask, latent_h, latent_w (pre-pack spatial)."""
+    def sample_batch() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int, list[Path]]:
+        """Return latents, embeds, mask, latent_h, latent_w, batch image paths."""
         n = min(batch_size, len(samples))
 
         eligible = [
@@ -2519,6 +2617,7 @@ def main() -> int:
         pick_i = random.choices(range(len(eligible)), weights=weights, k=1)[0]
         (tw, th), pool = eligible[pick_i]
         idxs = random.sample(pool, n) if n < len(pool) else list(pool[:n])
+        batch_paths = [samples[i][0] for i in idxs]
 
         lats = []
         embeds_list = []
@@ -2571,7 +2670,7 @@ def main() -> int:
         lh, lw = int(lat0.shape[-2]), int(lat0.shape[-1])
         prompt_embeds = torch.stack(embeds_list, dim=0)
         prompt_embeds_mask = torch.stack(masks_list, dim=0)
-        return latents, prompt_embeds, prompt_embeds_mask, lh, lw
+        return latents, prompt_embeds, prompt_embeds_mask, lh, lw, batch_paths
 
     def save_adapter(step: int | None = None) -> Path:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -2612,6 +2711,7 @@ def main() -> int:
     global_step = int(resume_step or 0)
     optimizer.zero_grad(set_to_none=True)
     running_loss = 0.0
+    prev_loss_v: float | None = None
     import time as _time
 
     if global_step > 0:
@@ -2684,7 +2784,14 @@ def main() -> int:
             flush()
 
         try:
-            latents, prompt_embeds, prompt_embeds_mask, lat_h, lat_w = sample_batch()
+            (
+                latents,
+                prompt_embeds,
+                prompt_embeds_mask,
+                lat_h,
+                lat_w,
+                batch_paths,
+            ) = sample_batch()
             latents = latents.to(device=device, dtype=weight_dtype)
             if latents.ndim == 4:
                 latents = latents.unsqueeze(2)
@@ -2737,13 +2844,17 @@ def main() -> int:
                 return_dict=False,
             )[0]
 
-            # Avoid .float() upcast copies of full DiT outputs (saves a lot of VRAM).
-            loss = torch.nn.functional.mse_loss(pred, target)
+            # Per-sample MSE (equiv. to mean reduction for the training scalar).
+            per = torch.nn.functional.mse_loss(pred, target, reduction="none")
+            per_sample = per.reshape(pred.shape[0], -1).mean(dim=1)
+            loss = per_sample.mean()
             loss = loss / grad_accum
             loss.backward()
             running_loss += loss.item() * grad_accum
 
+            per_sample_cpu = per_sample.detach().float().cpu()
             del pred, noisy, target, prompt_embeds, prompt_embeds_mask, position_ids, timesteps
+            del per, per_sample
             if attn_mask is not None:
                 del attn_mask
 
@@ -2752,6 +2863,7 @@ def main() -> int:
                     ensure_trainable_on_device(params, device)
                 torch.nn.utils.clip_grad_norm_(params, 1.0)
                 optimizer.step()
+                lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 if ema is not None:
                     ema.update()
@@ -2772,6 +2884,24 @@ def main() -> int:
             loss_v = float(loss.item() * grad_accum)
             # loss tensor may still be alive; item() already taken above — re-get from loss_v
             progress(global_step, steps, loss_v)
+
+            is_spike = False
+            if loss_v >= LOSS_SPIKE_FLOOR:
+                is_spike = True
+            elif (
+                prev_loss_v is not None
+                and prev_loss_v > 0
+                and loss_v >= prev_loss_v * LOSS_SPIKE_MULT
+            ):
+                is_spike = True
+
+            if is_spike and batch_paths:
+                worst_i = int(per_sample_cpu.argmax().item())
+                worst_i = max(0, min(worst_i, len(batch_paths) - 1))
+                loss_spike(global_step, loss_v, batch_paths[worst_i])
+
+            prev_loss_v = loss_v
+
             if global_step == 1 or global_step % 10 == 0:
                 dt = _time.perf_counter() - step_t0
                 per = dt / global_step

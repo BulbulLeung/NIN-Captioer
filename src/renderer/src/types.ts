@@ -387,6 +387,9 @@ declare global {
       onTrainProgress: (
         cb: (payload: { step: number; total: number; loss: number }) => void
       ) => () => void
+      onTrainLossSpike: (
+        cb: (payload: { step: number; loss: number; path: string }) => void
+      ) => () => void
       onTrainDone: (cb: (payload: { path: string }) => void) => () => void
       onTrainError: (cb: (payload: { message: string }) => void) => () => void
       checkModelStatus: (opts: {

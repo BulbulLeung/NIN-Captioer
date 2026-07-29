@@ -40,6 +40,11 @@ const api = {
     electron.ipcRenderer.on("train:progress", listener);
     return () => electron.ipcRenderer.removeListener("train:progress", listener);
   },
+  onTrainLossSpike: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("train:lossSpike", listener);
+    return () => electron.ipcRenderer.removeListener("train:lossSpike", listener);
+  },
   onTrainDone: (cb) => {
     const listener = (_e, payload) => cb(payload);
     electron.ipcRenderer.on("train:done", listener);

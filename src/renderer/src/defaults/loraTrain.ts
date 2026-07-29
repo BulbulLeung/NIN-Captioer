@@ -12,8 +12,12 @@ export interface LoraTrainEmaConfig {
   ema_decay: number
 }
 
+export type LoraTrainLrScheduler = 'constant_with_warmup' | 'cosine'
+
 export interface LoraTrainDatasetConfig {
   folder_path: string
+  /** How many times each image from this folder is counted in the training pool (≥ 1). */
+  num_repeats: number
   caption_ext: string
   caption_dropout_rate: number
   shuffle_tokens: boolean
@@ -47,6 +51,9 @@ export interface LoraTrainTrainConfig {
   noise_scheduler: string
   optimizer: string
   lr: number
+  /** Warmup then hold peak LR, or warmup then cosine decay. */
+  lr_scheduler: LoraTrainLrScheduler
+  warmup_steps: number
   dtype: string
   skip_first_sample: boolean
   disable_sampling: boolean
@@ -165,6 +172,7 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
   datasets: [
     {
       folder_path: '',
+      num_repeats: 1,
       caption_ext: 'txt',
       caption_dropout_rate: 0.05,
       shuffle_tokens: false,
@@ -183,6 +191,8 @@ export const DEFAULT_LORA_TRAIN_JOB: LoraTrainJobConfig = {
     noise_scheduler: 'flowmatch',
     optimizer: 'adamw8bit',
     lr: 1e-4,
+    lr_scheduler: 'constant_with_warmup',
+    warmup_steps: 100,
     dtype: 'bf16',
     skip_first_sample: false,
     disable_sampling: true,
@@ -251,6 +261,18 @@ function asNumberArray(value: unknown, fallback: number[]): number[] {
   return nums.length > 0 ? nums : [...fallback]
 }
 
+function normalizeNumRepeats(value: unknown, fallback: number): number {
+  const n = Math.round(asNumber(value, fallback))
+  return Number.isFinite(n) && n >= 1 ? n : Math.max(1, Math.round(fallback) || 1)
+}
+
+function normalizeLrScheduler(value: unknown, fallback: LoraTrainLrScheduler): LoraTrainLrScheduler {
+  const raw = asString(value, fallback).toLowerCase()
+  if (raw === 'cosine') return 'cosine'
+  if (raw === 'constant_with_warmup' || raw === 'constant') return 'constant_with_warmup'
+  return fallback
+}
+
 function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraTrainDatasetConfig {
   const o = asRecord(raw)
   if (!o) {
@@ -261,6 +283,7 @@ function normalizeDataset(raw: unknown, fallback: LoraTrainDatasetConfig): LoraT
   }
   return {
     folder_path: asString(o.folder_path, fallback.folder_path),
+    num_repeats: normalizeNumRepeats(o.num_repeats, fallback.num_repeats),
     caption_ext: 'txt',
     caption_dropout_rate: asNumber(o.caption_dropout_rate, fallback.caption_dropout_rate),
     shuffle_tokens: asBool(o.shuffle_tokens, fallback.shuffle_tokens),
@@ -363,6 +386,18 @@ export function normalizeLoraTrainJob(
     datasets = d.datasets.map((ds) => ({ ...ds, resolution: [...ds.resolution] }))
   }
 
+  // Shared resolution / dropout / shuffle / cache across all dataset rows.
+  if (datasets.length > 1) {
+    const shared = datasets[0]
+    datasets = datasets.map((ds) => ({
+      ...ds,
+      caption_dropout_rate: shared.caption_dropout_rate,
+      shuffle_tokens: shared.shuffle_tokens,
+      cache_latents_to_disk: shared.cache_latents_to_disk,
+      resolution: [...shared.resolution]
+    }))
+  }
+
   const legacyPath = asString(model.name_or_path, d.model.train_name_or_path)
   const trainPath = asString(model.train_name_or_path, legacyPath || d.model.train_name_or_path)
 
@@ -406,6 +441,8 @@ export function normalizeLoraTrainJob(
       noise_scheduler: asString(train.noise_scheduler, d.train.noise_scheduler),
       optimizer: asString(train.optimizer, d.train.optimizer),
       lr: asNumber(train.lr, d.train.lr),
+      lr_scheduler: normalizeLrScheduler(train.lr_scheduler, d.train.lr_scheduler),
+      warmup_steps: Math.max(0, Math.round(asNumber(train.warmup_steps, d.train.warmup_steps))),
       dtype: asString(train.dtype, d.train.dtype),
       skip_first_sample: asBool(train.skip_first_sample, d.train.skip_first_sample),
       disable_sampling: asBool(train.disable_sampling, d.train.disable_sampling),
