@@ -1557,6 +1557,18 @@ electron.app.whenReady().then(async () => {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+  electron.ipcMain.handle("shell:openPath", async (_event, targetPath) => {
+    const raw = typeof targetPath === "string" ? targetPath.trim() : "";
+    if (!raw) return { ok: false, error: "Path is empty" };
+    const resolved = path.isAbsolute(raw) ? raw : path.resolve(raw);
+    try {
+      await promises.mkdir(resolved, { recursive: true });
+    } catch {
+    }
+    const error = await electron.shell.openPath(resolved);
+    if (error) return { ok: false, error };
+    return { ok: true, path: resolved };
+  });
   electron.ipcMain.handle(
     "dialog:openFile",
     async (_event, opts) => {

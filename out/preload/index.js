@@ -3,6 +3,7 @@ const electron = require("electron");
 const api = {
   openFolder: () => electron.ipcRenderer.invoke("dialog:openFolder"),
   openFile: (opts) => electron.ipcRenderer.invoke("dialog:openFile", opts),
+  openPathInExplorer: (targetPath) => electron.ipcRenderer.invoke("shell:openPath", targetPath),
   listImages: (dir) => electron.ipcRenderer.invoke("fs:listImages", dir),
   scanArBuckets: (opts) => electron.ipcRenderer.invoke("dataset:scanArBuckets", opts),
   readCaption: (imagePath) => electron.ipcRenderer.invoke("fs:readCaption", imagePath),

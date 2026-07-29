@@ -51,6 +51,8 @@ const api = {
     title?: string
     filters?: { name: string; extensions: string[] }[]
   }): Promise<string | null> => ipcRenderer.invoke('dialog:openFile', opts),
+  openPathInExplorer: (targetPath: string): Promise<{ ok: boolean; error?: string; path?: string }> =>
+    ipcRenderer.invoke('shell:openPath', targetPath),
   listImages: (dir: string): Promise<ImageItem[]> => ipcRenderer.invoke('fs:listImages', dir),
   scanArBuckets: (opts: {
     folder: string

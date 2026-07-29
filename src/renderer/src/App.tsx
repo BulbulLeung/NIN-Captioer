@@ -591,6 +591,24 @@ export default function App() {
     [setError]
   )
 
+  const openLoraOutputFolder = async () => {
+    const folder = (activeLoraJob?.job.training_folder || '').trim()
+    const jobName = (activeLoraJob?.job.name || '').trim()
+    if (!folder) {
+      onLoraStatus('Set an Output folder in Basics first', true)
+      return
+    }
+    if (!jobName) {
+      onLoraStatus('Set a Job name in Basics first', true)
+      return
+    }
+    const jobOut = folder.replace(/[/\\]+$/, '') + '/' + jobName
+    const result = await window.api.openPathInExplorer(jobOut)
+    if (!result.ok) {
+      onLoraStatus(result.error || 'Could not open output folder', true)
+    }
+  }
+
   const runCaptionForPath = async (imagePath: string): Promise<void> => {
     captionAbortRef.current?.abort()
     const ac = new AbortController()
@@ -1120,6 +1138,24 @@ export default function App() {
               </button>
               <button type="button" onClick={() => setLoraSettingsOpen(true)}>
                 Settings
+              </button>
+              <button
+                type="button"
+                className="toolbar-icon-btn"
+                title="Open output folder"
+                aria-label="Open output folder"
+                disabled={
+                  !(activeLoraJob?.job.training_folder || '').trim() ||
+                  !(activeLoraJob?.job.name || '').trim()
+                }
+                onClick={() => void openLoraOutputFolder()}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                  />
+                </svg>
               </button>
             </>
           )}

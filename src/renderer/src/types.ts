@@ -318,6 +318,9 @@ declare global {
         title?: string
         filters?: { name: string; extensions: string[] }[]
       }) => Promise<string | null>
+      openPathInExplorer: (
+        targetPath: string
+      ) => Promise<{ ok: boolean; error?: string; path?: string }>
       listImages: (dir: string) => Promise<ImageItem[]>
       scanArBuckets: (opts: {
         folder: string

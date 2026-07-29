@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, screen, Menu, shell } from 'electron'
-import { join, dirname, basename, extname } from 'path'
+import { join, dirname, basename, extname, resolve as resolvePath, isAbsolute } from 'path'
 import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
-import { readFile, writeFile, readdir, access, constants, mkdtemp, stat } from 'fs/promises'
+import { readFile, writeFile, readdir, access, constants, mkdtemp, mkdir, stat } from 'fs/promises'
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import { cpus, freemem, totalmem, tmpdir } from 'os'
@@ -1203,6 +1203,20 @@ app.whenReady().then(async () => {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+
+  ipcMain.handle('shell:openPath', async (_event, targetPath: string) => {
+    const raw = typeof targetPath === 'string' ? targetPath.trim() : ''
+    if (!raw) return { ok: false, error: 'Path is empty' }
+    const resolved = isAbsolute(raw) ? raw : resolvePath(raw)
+    try {
+      await mkdir(resolved, { recursive: true })
+    } catch {
+      // Directory may already exist as a file, or permissions failed — let openPath report.
+    }
+    const error = await shell.openPath(resolved)
+    if (error) return { ok: false, error }
+    return { ok: true, path: resolved }
   })
 
   ipcMain.handle(
