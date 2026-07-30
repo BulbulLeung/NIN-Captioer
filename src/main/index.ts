@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, screen, Menu, shell } from 'electron'
 import { join, dirname, basename, extname, resolve as resolvePath, isAbsolute } from 'path'
-import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, rmSync, copyFileSync, unlinkSync, renameSync } from 'fs'
 import { readFile, writeFile, readdir, access, constants, mkdtemp, mkdir, stat } from 'fs/promises'
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
@@ -11,6 +11,17 @@ import {
   probePython,
   pythonInstallRunning
 } from './pythonEnv'
+import {
+  cancelComfyInstall,
+  comfyStatus,
+  getComfyOutputDir,
+  installComfyUi,
+  isComfyServerOnline,
+  probeComfyBat,
+  resolveComfyImagePath,
+  startComfyUi,
+  stopComfyUi
+} from './comfyUiEnv'
 
 const execFileAsync = promisify(execFile)
 
@@ -1350,6 +1361,215 @@ app.whenReady().then(async () => {
     }
   )
 
+  ipcMain.handle('comfy:probeBat', async (_event, batPath?: string) =>
+    probeComfyBat(batPath || '')
+  )
+
+  ipcMain.handle('comfy:cancelInstall', async () => cancelComfyInstall())
+
+  ipcMain.handle(
+    'comfy:install',
+    async (
+      _event,
+      opts?: { downloadFolder?: string; pythonPath?: string }
+    ) => {
+      const result = await installComfyUi({
+        downloadFolder: opts?.downloadFolder,
+        pythonPath: opts?.pythonPath,
+        onProgress: (p) => {
+          mainWindow?.webContents.send('comfy:installProgress', p)
+        }
+      })
+      return result
+    }
+  )
+
+  ipcMain.handle(
+    'comfy:start',
+    async (
+      _event,
+      opts: {
+        batPath: string
+        pythonPath?: string
+        modelsRoot?: string
+        loraFolders?: string[]
+        ditFolders?: string[]
+        vaeFolders?: string[]
+        clipFolders?: string[]
+      }
+    ) => startComfyUi(opts)
+  )
+
+  ipcMain.handle('comfy:stop', async () => stopComfyUi())
+
+  ipcMain.handle('comfy:status', async () => {
+    const proc = comfyStatus()
+    const online = await isComfyServerOnline()
+    return { ...proc, online, outputDir: proc.outputDir || getComfyOutputDir() }
+  })
+
+  ipcMain.handle(
+    'comfy:resolveImagePath',
+    async (
+      _event,
+      img: { filename: string; subfolder?: string; type?: string }
+    ): Promise<{ ok: boolean; path?: string; error?: string }> => {
+      try {
+        const abs = resolveComfyImagePath(img)
+        if (!existsSync(abs)) {
+          return { ok: false, error: `Image not found: ${abs}` }
+        }
+        return { ok: true, path: abs }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle('comfy:getOutputDir', async () => ({
+    ok: true,
+    path: getComfyOutputDir()
+  }))
+
+  /** Move a Comfy-generated image into {trainingFolder}/{jobName}/loratest. */
+  ipcMain.handle(
+    'loraTest:saveGeneratedImage',
+    async (
+      _event,
+      opts: {
+        sourcePath?: string
+        trainingFolder?: string
+        jobName?: string
+        fileName?: string
+      }
+    ): Promise<{ ok: boolean; path?: string; dir?: string; error?: string }> => {
+      const sourcePath = (opts?.sourcePath || '').trim()
+      const trainingFolder = (opts?.trainingFolder || '').trim()
+      const jobName = (opts?.jobName || '').trim()
+      if (!sourcePath) return { ok: false, error: 'Source image path is empty' }
+      if (!trainingFolder) return { ok: false, error: 'Job Output Folder is empty' }
+      if (!jobName) return { ok: false, error: 'Job name is empty' }
+      if (!existsSync(sourcePath)) {
+        return { ok: false, error: `Source image not found: ${sourcePath}` }
+      }
+      try {
+        const dir = join(trainingFolder, jobName, 'loratest')
+        await mkdir(dir, { recursive: true })
+        const ext = extname(sourcePath) || '.png'
+        const stamp = new Date()
+          .toISOString()
+          .replace(/[-:]/g, '')
+          .replace(/\.\d+Z$/, 'Z')
+          .replace('T', '_')
+        const safeBase =
+          (opts?.fileName || '').trim().replace(/[<>:"/\\|?*\x00-\x1f]+/g, '_') ||
+          `${safeJobName(jobName)}_loratest_${stamp}`
+        const baseName = safeBase.toLowerCase().endsWith(ext.toLowerCase())
+          ? safeBase
+          : `${safeBase}${ext}`
+        let dest = join(dir, baseName)
+        if (existsSync(dest)) {
+          const stem = baseName.slice(0, -ext.length)
+          dest = join(dir, `${stem}_${Date.now()}${ext}`)
+        }
+        // Move (cut): rename same-volume; copy+unlink when crossing drives.
+        try {
+          renameSync(sourcePath, dest)
+        } catch {
+          copyFileSync(sourcePath, dest)
+          unlinkSync(sourcePath)
+        }
+        return { ok: true, path: dest, dir }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'loraTest:listGallery',
+    async (
+      _event,
+      opts: { trainingFolder?: string; jobName?: string }
+    ): Promise<{
+      ok: boolean
+      error?: string
+      images: { path: string; name: string; mtimeMs: number }[]
+    }> => {
+      const trainingFolder = (opts?.trainingFolder || '').trim()
+      const jobName = (opts?.jobName || '').trim()
+      if (!trainingFolder || !jobName) {
+        return { ok: false, error: 'Job Output Folder or name is empty', images: [] }
+      }
+      const dir = join(trainingFolder, jobName, 'loratest')
+      try {
+        await access(dir, constants.R_OK)
+      } catch {
+        return { ok: true, images: [] }
+      }
+      try {
+        const entries = await readdir(dir, { withFileTypes: true })
+        const images: { path: string; name: string; mtimeMs: number }[] = []
+        for (const ent of entries) {
+          if (!ent.isFile()) continue
+          const ext = extname(ent.name).toLowerCase()
+          if (!IMAGE_EXTS.has(ext)) continue
+          const full = join(dir, ent.name)
+          let mtimeMs = 0
+          try {
+            mtimeMs = (await stat(full)).mtimeMs
+          } catch {
+            mtimeMs = 0
+          }
+          images.push({ path: full, name: ent.name, mtimeMs })
+        }
+        images.sort((a, b) => b.mtimeMs - a.mtimeMs || a.name.localeCompare(b.name))
+        return { ok: true, images }
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          images: []
+        }
+      }
+    }
+  )
+
+  /** Proxy ComfyUI HTTP from main (renderer fetch is blocked cross-origin / CORS). */
+  ipcMain.handle(
+    'comfy:httpRequest',
+    async (
+      _event,
+      opts: {
+        url: string
+        method?: string
+        headers?: Record<string, string>
+        body?: string
+        timeoutMs?: number
+      }
+    ) => {
+      try {
+        const method = (opts.method || 'GET').toUpperCase()
+        const timeoutMs = opts.timeoutMs ?? 120_000
+        const res = await fetch(opts.url, {
+          method,
+          headers: opts.headers,
+          body: method === 'GET' || method === 'HEAD' ? undefined : opts.body,
+          signal: AbortSignal.timeout(timeoutMs)
+        })
+        const text = await res.text()
+        return { ok: res.ok, status: res.status, text }
+      } catch (err) {
+        return {
+          ok: false,
+          status: 0,
+          text: '',
+          error: err instanceof Error ? err.message : String(err)
+        }
+      }
+    }
+  )
+
   ipcMain.handle(
     'train:start',
     async (
@@ -2202,4 +2422,8 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  void stopComfyUi()
 })

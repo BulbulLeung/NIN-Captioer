@@ -2,7 +2,7 @@
 
 import { join } from '../utils/pathJoin'
 
-export type ActiveView = 'datasetEdit' | 'loraTrain'
+export type ActiveView = 'datasetEdit' | 'loraTrain' | 'loraTest'
 
 export type LoraTrainArch = 'krea2'
 export type LoraTrainQuantizeMode = 'none' | 'qfloat8' | 'float8' | 'int8'
@@ -130,6 +130,33 @@ export interface LoraTrainAppSettings {
   huggingfaceToken: string
 }
 
+/** Persisted LoraTest generation form (shared across jobs; LoRA pick refreshes per job). */
+export interface LoraTestDraft {
+  prompt: string
+  negative: string
+  steps: number
+  cfg: number
+  seed: number
+  width: number
+  height: number
+  sampler: string
+  scheduler: string
+  /** Absolute path to ComfyUI launch .bat; empty = not configured. */
+  comfyUiBatPath: string
+  /** Absolute path to DiT / UNET .safetensors. */
+  ditPath: string
+  /** Absolute path to VAE .safetensors. */
+  vaePath: string
+  /** Absolute path to CLIP-L .safetensors. */
+  clipLPath: string
+  /** Absolute path to T5 .safetensors. */
+  t5Path: string
+  /** Shared LoRA strength for all selected checkpoints. */
+  loraStrength: number
+  /** Selected checkpoint step numbers (at least one required to generate). */
+  selectedLoraSteps: number[]
+}
+
 export const KREA2_RAW = 'krea/Krea-2-Raw'
 
 export const DEFAULT_SAMPLE_PROMPTS: string[] = [
@@ -229,6 +256,25 @@ export const DEFAULT_LORA_TRAIN_APP: LoraTrainAppSettings = {
   pythonPath: '',
   downloadFolder: '',
   huggingfaceToken: ''
+}
+
+export const DEFAULT_LORA_TEST_DRAFT: LoraTestDraft = {
+  prompt: '',
+  negative: '',
+  steps: 20,
+  cfg: 3.5,
+  seed: 42,
+  width: 1024,
+  height: 1024,
+  sampler: 'euler',
+  scheduler: 'simple',
+  comfyUiBatPath: '',
+  ditPath: '',
+  vaePath: '',
+  clipLPath: '',
+  t5Path: '',
+  loraStrength: 1,
+  selectedLoraSteps: []
 }
 
 export const DEFAULT_LORA_TRAIN_JOB_PRESET_ID = 'job-default'
@@ -552,6 +598,47 @@ export function normalizeLoraTrainApp(
   }
 }
 
+export function normalizeLoraTestDraft(
+  raw: Partial<LoraTestDraft> | null | undefined,
+  /** Legacy bat path previously stored on LoraTrainAppSettings. */
+  legacyComfyUiBatPath?: string
+): LoraTestDraft {
+  const d = DEFAULT_LORA_TEST_DRAFT
+  const o = asRecord(raw) ?? {}
+  let selectedLoraSteps = asNumberArray(o.selectedLoraSteps, [])
+    .map((n) => Math.round(n))
+    .filter((n, i, arr) => Number.isFinite(n) && arr.indexOf(n) === i)
+    .sort((a, b) => a - b)
+  // Migrate legacy single loraStep
+  if (selectedLoraSteps.length === 0) {
+    const legacy = o.loraStep
+    if (typeof legacy === 'number' && Number.isFinite(legacy)) {
+      selectedLoraSteps = [Math.round(legacy)]
+    }
+  }
+  const draftBat = asString(o.comfyUiBatPath, '')
+  const migratedBat =
+    draftBat || (legacyComfyUiBatPath || '').trim() || d.comfyUiBatPath
+  return {
+    prompt: asString(o.prompt, d.prompt),
+    negative: asString(o.negative, d.negative),
+    steps: Math.max(1, Math.round(asNumber(o.steps, d.steps))),
+    cfg: asNumber(o.cfg, d.cfg),
+    seed: Math.round(asNumber(o.seed, d.seed)),
+    width: Math.max(64, Math.round(asNumber(o.width, d.width))),
+    height: Math.max(64, Math.round(asNumber(o.height, d.height))),
+    sampler: asString(o.sampler, d.sampler) || d.sampler,
+    scheduler: asString(o.scheduler, d.scheduler) || d.scheduler,
+    comfyUiBatPath: migratedBat,
+    ditPath: asString(o.ditPath, d.ditPath),
+    vaePath: asString(o.vaePath, d.vaePath),
+    clipLPath: asString(o.clipLPath, d.clipLPath),
+    t5Path: asString(o.t5Path, d.t5Path),
+    loraStrength: Math.min(2, Math.max(0, asNumber(o.loraStrength, d.loraStrength))),
+    selectedLoraSteps
+  }
+}
+
 /** Resolved Python install path from downloadFolder; undefined = main default (userData/python). */
 export function pythonInstallPathFromDownloadFolder(
   downloadFolder: string
@@ -569,5 +656,7 @@ export function modelDownloadPathFromDownloadFolder(
 }
 
 export function normalizeActiveView(value: unknown): ActiveView {
-  return value === 'loraTrain' ? 'loraTrain' : 'datasetEdit'
+  if (value === 'loraTrain') return 'loraTrain'
+  if (value === 'loraTest') return 'loraTest'
+  return 'datasetEdit'
 }

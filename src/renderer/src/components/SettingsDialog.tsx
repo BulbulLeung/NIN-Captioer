@@ -7,8 +7,11 @@ import {
   FALLBACK_WD14_MODEL_REPOS,
   listWd14ModelReposOrFallback
 } from '../services/wd14Models'
+import { ComfyUiBatField } from './ComfyUiBatField'
 import { DownloadFolderField } from './DownloadFolderField'
 import { PythonExecutableField } from './PythonExecutableField'
+
+type SettingsTab = 'general' | 'datasetEdit' | 'loraTrain' | 'loraTest'
 
 interface Props {
   open: boolean
@@ -23,8 +26,25 @@ function newPresetId(): string {
   return `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+function tabFromActiveView(view: AppSettings['activeView']): SettingsTab {
+  if (view === 'datasetEdit') return 'datasetEdit'
+  if (view === 'loraTrain') return 'loraTrain'
+  if (view === 'loraTest') return 'loraTest'
+  return 'general'
+}
+
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'datasetEdit', label: 'Dataset Edit' },
+  { id: 'loraTrain', label: 'Lora Train' },
+  { id: 'loraTest', label: 'Lora Test' }
+]
+
+type ModelPathKey = 'ditPath' | 'vaePath' | 't5Path'
+
 export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: Props) {
   const [draft, setDraft] = useState<AppSettings>(settings)
+  const [tab, setTab] = useState<SettingsTab>(() => tabFromActiveView(settings.activeView))
   const [models, setModels] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -106,7 +126,6 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       if (error && !fromNetwork) {
         setWd14ReposError(`Using offline list: ${error}`)
       }
-      // Keep the user's current selection even if Hub list changes; options merge it in.
     } finally {
       if (id === wd14FetchId.current) setLoadingWd14Repos(false)
     }
@@ -117,6 +136,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     skipUrlFetch.current = true
     skipPromptSave.current = true
     setDraft(normalizeSettings(settings))
+    setTab(tabFromActiveView(settings.activeView))
     setTestResult(null)
     setTestError(null)
     setModelsError(null)
@@ -140,7 +160,6 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     }
   }, [open, draft.provider, baseUrl, fetchModels])
 
-  // Auto-save caption presets / active id / appendPositivePrompt while settings stay open
   useEffect(() => {
     if (!open) return
     if (skipPromptSave.current) {
@@ -211,6 +230,21 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     })
   }
 
+  const browseSafetensors = async (key: ModelPathKey, title: string) => {
+    const file = await window.api.openFile({
+      title,
+      filters: [
+        { name: 'Safetensors', extensions: ['safetensors'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    if (!file) return
+    setDraft((prev) => ({
+      ...prev,
+      loraTestDraft: { ...prev.loraTestDraft, [key]: file }
+    }))
+  }
+
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
@@ -269,6 +303,7 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       loraTrainJobs: draft.loraTrainJobs,
       activeLoraTrainJobId: draft.activeLoraTrainJobId,
       loraTrainApp: draft.loraTrainApp,
+      loraTestDraft: draft.loraTestDraft,
       uiGpuMode: draft.uiGpuMode
     })
   }
@@ -281,363 +316,549 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       }}
     >
       <div
-        className="modal modal-wide"
+        className="modal modal-wide settings-modal"
         role="dialog"
         aria-labelledby="settings-title"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="settings-title">Settings</h2>
 
-        <label className="field">
-          <span>Translation provider</span>
-          <div className="radio-row">
-            <label>
-              <input
-                type="radio"
-                name="provider"
-                checked={draft.provider === 'lmstudio'}
-                onChange={() => setProvider('lmstudio')}
-              />
-              LM Studio
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="provider"
-                checked={draft.provider === 'ollama'}
-                onChange={() => setProvider('ollama')}
-              />
-              Ollama
-            </label>
-          </div>
-        </label>
-
-        {draft.provider === 'lmstudio' ? (
-          <label className="field">
-            <span>LM Studio Base URL</span>
-            <input
-              type="text"
-              value={draft.lmStudioBaseUrl}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
-              }
-            />
-          </label>
-        ) : (
-          <>
-            <label className="field">
-              <span>Ollama Base URL</span>
-              <input
-                type="text"
-                value={draft.ollamaBaseUrl}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
-                }
-              />
-            </label>
-            <p className="field-hint">
-              Interactive translation / captioning has priority; analysis pauses until idle.
-              Optional: <code>OLLAMA_NUM_PARALLEL=2</code> for hard concurrency (restart
-              Ollama).
-            </p>
-          </>
-        )}
-
-        <div className="field">
-          <span>Model</span>
-          <div className="model-row">
-            <select
-              value={draft.model}
-              onChange={(e) => setDraft((prev) => ({ ...prev, model: e.target.value }))}
-              disabled={loadingModels && modelOptions.length === 0}
-              aria-label="Select model"
-            >
-              {modelOptions.length === 0 ? (
-                <option value="">{loadingModels ? 'Detecting…' : 'No models available'}</option>
-              ) : (
-                modelOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))
-              )}
-            </select>
+        <div className="settings-tabs view-switch" role="tablist" aria-label="Settings sections">
+          {TABS.map((t) => (
             <button
+              key={t.id}
               type="button"
-              onClick={() => void fetchModels(draft)}
-              disabled={loadingModels}
+              role="tab"
+              className={`view-switch-seg${tab === t.id ? ' active' : ''}`}
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
             >
-              {loadingModels ? 'Detecting…' : 'Refresh'}
+              {t.label}
             </button>
-          </div>
-          {modelsError && <p className="field-hint warn">{modelsError}</p>}
-          <p className="field-hint">
-            Used for translation, Natural Auto Caption / reCaption, and analysis.
-          </p>
+          ))}
         </div>
 
-        <label className="field checkbox-field">
-          <span className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={draft.autoAnalysis}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, autoAnalysis: e.target.checked }))
-              }
-            />
-            Auto analysis
-          </span>
-          <p className="field-hint">
-            On: analyze captions in the background. Off: only while the Analyze dialog is
-            open.
-          </p>
-        </label>
+        <div className="settings-tab-body">
+          {tab === 'general' && (
+            <>
+              <div className="settings-section settings-section-first">
+                <h3>Display</h3>
+                <label className="field">
+                  <span>UI GPU rendering</span>
+                  <div className="radio-row">
+                    <label>
+                      <input
+                        type="radio"
+                        name="uiGpuMode"
+                        checked={draft.uiGpuMode === 'auto'}
+                        onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'auto' }))}
+                      />
+                      Auto
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="uiGpuMode"
+                        checked={draft.uiGpuMode === 'onboard'}
+                        onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'onboard' }))}
+                      />
+                      Onboard GPU
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="uiGpuMode"
+                        checked={draft.uiGpuMode === 'software'}
+                        onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'software' }))}
+                      />
+                      Software
+                    </label>
+                  </div>
+                  <p className="field-hint">
+                    Auto: OS/driver chooses. Onboard: force integrated GPU (frees dedicated VRAM
+                    when dual-GPU). Software: CPU/RAM only. Does not affect training or AI.
+                    Requires restart. Windows Graphics settings for Captioer may override Onboard.
+                  </p>
+                </label>
+              </div>
 
-        <div className="settings-section">
-          <h3>Display</h3>
-          <label className="field">
-            <span>UI GPU rendering</span>
-            <div className="radio-row">
-              <label>
-                <input
-                  type="radio"
-                  name="uiGpuMode"
-                  checked={draft.uiGpuMode === 'auto'}
-                  onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'auto' }))}
+              <div className="settings-section">
+                <h3>Environment</h3>
+                <DownloadFolderField
+                  value={draft.loraTrainApp.downloadFolder}
+                  onChange={(downloadFolder) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      loraTrainApp: { ...prev.loraTrainApp, downloadFolder }
+                    }))
+                  }
                 />
-                Auto
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="uiGpuMode"
-                  checked={draft.uiGpuMode === 'onboard'}
-                  onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'onboard' }))}
+                <PythonExecutableField
+                  value={draft.loraTrainApp.pythonPath}
+                  onChange={(pythonPath) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      loraTrainApp: { ...prev.loraTrainApp, pythonPath }
+                    }))
+                  }
+                  downloadFolder={draft.loraTrainApp.downloadFolder}
+                  enabled={open}
+                  hint={
+                    <>
+                      Shared by Dataset Edit (WD14), LoraTrain, and ComfyUI install. Download
+                      installs CUDA torch 2.9.1 (cu128), packages from{' '}
+                      <code>trainer/requirements.txt</code> and{' '}
+                      <code>trainer/requirements-wd14.txt</code>, and on Windows{' '}
+                      <code>triton-windows</code> and <code>flash-attn</code> (FA2 wheel).
+                    </>
+                  }
                 />
-                Onboard GPU
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="uiGpuMode"
-                  checked={draft.uiGpuMode === 'software'}
-                  onChange={() => setDraft((prev) => ({ ...prev, uiGpuMode: 'software' }))}
+                <label className="field">
+                  <span>Hugging Face token (for gated Krea models)</span>
+                  <input
+                    type="password"
+                    value={draft.loraTrainApp.huggingfaceToken}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        loraTrainApp: {
+                          ...prev.loraTrainApp,
+                          huggingfaceToken: e.target.value
+                        }
+                      }))
+                    }
+                    placeholder="hf_… from huggingface.co/settings/tokens"
+                    autoComplete="off"
+                  />
+                  <p className="field-hint">
+                    Also open{' '}
+                    <a
+                      href="https://huggingface.co/krea/Krea-2-Raw"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      krea/Krea-2-Raw
+                    </a>{' '}
+                    (and Turbo) while logged in and click Agree — token alone is not enough.
+                  </p>
+                </label>
+                <ComfyUiBatField
+                  value={draft.loraTestDraft.comfyUiBatPath}
+                  onChange={(comfyUiBatPath) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      loraTestDraft: { ...prev.loraTestDraft, comfyUiBatPath }
+                    }))
+                  }
+                  downloadFolder={draft.loraTrainApp.downloadFolder}
+                  pythonPath={draft.loraTrainApp.pythonPath}
+                  enabled={open}
                 />
-                Software
+              </div>
+            </>
+          )}
+
+          {tab === 'datasetEdit' && (
+            <>
+              <label className="field">
+                <span>Translation provider</span>
+                <div className="radio-row">
+                  <label>
+                    <input
+                      type="radio"
+                      name="provider"
+                      checked={draft.provider === 'lmstudio'}
+                      onChange={() => setProvider('lmstudio')}
+                    />
+                    LM Studio
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="provider"
+                      checked={draft.provider === 'ollama'}
+                      onChange={() => setProvider('ollama')}
+                    />
+                    Ollama
+                  </label>
+                </div>
               </label>
-            </div>
+
+              {draft.provider === 'lmstudio' ? (
+                <label className="field">
+                  <span>LM Studio Base URL</span>
+                  <input
+                    type="text"
+                    value={draft.lmStudioBaseUrl}
+                    onChange={(e) =>
+                      setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
+                    }
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="field">
+                    <span>Ollama Base URL</span>
+                    <input
+                      type="text"
+                      value={draft.ollamaBaseUrl}
+                      onChange={(e) =>
+                        setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <p className="field-hint">
+                    Interactive translation / captioning has priority; analysis pauses until idle.
+                    Optional: <code>OLLAMA_NUM_PARALLEL=2</code> for hard concurrency (restart
+                    Ollama).
+                  </p>
+                </>
+              )}
+
+              <div className="field">
+                <span>Model</span>
+                <div className="model-row">
+                  <select
+                    value={draft.model}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, model: e.target.value }))}
+                    disabled={loadingModels && modelOptions.length === 0}
+                    aria-label="Select model"
+                  >
+                    {modelOptions.length === 0 ? (
+                      <option value="">
+                        {loadingModels ? 'Detecting…' : 'No models available'}
+                      </option>
+                    ) : (
+                      modelOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void fetchModels(draft)}
+                    disabled={loadingModels}
+                  >
+                    {loadingModels ? 'Detecting…' : 'Refresh'}
+                  </button>
+                </div>
+                {modelsError && <p className="field-hint warn">{modelsError}</p>}
+                <p className="field-hint">
+                  Used for translation, Natural Auto Caption / reCaption, and analysis.
+                </p>
+              </div>
+
+              <div className="settings-section">
+                <h3>WD14 Tagging</h3>
+                <p className="field-hint">
+                  Used when Caption format is set to Danbooru Tags(SD/XL). Python / download
+                  folder are configured on the General tab.
+                </p>
+                <label className="field">
+                  <span>Model repo</span>
+                  <div className="model-row">
+                    <select
+                      value={draft.wd14.modelRepoId}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          wd14: { ...prev.wd14, modelRepoId: e.target.value }
+                        }))
+                      }
+                      disabled={loadingWd14Repos && wd14RepoOptions.length === 0}
+                      aria-label="WD14 model repo"
+                    >
+                      {wd14RepoOptions.length === 0 ? (
+                        <option value="">
+                          {loadingWd14Repos ? 'Loading…' : 'No models available'}
+                        </option>
+                      ) : (
+                        wd14RepoOptions.map((repo) => (
+                          <option key={repo} value={repo}>
+                            {repo.replace(/^SmilingWolf\//, '')}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void fetchWd14Repos()}
+                      disabled={loadingWd14Repos}
+                    >
+                      {loadingWd14Repos ? 'Loading…' : 'Refresh'}
+                    </button>
+                  </div>
+                  {wd14ReposError && <p className="field-hint warn">{wd14ReposError}</p>}
+                  <p className="field-hint">
+                    {wd14ReposFromNetwork
+                      ? 'Listed from Hugging Face (ONNX + selected_tags.csv).'
+                      : 'Offline fallback list — click Refresh when online.'}{' '}
+                    Full id: <code>{draft.wd14.modelRepoId || '—'}</code>
+                  </p>
+                </label>
+                <div className="model-row">
+                  <label className="field" style={{ flex: 1 }}>
+                    <span>Threshold</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={draft.wd14.threshold}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          wd14: {
+                            ...prev.wd14,
+                            threshold: Number(e.target.value)
+                          }
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field" style={{ flex: 1 }}>
+                    <span>Character threshold</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={draft.wd14.characterThreshold}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          wd14: {
+                            ...prev.wd14,
+                            characterThreshold: Number(e.target.value)
+                          }
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Auto analysis</h3>
+                <div className="field">
+                  <div
+                    className={`settings-toggle-row lora-toggle${draft.autoAnalysis ? ' is-on' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      role="switch"
+                      className="lora-switch"
+                      aria-checked={draft.autoAnalysis}
+                      aria-label="Auto analysis"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          autoAnalysis: !prev.autoAnalysis
+                        }))
+                      }
+                    >
+                      <span className="lora-switch-knob" aria-hidden="true" />
+                    </button>
+                    <span className="lora-toggle-label">Background analysis</span>
+                  </div>
+                  <p className="field-hint">
+                    On: analyze captions in the background. Off: only while the Analyze dialog is
+                    open.
+                  </p>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Auto Caption prompt</h3>
+                <p className="field-hint">
+                  Used only for Natural Language(Flux/Krea2) format. Danbooru Tags ignores these
+                  prompts.
+                </p>
+                <div className="field">
+                  <span>Preset</span>
+                  <div className="model-row">
+                    <select
+                      value={draft.activeCaptionPresetId}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          activeCaptionPresetId: e.target.value
+                        }))
+                      }
+                      aria-label="Caption prompt preset"
+                    >
+                      {draft.captionPresets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={addPreset}>
+                      Add
+                    </button>
+                    <button type="button" onClick={deletePreset}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <label className="field">
+                  <span>Preset name</span>
+                  <input
+                    type="text"
+                    value={activePreset?.name ?? ''}
+                    onChange={(e) => updateActivePreset({ name: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>Caption Prompt</span>
+                  <textarea
+                    className="prompt-textarea"
+                    value={activePreset?.prompt ?? ''}
+                    onChange={(e) => updateActivePreset({ prompt: e.target.value })}
+                    spellCheck={false}
+                  />
+                </label>
+                <div className="field">
+                  <div
+                    className={`lora-toggle${draft.appendPositivePrompt ? ' is-on' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      role="switch"
+                      className="lora-switch"
+                      aria-checked={draft.appendPositivePrompt}
+                      aria-label="Append positive Prompt"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          appendPositivePrompt: !prev.appendPositivePrompt
+                        }))
+                      }
+                    >
+                      <span className="lora-switch-knob" aria-hidden="true" />
+                    </button>
+                    <span className="lora-toggle-label">Append positive Prompt</span>
+                  </div>
+                  <p className="field-hint">
+                    On: append PNG Info positive prompt to the bottom of the Auto Caption prompt
+                    at runtime.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === 'loraTrain' && (
             <p className="field-hint">
-              Auto: OS/driver chooses. Onboard: force integrated GPU (frees dedicated VRAM when
-              dual-GPU). Software: CPU/RAM only. Does not affect training or AI. Requires
-              restart. Windows Graphics settings for Captioer may override Onboard.
+              Job hyper-parameters (network, steps, datasets, model path, sampling) are edited on
+              the LoraTrain panel. Shared environment settings live on the General tab.
             </p>
-          </label>
-        </div>
+          )}
 
-        <div className="settings-section">
-          <h3>WD14 Tagging</h3>
-          <DownloadFolderField
-            value={draft.loraTrainApp.downloadFolder}
-            onChange={(downloadFolder) =>
-              setDraft((prev) => ({
-                ...prev,
-                loraTrainApp: { ...prev.loraTrainApp, downloadFolder }
-              }))
-            }
-          />
-          <PythonExecutableField
-            value={draft.loraTrainApp.pythonPath}
-            onChange={(pythonPath) =>
-              setDraft((prev) => ({
-                ...prev,
-                loraTrainApp: { ...prev.loraTrainApp, pythonPath }
-              }))
-            }
-            downloadFolder={draft.loraTrainApp.downloadFolder}
-            enabled={open}
-          />
-          <p className="field-hint">
-            Used when Caption format is set to Danbooru Tags(SD/XL). Download installs WD14 +
-            training packages into the download folder&apos;s python venv.
-          </p>
-          <label className="field">
-            <span>Model repo</span>
-            <div className="model-row">
-              <select
-                value={draft.wd14.modelRepoId}
-                onChange={(e) =>
+          {tab === 'loraTest' && (
+            <>
+              <p className="field-hint">
+                Base models for ComfyUI generation. ComfyUI launch bat is on the General tab.
+              </p>
+              <PathBrowseField
+                label="DiT"
+                value={draft.loraTestDraft.ditPath}
+                onChange={(ditPath) =>
                   setDraft((prev) => ({
                     ...prev,
-                    wd14: { ...prev.wd14, modelRepoId: e.target.value }
+                    loraTestDraft: { ...prev.loraTestDraft, ditPath }
                   }))
                 }
-                disabled={loadingWd14Repos && wd14RepoOptions.length === 0}
-                aria-label="WD14 model repo"
-              >
-                {wd14RepoOptions.length === 0 ? (
-                  <option value="">
-                    {loadingWd14Repos ? 'Loading…' : 'No models available'}
-                  </option>
-                ) : (
-                  wd14RepoOptions.map((repo) => (
-                    <option key={repo} value={repo}>
-                      {repo.replace(/^SmilingWolf\//, '')}
-                    </option>
-                  ))
-                )}
-              </select>
-              <button
-                type="button"
-                onClick={() => void fetchWd14Repos()}
-                disabled={loadingWd14Repos}
-              >
-                {loadingWd14Repos ? 'Loading…' : 'Refresh'}
-              </button>
-            </div>
-            {wd14ReposError && <p className="field-hint warn">{wd14ReposError}</p>}
-            <p className="field-hint">
-              {wd14ReposFromNetwork
-                ? 'Listed from Hugging Face (ONNX + selected_tags.csv).'
-                : 'Offline fallback list — click Refresh when online.'}{' '}
-              Full id: <code>{draft.wd14.modelRepoId || '—'}</code>
-            </p>
-          </label>
-          <div className="model-row">
-            <label className="field" style={{ flex: 1 }}>
-              <span>Threshold</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={draft.wd14.threshold}
-                onChange={(e) =>
+                onBrowse={() => void browseSafetensors('ditPath', 'Select DiT safetensors')}
+              />
+              <PathBrowseField
+                label="VAE"
+                value={draft.loraTestDraft.vaePath}
+                onChange={(vaePath) =>
                   setDraft((prev) => ({
                     ...prev,
-                    wd14: {
-                      ...prev.wd14,
-                      threshold: Number(e.target.value)
-                    }
+                    loraTestDraft: { ...prev.loraTestDraft, vaePath }
                   }))
+                }
+                onBrowse={() => void browseSafetensors('vaePath', 'Select VAE safetensors')}
+              />
+              <PathBrowseField
+                label="Text Encoder (Qwen)"
+                value={draft.loraTestDraft.t5Path}
+                onChange={(t5Path) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    loraTestDraft: { ...prev.loraTestDraft, t5Path }
+                  }))
+                }
+                onBrowse={() =>
+                  void browseSafetensors('t5Path', 'Select Qwen text encoder')
                 }
               />
-            </label>
-            <label className="field" style={{ flex: 1 }}>
-              <span>Character threshold</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={draft.wd14.characterThreshold}
-                onChange={(e) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    wd14: {
-                      ...prev.wd14,
-                      characterThreshold: Number(e.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <h3>Auto Caption prompt</h3>
-          <p className="field-hint">
-            Used only for Natural Language(Flux/Krea2) format. Danbooru Tags ignores these
-            prompts.
-          </p>
-          <div className="field">
-            <span>Preset</span>
-            <div className="model-row">
-              <select
-                value={draft.activeCaptionPresetId}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, activeCaptionPresetId: e.target.value }))
-                }
-                aria-label="Caption prompt preset"
-              >
-                {draft.captionPresets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <button type="button" onClick={addPreset}>
-                Add
-              </button>
-              <button type="button" onClick={deletePreset}>
-                Delete
-              </button>
-            </div>
-          </div>
-          <label className="field">
-            <span>Preset name</span>
-            <input
-              type="text"
-              value={activePreset?.name ?? ''}
-              onChange={(e) => updateActivePreset({ name: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            <span>Caption Prompt</span>
-            <textarea
-              className="prompt-textarea"
-              value={activePreset?.prompt ?? ''}
-              onChange={(e) => updateActivePreset({ prompt: e.target.value })}
-              spellCheck={false}
-            />
-          </label>
-          <div className="field">
-            <div
-              className={`lora-toggle${draft.appendPositivePrompt ? ' is-on' : ''}`}
-            >
-              <button
-                type="button"
-                role="switch"
-                className="lora-switch"
-                aria-checked={draft.appendPositivePrompt}
-                aria-label="Append positive Prompt"
-                onClick={() =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    appendPositivePrompt: !prev.appendPositivePrompt
-                  }))
-                }
-              >
-                <span className="lora-switch-knob" aria-hidden="true" />
-              </button>
-              <span className="lora-toggle-label">Append positive Prompt</span>
-            </div>
-            <p className="field-hint">
-              On: append PNG Info positive prompt to the bottom of the Auto Caption prompt
-              at runtime.
-            </p>
-          </div>
+            </>
+          )}
         </div>
 
         <div className="modal-actions">
-          <button type="button" onClick={resetDefaults}>
-            Reset default URLs
-          </button>
-          <button type="button" onClick={handleTest} disabled={testing}>
-            {testing ? 'Testing…' : 'Test connection'}
-          </button>
+          {tab === 'datasetEdit' && (
+            <>
+              <button type="button" onClick={resetDefaults}>
+                Reset default URLs
+              </button>
+              <button type="button" onClick={() => void handleTest()} disabled={testing}>
+                {testing ? 'Testing…' : 'Test connection'}
+              </button>
+            </>
+          )}
           <div className="spacer" />
           <button type="button" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="primary" onClick={handleSave} disabled={saving}>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
 
-        {testResult && <p className="test-ok">{testResult}</p>}
-        {testError && <p className="test-err">{testError}</p>}
+        {tab === 'datasetEdit' && testResult && <p className="test-ok">{testResult}</p>}
+        {tab === 'datasetEdit' && testError && <p className="test-err">{testError}</p>}
       </div>
     </div>
+  )
+}
+
+function PathBrowseField({
+  label,
+  value,
+  onChange,
+  onBrowse
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  onBrowse: () => void
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <div className="field-row">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`${label} .safetensors path`}
+          spellCheck={false}
+        />
+        <button type="button" onClick={onBrowse}>
+          Browse
+        </button>
+      </div>
+    </label>
   )
 }

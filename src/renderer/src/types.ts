@@ -12,17 +12,20 @@ import {
 import {
   createDefaultLoraTrainJobPreset,
   createLoraTrainJobId,
+  DEFAULT_LORA_TEST_DRAFT,
   DEFAULT_LORA_TRAIN_APP,
   DEFAULT_LORA_TRAIN_JOB,
   DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
   KREA2_RAW,
   normalizeActiveView,
+  normalizeLoraTestDraft,
   normalizeLoraTrainApp,
   normalizeLoraTrainJob,
   normalizeLoraTrainJobPresets,
   modelDownloadPathFromDownloadFolder,
   pythonInstallPathFromDownloadFolder,
   type ActiveView,
+  type LoraTestDraft,
   type LoraTrainAppSettings,
   type LoraTrainJobConfig,
   type LoraTrainJobPreset
@@ -32,6 +35,7 @@ export type {
   ActiveView,
   CaptionFormatId,
   CaptionFormatOption,
+  LoraTestDraft,
   LoraTrainAppSettings,
   LoraTrainJobConfig,
   LoraTrainJobPreset,
@@ -40,6 +44,7 @@ export type {
 export {
   CAPTION_FORMAT_OPTIONS,
   DEFAULT_CAPTION_FORMAT,
+  DEFAULT_LORA_TEST_DRAFT,
   DEFAULT_LORA_TRAIN_APP,
   DEFAULT_LORA_TRAIN_JOB,
   DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
@@ -50,6 +55,7 @@ export {
   modelDownloadPathFromDownloadFolder,
   normalizeActiveView,
   normalizeCaptionFormat,
+  normalizeLoraTestDraft,
   normalizeLoraTrainApp,
   normalizeLoraTrainJob,
   normalizeLoraTrainJobPresets,
@@ -133,6 +139,7 @@ export interface AppSettings {
   loraTrainJobs: LoraTrainJobPreset[]
   activeLoraTrainJobId: string
   loraTrainApp: LoraTrainAppSettings
+  loraTestDraft: LoraTestDraft
   /**
    * Electron UI GPU preference. Requires restart.
    * auto = OS/driver; onboard = integrated GPU; software = CPU/RAM (no VRAM).
@@ -189,6 +196,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   loraTrainJobs: [createDefaultLoraTrainJobPreset()],
   activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
   loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP },
+  loraTestDraft: { ...DEFAULT_LORA_TEST_DRAFT },
   uiGpuMode: 'auto'
 }
 
@@ -286,6 +294,12 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
       }
     }
   }
+  const loraTrainAppRaw =
+    merged.loraTrainApp && typeof merged.loraTrainApp === 'object'
+      ? (merged.loraTrainApp as unknown as Record<string, unknown>)
+      : {}
+  const legacyComfyUiBatPath =
+    typeof loraTrainAppRaw.comfyUiBatPath === 'string' ? loraTrainAppRaw.comfyUiBatPath : ''
   return {
     ...merged,
     captionPresets: presets,
@@ -306,6 +320,10 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     loraTrainJobs,
     activeLoraTrainJobId,
     loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp),
+    loraTestDraft: normalizeLoraTestDraft(
+      (rawRecord.loraTestDraft as Partial<LoraTestDraft> | undefined) ?? merged.loraTestDraft,
+      legacyComfyUiBatPath
+    ),
     uiGpuMode: normalizeUiGpuMode(rawRecord)
   }
 }
@@ -361,6 +379,61 @@ declare global {
       onPythonInstallProgress: (
         cb: (payload: { stage: string; message: string; pct: number }) => void
       ) => () => void
+      probeComfyBat: (
+        batPath?: string
+      ) => Promise<{ ok: boolean; message: string; installRoot?: string }>
+      installComfyUi: (opts?: {
+        downloadFolder?: string
+        pythonPath?: string
+      }) => Promise<{ ok: boolean; batPath?: string; message: string; installRoot?: string }>
+      cancelComfyInstall: () => Promise<{ ok: boolean }>
+      onComfyInstallProgress: (
+        cb: (payload: { stage: string; message: string; pct: number }) => void
+      ) => () => void
+      startComfyUi: (opts: {
+        batPath: string
+        pythonPath?: string
+        modelsRoot?: string
+        loraFolders?: string[]
+        ditFolders?: string[]
+        vaeFolders?: string[]
+        clipFolders?: string[]
+      }) => Promise<{ ok: boolean; error?: string; alreadyRunning?: boolean }>
+      stopComfyUi: () => Promise<{ ok: boolean }>
+      comfyStatus: () => Promise<{
+        running: boolean
+        pid?: number
+        online: boolean
+        installRoot?: string
+        outputDir?: string
+      }>
+      comfyHttpRequest: (opts: {
+        url: string
+        method?: string
+        headers?: Record<string, string>
+        body?: string
+        timeoutMs?: number
+      }) => Promise<{ ok: boolean; status: number; text: string; error?: string }>
+      comfyResolveImagePath: (img: {
+        filename: string
+        subfolder?: string
+        type?: string
+      }) => Promise<{ ok: boolean; path?: string; error?: string }>
+      comfyGetOutputDir: () => Promise<{ ok: boolean; path: string }>
+      loraTestSaveGeneratedImage: (opts: {
+        sourcePath: string
+        trainingFolder: string
+        jobName: string
+        fileName?: string
+      }) => Promise<{ ok: boolean; path?: string; dir?: string; error?: string }>
+      loraTestListGallery: (opts: {
+        trainingFolder: string
+        jobName: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        images: { path: string; name: string; mtimeMs: number }[]
+      }>
       startTrain: (opts: {
         pythonPath?: string
         configJson: string

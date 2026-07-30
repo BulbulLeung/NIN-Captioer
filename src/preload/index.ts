@@ -129,6 +129,76 @@ const api = {
     ipcRenderer.on('python:installProgress', listener)
     return () => ipcRenderer.removeListener('python:installProgress', listener)
   },
+  probeComfyBat: (
+    batPath?: string
+  ): Promise<{ ok: boolean; message: string; installRoot?: string }> =>
+    ipcRenderer.invoke('comfy:probeBat', batPath),
+  installComfyUi: (opts?: {
+    downloadFolder?: string
+    pythonPath?: string
+  }): Promise<{ ok: boolean; batPath?: string; message: string; installRoot?: string }> =>
+    ipcRenderer.invoke('comfy:install', opts),
+  cancelComfyInstall: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('comfy:cancelInstall'),
+  onComfyInstallProgress: (
+    cb: (payload: { stage: string; message: string; pct: number }) => void
+  ) => {
+    const listener = (
+      _e: IpcRendererEvent,
+      payload: { stage: string; message: string; pct: number }
+    ) => cb(payload)
+    ipcRenderer.on('comfy:installProgress', listener)
+    return () => ipcRenderer.removeListener('comfy:installProgress', listener)
+  },
+  startComfyUi: (opts: {
+    batPath: string
+    pythonPath?: string
+    modelsRoot?: string
+    loraFolders?: string[]
+    ditFolders?: string[]
+    vaeFolders?: string[]
+    clipFolders?: string[]
+  }): Promise<{ ok: boolean; error?: string; alreadyRunning?: boolean }> =>
+    ipcRenderer.invoke('comfy:start', opts),
+  stopComfyUi: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('comfy:stop'),
+  comfyStatus: (): Promise<{
+    running: boolean
+    pid?: number
+    online: boolean
+    installRoot?: string
+    outputDir?: string
+  }> => ipcRenderer.invoke('comfy:status'),
+  comfyHttpRequest: (opts: {
+    url: string
+    method?: string
+    headers?: Record<string, string>
+    body?: string
+    timeoutMs?: number
+  }): Promise<{ ok: boolean; status: number; text: string; error?: string }> =>
+    ipcRenderer.invoke('comfy:httpRequest', opts),
+  comfyResolveImagePath: (img: {
+    filename: string
+    subfolder?: string
+    type?: string
+  }): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('comfy:resolveImagePath', img),
+  comfyGetOutputDir: (): Promise<{ ok: boolean; path: string }> =>
+    ipcRenderer.invoke('comfy:getOutputDir'),
+  loraTestSaveGeneratedImage: (opts: {
+    sourcePath: string
+    trainingFolder: string
+    jobName: string
+    fileName?: string
+  }): Promise<{ ok: boolean; path?: string; dir?: string; error?: string }> =>
+    ipcRenderer.invoke('loraTest:saveGeneratedImage', opts),
+  loraTestListGallery: (opts: {
+    trainingFolder: string
+    jobName: string
+  }): Promise<{
+    ok: boolean
+    error?: string
+    images: { path: string; name: string; mtimeMs: number }[]
+  }> => ipcRenderer.invoke('loraTest:listGallery', opts),
   startTrain: (opts: {
     pythonPath?: string
     configJson: string

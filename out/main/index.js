@@ -8,9 +8,9 @@ const util = require("util");
 const os = require("os");
 const https = require("https");
 const promises$1 = require("stream/promises");
-const execFileAsync$1 = util.promisify(child_process.execFile);
+const execFileAsync$2 = util.promisify(child_process.execFile);
 let installProc = null;
-let installCancelled = false;
+let installCancelled$1 = false;
 function defaultPythonInstallPath() {
   return path.join(electron.app.getPath("userData"), "python");
 }
@@ -61,7 +61,7 @@ async function extractArchive(archivePath, destDir) {
   await promises.mkdir(destDir, { recursive: true });
   if (archivePath.endsWith(".zip")) {
     if (process.platform === "win32") {
-      await execFileAsync$1(
+      await execFileAsync$2(
         "powershell.exe",
         [
           "-NoProfile",
@@ -72,14 +72,14 @@ async function extractArchive(archivePath, destDir) {
       );
       return;
     }
-    await execFileAsync$1("unzip", ["-o", archivePath, "-d", destDir], { timeout: 12e4 });
+    await execFileAsync$2("unzip", ["-o", archivePath, "-d", destDir], { timeout: 12e4 });
     return;
   }
-  await execFileAsync$1("tar", ["-xzf", archivePath, "-C", destDir], { timeout: 12e4 });
+  await execFileAsync$2("tar", ["-xzf", archivePath, "-C", destDir], { timeout: 12e4 });
 }
 function runSpawn(command, args, opts) {
   return new Promise((resolve, reject) => {
-    if (installCancelled) {
+    if (installCancelled$1) {
       reject(new Error("Cancelled"));
       return;
     }
@@ -103,7 +103,7 @@ function runSpawn(command, args, opts) {
     });
     child.on("close", (code) => {
       if (installProc === child) installProc = null;
-      if (installCancelled) {
+      if (installCancelled$1) {
         reject(new Error("Cancelled"));
         return;
       }
@@ -112,7 +112,7 @@ function runSpawn(command, args, opts) {
   });
 }
 function cancelPythonInstall() {
-  installCancelled = true;
+  installCancelled$1 = true;
   if (installProc && !installProc.killed) {
     try {
       installProc.kill();
@@ -162,7 +162,7 @@ async function probePython(pythonPath) {
     'print("TRITON:" + ("1" if ok_triton else "0"))'
   ].join("\n");
   try {
-    const { stdout, stderr } = await execFileAsync$1(py, ["-c", code], {
+    const { stdout, stderr } = await execFileAsync$2(py, ["-c", code], {
       timeout: 6e4,
       windowsHide: true,
       encoding: "utf8",
@@ -278,9 +278,9 @@ function torchaoSpecForTorch(torchVersion) {
   if (major === 2 && minor === 10) return "torchao==0.16.0";
   return "torchao>=0.15.0,<0.17.0";
 }
-async function readTorchVersion(py) {
+async function readTorchVersion$1(py) {
   try {
-    const { stdout } = await execFileAsync$1(
+    const { stdout } = await execFileAsync$2(
       py,
       ["-c", "import torch; print(torch.__version__)"],
       { timeout: 6e4, windowsHide: true, encoding: "utf8" }
@@ -292,7 +292,7 @@ async function readTorchVersion(py) {
 }
 async function readTorchCuda(py) {
   try {
-    const { stdout } = await execFileAsync$1(
+    const { stdout } = await execFileAsync$2(
       py,
       ["-c", 'import torch; print(torch.version.cuda or "")'],
       { timeout: 6e4, windowsHide: true, encoding: "utf8" }
@@ -332,7 +332,7 @@ async function installTritonWindows(opts) {
       message: `triton Windows deps (setuptools/CUDA) failed: ${r.stderr || r.stdout}`
     };
   }
-  const torchVer = await readTorchVersion(py);
+  const torchVer = await readTorchVersion$1(py);
   const spec = tritonWindowsSpecForTorch(torchVer || "2.9");
   onProgress({
     stage: "triton",
@@ -349,7 +349,7 @@ async function installTritonWindows(opts) {
     };
   }
   try {
-    await execFileAsync$1(py, ["-c", "import triton; print(triton.__version__)"], {
+    await execFileAsync$2(py, ["-c", "import triton; print(triton.__version__)"], {
       timeout: 6e4,
       windowsHide: true,
       encoding: "utf8"
@@ -383,7 +383,7 @@ function flashAttnWindowsWheelUrl(torchVersion, cudaVersion, pythonVersion) {
 }
 async function readPythonVersion(py) {
   try {
-    const { stdout } = await execFileAsync$1(
+    const { stdout } = await execFileAsync$2(
       py,
       ["-c", 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],
       { timeout: 3e4, windowsHide: true, encoding: "utf8" }
@@ -404,7 +404,7 @@ async function installFlashAttn(opts) {
     cwd: installRoot
   });
   if (process.platform === "win32") {
-    const torchVer = await readTorchVersion(py);
+    const torchVer = await readTorchVersion$1(py);
     const cudaVer = await readTorchCuda(py);
     const pyVer = await readPythonVersion(py);
     const wheelUrl = flashAttnWindowsWheelUrl(torchVer, cudaVer, pyVer || "3.11");
@@ -453,7 +453,7 @@ async function installFlashAttn(opts) {
     }
   }
   try {
-    const { stdout } = await execFileAsync$1(
+    const { stdout } = await execFileAsync$2(
       py,
       [
         "-c",
@@ -469,7 +469,7 @@ async function installFlashAttn(opts) {
   }
 }
 async function installPythonEnv(opts) {
-  installCancelled = false;
+  installCancelled$1 = false;
   const installRoot = resolvePythonInstallPath(opts.installPath);
   const onProgress = opts.onProgress;
   try {
@@ -539,7 +539,7 @@ async function installPythonEnv(opts) {
     if (r.code !== 0) {
       throw new Error(`requirements.txt install failed: ${r.stderr || r.stdout}`);
     }
-    const torchVer = await readTorchVersion(py);
+    const torchVer = await readTorchVersion$1(py);
     const torchaoSpec = torchaoSpecForTorch(torchVer || "2.9.1");
     onProgress({
       stage: "torchao",
@@ -621,8 +621,536 @@ async function installPythonEnv(opts) {
     return { ok: false, message };
   } finally {
     installProc = null;
-    installCancelled = false;
+    installCancelled$1 = false;
   }
+}
+const execFileAsync$1 = util.promisify(child_process.execFile);
+const COMFY_DEFAULT_PORT = 8188;
+const COMFY_BASE_URL = `http://127.0.0.1:${COMFY_DEFAULT_PORT}`;
+let installCancelled = false;
+let comfyProc = null;
+let lastComfyInstallRoot = null;
+function defaultComfyInstallPath(downloadFolder) {
+  const root = (downloadFolder || "").trim() || electron.app.getPath("userData");
+  return path.join(root, "ComfyUI");
+}
+function batPathForInstall(installRoot) {
+  return path.join(installRoot, "run_captioer.bat");
+}
+function resolvePythonExe(pythonPath) {
+  const trimmed = (pythonPath || "").trim();
+  if (trimmed) return trimmed;
+  return process.platform === "win32" ? "python" : "python3";
+}
+function findUvBesidePython(pythonExe) {
+  const scriptsOrBin = path.dirname(pythonExe);
+  const venvDir = path.dirname(scriptsOrBin);
+  const installRoot = path.dirname(venvDir);
+  const uvName = process.platform === "win32" ? "uv.exe" : "uv";
+  const candidates = [
+    path.join(installRoot, "tools", uvName),
+    path.join(venvDir, "tools", uvName),
+    path.join(path.dirname(pythonExe), uvName)
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+async function hasPipModule(pythonExe) {
+  try {
+    await execFileAsync$1(pythonExe, ["-c", "import pip"], {
+      timeout: 15e3,
+      windowsHide: true
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function torchAudioLoads(pythonExe) {
+  try {
+    await execFileAsync$1(
+      pythonExe,
+      ["-c", "import torchaudio; import torchaudio.lib._torchaudio"],
+      { timeout: 6e4, windowsHide: true }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function readTorchVersion(pythonExe) {
+  try {
+    const { stdout } = await execFileAsync$1(
+      pythonExe,
+      ["-c", "import torch; print(torch.__version__)"],
+      { timeout: 3e4, windowsHide: true, encoding: "utf8" }
+    );
+    const v = (stdout || "").trim();
+    return v || null;
+  } catch {
+    return null;
+  }
+}
+async function alignTorchAudio(pythonExe, cwd, onProgress) {
+  if (await torchAudioLoads(pythonExe)) return;
+  const torchVer = await readTorchVersion(pythonExe) || "2.9.1+cu128";
+  const base = torchVer.split("+")[0] || "2.9.1";
+  const cudaTag = /cu\d+/i.exec(torchVer)?.[0]?.toLowerCase() || "cu128";
+  const indexUrl = `https://download.pytorch.org/whl/${cudaTag}`;
+  const uv = findUvBesidePython(pythonExe);
+  onProgress?.({
+    stage: "pip",
+    message: `Repairing torchaudio to match torch ${torchVer}…`,
+    pct: 72
+  });
+  if (uv) {
+    try {
+      await runLogged(uv, ["pip", "uninstall", "-y", "--python", pythonExe, "torchaudio"], {
+        cwd,
+        onProgress,
+        stage: "pip"
+      });
+    } catch {
+    }
+    await runLogged(
+      uv,
+      ["pip", "install", "--python", pythonExe, `torchaudio==${base}`, "--index-url", indexUrl],
+      { cwd, onProgress, stage: "pip" }
+    );
+  } else {
+    try {
+      await runLogged(pythonExe, ["-m", "pip", "uninstall", "-y", "torchaudio"], {
+        cwd,
+        onProgress,
+        stage: "pip"
+      });
+    } catch {
+    }
+    await runLogged(
+      pythonExe,
+      ["-m", "pip", "install", `torchaudio==${base}`, "--index-url", indexUrl],
+      { cwd, onProgress, stage: "pip" }
+    );
+  }
+  if (!await torchAudioLoads(pythonExe)) {
+    throw new Error(
+      `torchaudio still fails to load after aligning to torch ${torchVer}. Try reinstalling Captioer Python, then ComfyUI Download again.`
+    );
+  }
+}
+async function installComfyRequirements(pythonExe, requirementsPath, cwd, onProgress) {
+  const uv = findUvBesidePython(pythonExe);
+  if (uv) {
+    onProgress?.({
+      stage: "pip",
+      message: `Installing ComfyUI requirements via uv…`,
+      pct: 50
+    });
+    await runLogged(uv, ["pip", "install", "--python", pythonExe, "-r", requirementsPath], {
+      cwd,
+      onProgress,
+      stage: "pip"
+    });
+    await alignTorchAudio(pythonExe, cwd, onProgress);
+    return;
+  }
+  if (!await hasPipModule(pythonExe)) {
+    onProgress?.({
+      stage: "pip",
+      message: "Bootstrapping pip (ensurepip)…",
+      pct: 48
+    });
+    try {
+      await runLogged(pythonExe, ["-m", "ensurepip", "--upgrade"], {
+        cwd,
+        onProgress,
+        stage: "pip"
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `This Python has no pip, and ensurepip failed. Use Captioer Python Download (uv) or install pip manually. ${detail}`
+      );
+    }
+  }
+  onProgress?.({
+    stage: "pip",
+    message: "Installing ComfyUI requirements…",
+    pct: 55
+  });
+  await runLogged(pythonExe, ["-m", "pip", "install", "-r", requirementsPath], {
+    cwd,
+    onProgress,
+    stage: "pip"
+  });
+  await alignTorchAudio(pythonExe, cwd, onProgress);
+}
+async function pathExists(p) {
+  try {
+    await promises.access(p, promises.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function probeComfyBat(batPath) {
+  const trimmed = (batPath || "").trim();
+  if (!trimmed) {
+    return { ok: false, message: "ComfyUI launch bat not set" };
+  }
+  if (!await pathExists(trimmed)) {
+    return { ok: false, message: `Bat not found: ${trimmed}` };
+  }
+  const installRoot = path.dirname(trimmed);
+  const mainPy = path.join(installRoot, "main.py");
+  if (!await pathExists(mainPy)) {
+    return {
+      ok: false,
+      message: `main.py not found next to bat (expected ${mainPy})`,
+      installRoot
+    };
+  }
+  return { ok: true, message: "ComfyUI install looks valid", installRoot };
+}
+function buildBatContents(installRoot, pythonExe) {
+  const py = pythonExe.replace(/"/g, "");
+  return `@echo off
+cd /d "${installRoot}"
+"${py}" main.py --disable-auto-launch --port ${COMFY_DEFAULT_PORT}
+`;
+}
+async function writeExtraModelPaths(installRoot, opts) {
+  const lines = ["# Generated by Captioer — do not edit while app is managing ComfyUI", ""];
+  const modelsRoot = (opts.modelsRoot || "").trim();
+  if (modelsRoot) {
+    lines.push("captioer_models:");
+    lines.push(`    base_path: ${modelsRoot.replace(/\\/g, "/")}`);
+    lines.push("    checkpoints: .");
+    lines.push("    diffusion_models: .");
+    lines.push("    unet: .");
+    lines.push("    clip: .");
+    lines.push("    vae: .");
+    lines.push("    loras: .");
+    lines.push("");
+  }
+  const uniq = (arr) => [...new Set((arr || []).map((p) => (p || "").trim()).filter(Boolean))];
+  uniq(opts.ditFolders).forEach((folder, i) => {
+    lines.push(`captioer_dit_${i}:`);
+    lines.push(`    base_path: ${folder.replace(/\\/g, "/")}`);
+    lines.push("    diffusion_models: .");
+    lines.push("    unet: .");
+    lines.push("");
+  });
+  uniq(opts.vaeFolders).forEach((folder, i) => {
+    lines.push(`captioer_vae_${i}:`);
+    lines.push(`    base_path: ${folder.replace(/\\/g, "/")}`);
+    lines.push("    vae: .");
+    lines.push("");
+  });
+  uniq(opts.clipFolders).forEach((folder, i) => {
+    lines.push(`captioer_clip_${i}:`);
+    lines.push(`    base_path: ${folder.replace(/\\/g, "/")}`);
+    lines.push("    clip: .");
+    lines.push("");
+  });
+  uniq(opts.loraFolders).forEach((folder, i) => {
+    lines.push(`captioer_lora_${i}:`);
+    lines.push(`    base_path: ${folder.replace(/\\/g, "/")}`);
+    lines.push("    loras: .");
+    lines.push("");
+  });
+  await promises.writeFile(path.join(installRoot, "extra_model_paths.yaml"), lines.join("\n"), "utf8");
+}
+async function runLogged(cmd, args, opts = {}) {
+  if (installCancelled) throw new Error("Cancelled");
+  return new Promise((resolve, reject) => {
+    const child = child_process.spawn(cmd, args, {
+      cwd: opts.cwd,
+      env: { ...process.env, ...opts.env },
+      windowsHide: true,
+      shell: false
+    });
+    let stderr = "";
+    child.stdout.on("data", (buf) => {
+      const line = buf.toString("utf8").trim();
+      if (line && opts.onProgress) {
+        opts.onProgress({
+          stage: opts.stage || "run",
+          message: line.slice(0, 200),
+          pct: 0
+        });
+      }
+    });
+    child.stderr.on("data", (buf) => {
+      stderr += buf.toString("utf8");
+    });
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
+      if (installCancelled) {
+        reject(new Error("Cancelled"));
+        return;
+      }
+      if (code !== 0) {
+        reject(new Error(`${cmd} ${args.join(" ")} failed (${code}): ${stderr.slice(-800)}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+function cancelComfyInstall() {
+  installCancelled = true;
+  return { ok: true };
+}
+async function installComfyUi(opts) {
+  installCancelled = false;
+  const onProgress = opts.onProgress;
+  const installRoot = defaultComfyInstallPath(opts.downloadFolder);
+  const pythonExe = resolvePythonExe(opts.pythonPath);
+  const batPath = batPathForInstall(installRoot);
+  try {
+    onProgress?.({ stage: "prepare", message: `Install root: ${installRoot}`, pct: 5 });
+    await promises.mkdir(path.dirname(installRoot), { recursive: true });
+    const mainPy = path.join(installRoot, "main.py");
+    if (await pathExists(mainPy)) {
+      onProgress?.({ stage: "git", message: "ComfyUI already present; pulling latest…", pct: 20 });
+      try {
+        await runLogged("git", ["-C", installRoot, "pull", "--ff-only"], {
+          onProgress,
+          stage: "git"
+        });
+      } catch (err) {
+        onProgress?.({
+          stage: "git",
+          message: `git pull skipped: ${err instanceof Error ? err.message : String(err)}`,
+          pct: 25
+        });
+      }
+    } else {
+      onProgress?.({
+        stage: "git",
+        message: "Cloning ComfyUI (requires git on PATH)…",
+        pct: 15
+      });
+      if (await pathExists(installRoot)) {
+      }
+      try {
+        await runLogged(
+          "git",
+          ["clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", installRoot],
+          { onProgress, stage: "git" }
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          message: `git clone failed. Install Git and retry. ${msg}`,
+          installRoot
+        };
+      }
+    }
+    if (installCancelled) return { ok: false, message: "Cancelled", installRoot };
+    onProgress?.({
+      stage: "pip",
+      message: "Installing ComfyUI requirements (using Captioer Python)…",
+      pct: 45
+    });
+    const req = path.join(installRoot, "requirements.txt");
+    if (await pathExists(req)) {
+      await installComfyRequirements(pythonExe, req, installRoot, onProgress);
+    }
+    if (installCancelled) return { ok: false, message: "Cancelled", installRoot };
+    onProgress?.({ stage: "bat", message: "Writing run_captioer.bat…", pct: 85 });
+    await promises.writeFile(batPath, buildBatContents(installRoot, pythonExe), "utf8");
+    const modelsRoot = opts.downloadFolder ? path.join(opts.downloadFolder.trim() || electron.app.getPath("userData"), "models") : path.join(electron.app.getPath("userData"), "models");
+    await writeExtraModelPaths(installRoot, { modelsRoot });
+    onProgress?.({ stage: "done", message: "ComfyUI ready", pct: 100 });
+    return {
+      ok: true,
+      batPath,
+      installRoot,
+      message: `Installed at ${installRoot}`
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      installRoot,
+      message: err instanceof Error ? err.message : String(err)
+    };
+  }
+}
+async function isComfyServerOnline(baseUrl = COMFY_BASE_URL) {
+  try {
+    const res = await fetch(`${baseUrl}/system_stats`, { signal: AbortSignal.timeout(2e3) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+function comfyStatus() {
+  const installRoot = lastComfyInstallRoot || void 0;
+  const outputDir = installRoot ? path.join(installRoot, "output") : void 0;
+  if (comfyProc && !comfyProc.killed) {
+    return { running: true, pid: comfyProc.pid, installRoot, outputDir };
+  }
+  return { running: false, installRoot, outputDir };
+}
+function getComfyInstallRoot() {
+  return lastComfyInstallRoot || defaultComfyInstallPath();
+}
+function getComfyOutputDir() {
+  return path.join(getComfyInstallRoot(), "output");
+}
+function resolveComfyImagePath(img) {
+  const root = getComfyInstallRoot();
+  const kind = (img.type || "output").toLowerCase();
+  const base = kind === "temp" ? path.join(root, "temp") : kind === "input" ? path.join(root, "input") : path.join(root, "output");
+  const sub = (img.subfolder || "").replace(/^[/\\]+/, "").replace(/\\/g, "/");
+  return sub ? path.join(base, ...sub.split("/"), img.filename) : path.join(base, img.filename);
+}
+async function stopComfyUi() {
+  if (!comfyProc) {
+    lastExtraPathsKey = "";
+    return { ok: true };
+  }
+  const proc = comfyProc;
+  comfyProc = null;
+  lastExtraPathsKey = "";
+  try {
+    if (process.platform === "win32" && proc.pid) {
+      await execFileAsync$1("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true });
+    } else {
+      proc.kill("SIGTERM");
+    }
+  } catch {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+    }
+  }
+  return { ok: true };
+}
+async function stopComfyProcessOnly() {
+  if (!comfyProc) return;
+  const proc = comfyProc;
+  comfyProc = null;
+  try {
+    if (process.platform === "win32" && proc.pid) {
+      await execFileAsync$1("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true });
+    } else {
+      proc.kill("SIGTERM");
+    }
+  } catch {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+    }
+  }
+}
+let lastExtraPathsKey = "";
+function extraPathsKey(opts) {
+  return JSON.stringify({
+    modelsRoot: (opts.modelsRoot || "").trim(),
+    loraFolders: (opts.loraFolders || []).map((p) => p.trim()).filter(Boolean).sort(),
+    ditFolders: (opts.ditFolders || []).map((p) => p.trim()).filter(Boolean).sort(),
+    vaeFolders: (opts.vaeFolders || []).map((p) => p.trim()).filter(Boolean).sort(),
+    clipFolders: (opts.clipFolders || []).map((p) => p.trim()).filter(Boolean).sort()
+  });
+}
+async function startComfyUi(opts) {
+  const probe = await probeComfyBat(opts.batPath);
+  if (!probe.ok || !probe.installRoot) {
+    return { ok: false, error: probe.message };
+  }
+  const installRoot = probe.installRoot;
+  const pathKey = extraPathsKey(opts);
+  await writeExtraModelPaths(installRoot, {
+    modelsRoot: opts.modelsRoot,
+    loraFolders: opts.loraFolders,
+    ditFolders: opts.ditFolders,
+    vaeFolders: opts.vaeFolders,
+    clipFolders: opts.clipFolders
+  });
+  if (await isComfyServerOnline()) {
+    if (pathKey === lastExtraPathsKey) {
+      lastComfyInstallRoot = installRoot;
+      return { ok: true, alreadyRunning: true };
+    }
+    await stopComfyProcessOnly();
+  } else if (comfyProc && !comfyProc.killed) {
+    if (pathKey === lastExtraPathsKey) {
+      lastComfyInstallRoot = installRoot;
+      return { ok: true, alreadyRunning: true };
+    }
+    await stopComfyProcessOnly();
+  }
+  lastExtraPathsKey = pathKey;
+  const pythonExe = resolvePythonExe(opts.pythonPath);
+  await stopComfyProcessOnly();
+  try {
+    const preOk = await torchAudioLoads(pythonExe);
+    if (!preOk) {
+      await alignTorchAudio(pythonExe, installRoot);
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    };
+  }
+  return new Promise((resolve) => {
+    const child = child_process.spawn(pythonExe, ["main.py", "--disable-auto-launch", "--port", String(COMFY_DEFAULT_PORT)], {
+      cwd: installRoot,
+      windowsHide: true,
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    comfyProc = child;
+    lastComfyInstallRoot = installRoot;
+    let settled = false;
+    let stdoutBuf = "";
+    let stderrBuf = "";
+    child.stdout?.on("data", (buf) => {
+      stdoutBuf += buf.toString("utf8");
+      if (stdoutBuf.length > 8e3) stdoutBuf = stdoutBuf.slice(-8e3);
+    });
+    child.stderr?.on("data", (buf) => {
+      stderrBuf += buf.toString("utf8");
+      if (stderrBuf.length > 8e3) stderrBuf = stderrBuf.slice(-8e3);
+    });
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      if (comfyProc === child) comfyProc = null;
+      const detail = [stderrBuf.trim(), stdoutBuf.trim()].filter(Boolean).join("\n").slice(-1200);
+      resolve({ ok: false, error: detail ? `${error}
+${detail}` : error });
+    };
+    child.on("error", (err) => fail(err.message));
+    child.on("exit", (code) => {
+      if (comfyProc === child) comfyProc = null;
+      if (!settled) {
+        fail(`ComfyUI exited early (code ${code})`);
+      }
+    });
+    const startedAt = Date.now();
+    const poll = async () => {
+      if (settled) return;
+      if (await isComfyServerOnline()) {
+        settled = true;
+        resolve({ ok: true });
+        return;
+      }
+      if (Date.now() - startedAt > 12e4) {
+        fail("ComfyUI did not become ready within 120s");
+        return;
+      }
+      setTimeout(() => void poll(), 1e3);
+    };
+    setTimeout(() => void poll(), 1500);
+  });
 }
 const execFileAsync = util.promisify(child_process.execFile);
 const IMAGE_EXTS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"]);
@@ -1667,6 +2195,153 @@ electron.app.whenReady().then(async () => {
     }
   );
   electron.ipcMain.handle(
+    "comfy:probeBat",
+    async (_event, batPath) => probeComfyBat(batPath || "")
+  );
+  electron.ipcMain.handle("comfy:cancelInstall", async () => cancelComfyInstall());
+  electron.ipcMain.handle(
+    "comfy:install",
+    async (_event, opts) => {
+      const result = await installComfyUi({
+        downloadFolder: opts?.downloadFolder,
+        pythonPath: opts?.pythonPath,
+        onProgress: (p) => {
+          mainWindow?.webContents.send("comfy:installProgress", p);
+        }
+      });
+      return result;
+    }
+  );
+  electron.ipcMain.handle(
+    "comfy:start",
+    async (_event, opts) => startComfyUi(opts)
+  );
+  electron.ipcMain.handle("comfy:stop", async () => stopComfyUi());
+  electron.ipcMain.handle("comfy:status", async () => {
+    const proc = comfyStatus();
+    const online = await isComfyServerOnline();
+    return { ...proc, online, outputDir: proc.outputDir || getComfyOutputDir() };
+  });
+  electron.ipcMain.handle(
+    "comfy:resolveImagePath",
+    async (_event, img) => {
+      try {
+        const abs = resolveComfyImagePath(img);
+        if (!fs.existsSync(abs)) {
+          return { ok: false, error: `Image not found: ${abs}` };
+        }
+        return { ok: true, path: abs };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  );
+  electron.ipcMain.handle("comfy:getOutputDir", async () => ({
+    ok: true,
+    path: getComfyOutputDir()
+  }));
+  electron.ipcMain.handle(
+    "loraTest:saveGeneratedImage",
+    async (_event, opts) => {
+      const sourcePath = (opts?.sourcePath || "").trim();
+      const trainingFolder = (opts?.trainingFolder || "").trim();
+      const jobName = (opts?.jobName || "").trim();
+      if (!sourcePath) return { ok: false, error: "Source image path is empty" };
+      if (!trainingFolder) return { ok: false, error: "Job Output Folder is empty" };
+      if (!jobName) return { ok: false, error: "Job name is empty" };
+      if (!fs.existsSync(sourcePath)) {
+        return { ok: false, error: `Source image not found: ${sourcePath}` };
+      }
+      try {
+        const dir = path.join(trainingFolder, jobName, "loratest");
+        await promises.mkdir(dir, { recursive: true });
+        const ext = path.extname(sourcePath) || ".png";
+        const stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").replace("T", "_");
+        const safeBase = (opts?.fileName || "").trim().replace(/[<>:"/\\|?*\x00-\x1f]+/g, "_") || `${safeJobName(jobName)}_loratest_${stamp}`;
+        const baseName = safeBase.toLowerCase().endsWith(ext.toLowerCase()) ? safeBase : `${safeBase}${ext}`;
+        let dest = path.join(dir, baseName);
+        if (fs.existsSync(dest)) {
+          const stem = baseName.slice(0, -ext.length);
+          dest = path.join(dir, `${stem}_${Date.now()}${ext}`);
+        }
+        try {
+          fs.renameSync(sourcePath, dest);
+        } catch {
+          fs.copyFileSync(sourcePath, dest);
+          fs.unlinkSync(sourcePath);
+        }
+        return { ok: true, path: dest, dir };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  );
+  electron.ipcMain.handle(
+    "loraTest:listGallery",
+    async (_event, opts) => {
+      const trainingFolder = (opts?.trainingFolder || "").trim();
+      const jobName = (opts?.jobName || "").trim();
+      if (!trainingFolder || !jobName) {
+        return { ok: false, error: "Job Output Folder or name is empty", images: [] };
+      }
+      const dir = path.join(trainingFolder, jobName, "loratest");
+      try {
+        await promises.access(dir, promises.constants.R_OK);
+      } catch {
+        return { ok: true, images: [] };
+      }
+      try {
+        const entries = await promises.readdir(dir, { withFileTypes: true });
+        const images = [];
+        for (const ent of entries) {
+          if (!ent.isFile()) continue;
+          const ext = path.extname(ent.name).toLowerCase();
+          if (!IMAGE_EXTS.has(ext)) continue;
+          const full = path.join(dir, ent.name);
+          let mtimeMs = 0;
+          try {
+            mtimeMs = (await promises.stat(full)).mtimeMs;
+          } catch {
+            mtimeMs = 0;
+          }
+          images.push({ path: full, name: ent.name, mtimeMs });
+        }
+        images.sort((a, b) => b.mtimeMs - a.mtimeMs || a.name.localeCompare(b.name));
+        return { ok: true, images };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          images: []
+        };
+      }
+    }
+  );
+  electron.ipcMain.handle(
+    "comfy:httpRequest",
+    async (_event, opts) => {
+      try {
+        const method = (opts.method || "GET").toUpperCase();
+        const timeoutMs = opts.timeoutMs ?? 12e4;
+        const res = await fetch(opts.url, {
+          method,
+          headers: opts.headers,
+          body: method === "GET" || method === "HEAD" ? void 0 : opts.body,
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+        const text = await res.text();
+        return { ok: res.ok, status: res.status, text };
+      } catch (err) {
+        return {
+          ok: false,
+          status: 0,
+          text: "",
+          error: err instanceof Error ? err.message : String(err)
+        };
+      }
+    }
+  );
+  electron.ipcMain.handle(
     "train:start",
     async (_event, opts) => {
       if (trainProc && !trainProc.killed) {
@@ -2376,4 +3051,7 @@ ${stderr || ""}`;
 });
 electron.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") electron.app.quit();
+});
+electron.app.on("before-quit", () => {
+  void stopComfyUi();
 });

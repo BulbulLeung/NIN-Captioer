@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { AnalysisDialog } from './components/AnalysisDialog'
 import { DatasetEditView } from './components/DatasetEditView'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
-import { LoraTrainSettingsDialog } from './components/LoraTrainSettingsDialog'
 import { LoraTrainView } from './components/LoraTrainView'
+import { LoraTestView } from './components/LoraTestView'
 import { MissingDatasetFolderDialog } from './components/MissingDatasetFolderDialog'
 import { RemoveDatasetFolderDialog } from './components/RemoveDatasetFolderDialog'
 import { RemoveLoraJobDialog } from './components/RemoveLoraJobDialog'
@@ -18,7 +18,7 @@ import type {
   CaptionFormatId,
   ImageItem,
   ListViewMode,
-  LoraTrainAppSettings,
+  LoraTestDraft,
   LoraTrainJobConfig
 } from './types'
 import {
@@ -59,8 +59,8 @@ export default function App() {
   const [savedEnglish, setSavedEnglish] = useState('')
   const [translated, setTranslated] = useState('')
   const [settings, setSettings] = useState<AppSettings>(() => normalizeSettings(null))
+  const [settingsReady, setSettingsReady] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [loraSettingsOpen, setLoraSettingsOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [unsavedOpen, setUnsavedOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -84,6 +84,8 @@ export default function App() {
   const jobMenuRef = useRef<HTMLDivElement | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  const settingsReadyRef = useRef(settingsReady)
+  settingsReadyRef.current = settingsReady
   const selectedPathRef = useRef(selectedPath)
   selectedPathRef.current = selectedPath
 
@@ -198,6 +200,7 @@ export default function App() {
         }
         setStatus('')
         if (persist) {
+          if (!settingsReadyRef.current) return true
           setSettings((prev) => {
             const folders = prev.datasetFolders.includes(dir)
               ? prev.datasetFolders
@@ -207,6 +210,7 @@ export default function App() {
               lastFolder: dir,
               datasetFolders: folders
             })
+            settingsRef.current = next
             void window.api.setSettings(next)
             return next
           })
@@ -225,8 +229,9 @@ export default function App() {
       const next = normalizeSettings(s)
       settingsRef.current = next
       setSettings(next)
-      // LoraTrain startup: skip folder load / Local AI (translation, analysis).
-      if (next.activeView === 'loraTrain') return
+      setSettingsReady(true)
+      // LoraTrain / LoraTest startup: skip folder load / Local AI (translation, analysis).
+      if (next.activeView === 'loraTrain' || next.activeView === 'loraTest') return
       if (next.lastFolder) {
         await loadFolder(next.lastFolder, false)
       }
@@ -367,6 +372,7 @@ export default function App() {
         datasetFolders: remaining,
         lastFolder: prev.lastFolder === removing ? (remaining[0] ?? null) : prev.lastFolder
       })
+      settingsRef.current = next
       void window.api.setSettings(next)
       return next
     })
@@ -397,6 +403,7 @@ export default function App() {
         datasetFolders: remaining,
         lastFolder: nextFolder
       })
+      settingsRef.current = next
       void window.api.setSettings(next)
       return next
     })
@@ -427,18 +434,23 @@ export default function App() {
   }
 
   const onLanguageChange = async (code: string) => {
-    const next = normalizeSettings({ ...settings, targetLanguage: code })
+    if (!settingsReadyRef.current) return
+    const next = normalizeSettings({ ...settingsRef.current, targetLanguage: code })
+    settingsRef.current = next
     setSettings(next)
     await window.api.setSettings(next)
   }
 
   const onSaveSettings = async (next: AppSettings) => {
+    if (!settingsReadyRef.current) return
     const normalized = normalizeSettings(next)
+    settingsRef.current = normalized
     await window.api.setSettings(normalized)
     setSettings(normalized)
   }
 
   const onAutoSaveSettings = useCallback(async (next: AppSettings) => {
+    if (!settingsReadyRef.current) return
     const normalized = normalizeSettings(next)
     settingsRef.current = normalized
     setSettings(normalized)
@@ -446,6 +458,8 @@ export default function App() {
   }, [])
 
   const persistSettingsPatch = useCallback((patch: Partial<AppSettings>) => {
+    // Never write defaults before disk settings have been loaded (wipes user config).
+    if (!settingsReadyRef.current) return
     const next = normalizeSettings({ ...settingsRef.current, ...patch })
     settingsRef.current = next
     setSettings(next)
@@ -479,7 +493,7 @@ export default function App() {
       statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
       return
     }
-    if (view === 'loraTrain') {
+    if (view === 'loraTrain' || view === 'loraTest') {
       stopAllLocalAi()
       setStatus('Local AI stopped')
       setError(null)
@@ -565,11 +579,12 @@ export default function App() {
     })
   }
 
-  const onSaveLoraTrainApp = async (loraTrainApp: LoraTrainAppSettings) => {
-    const next = normalizeSettings({ ...settingsRef.current, loraTrainApp })
-    await window.api.setSettings(next)
-    setSettings(next)
-  }
+  const onLoraTestDraftChange = useCallback(
+    (loraTestDraft: LoraTestDraft) => {
+      persistSettingsPatch({ loraTestDraft })
+    },
+    [persistSettingsPatch]
+  )
 
   const onLoraStatus = useCallback(
     (message: string, isError?: boolean, options?: { sticky?: boolean }) => {
@@ -787,7 +802,7 @@ export default function App() {
 
       if (isCaptionFocused()) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (deleteOpen || unsavedOpen || settingsOpen || loraSettingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return
+      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return
       if (settingsRef.current.activeView !== 'datasetEdit') return
 
       // Space/Enter would activate a previously focused control (e.g. list button).
@@ -850,7 +865,6 @@ export default function App() {
     deleteOpen,
     unsavedOpen,
     settingsOpen,
-    loraSettingsOpen,
     removeDatasetOpen,
     removeLoraJobOpen,
     missingDatasetOpen
@@ -870,14 +884,18 @@ export default function App() {
   const toolbarStatusIsError = Boolean(error && !status)
 
   const persistPaneWidths = useCallback((next: AppSettings) => {
+    if (!settingsReadyRef.current) return
     const normalized = normalizeSettings(next)
+    settingsRef.current = normalized
     setSettings(normalized)
     void window.api.setSettings(normalized)
   }, [])
 
   const persistListView = useCallback(
     (patch: Partial<Pick<AppSettings, 'listViewMode' | 'thumbnailWidth' | 'bucketPreview'>>) => {
+      if (!settingsReadyRef.current) return
       const next = normalizeSettings({ ...settingsRef.current, ...patch })
+      settingsRef.current = next
       setSettings(next)
       void window.api.setSettings(next)
     },
@@ -948,6 +966,8 @@ export default function App() {
   }
 
   const isDatasetEdit = settings.activeView === 'datasetEdit'
+  const isLoraTrain = settings.activeView === 'loraTrain'
+  const isLoraTest = settings.activeView === 'loraTest'
 
   return (
     <div className="app">
@@ -1050,7 +1070,11 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <button type="button" onClick={() => setSettingsOpen(true)}>
+              <button
+                type="button"
+                disabled={!settingsReady}
+                onClick={() => setSettingsOpen(true)}
+              >
                 Settings
               </button>
               <button
@@ -1106,57 +1130,67 @@ export default function App() {
                   </ul>
                 )}
               </div>
+              {!isLoraTest && (
+                <button
+                  type="button"
+                  className="primary toolbar-icon-btn"
+                  title="Add job preset"
+                  aria-label="Add job preset"
+                  disabled={loraTraining}
+                  onClick={addLoraJob}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                    />
+                  </svg>
+                </button>
+              )}
+              {!isLoraTest && (
+                <button
+                  type="button"
+                  className="toolbar-icon-btn danger"
+                  disabled={!activeLoraJob || loraTraining}
+                  title="Remove job preset"
+                  aria-label="Remove job preset"
+                  onClick={requestRemoveLoraJob}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                    />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
-                className="primary toolbar-icon-btn"
-                title="Add job preset"
-                aria-label="Add job preset"
-                disabled={loraTraining}
-                onClick={addLoraJob}
+                disabled={!settingsReady}
+                onClick={() => setSettingsOpen(true)}
               >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="toolbar-icon-btn danger"
-                disabled={!activeLoraJob || loraTraining}
-                title="Remove job preset"
-                aria-label="Remove job preset"
-                onClick={requestRemoveLoraJob}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
-                  />
-                </svg>
-              </button>
-              <button type="button" onClick={() => setLoraSettingsOpen(true)}>
                 Settings
               </button>
-              <button
-                type="button"
-                className="toolbar-icon-btn"
-                title="Open output folder"
-                aria-label="Open output folder"
-                disabled={
-                  !(activeLoraJob?.job.training_folder || '').trim() ||
-                  !(activeLoraJob?.job.name || '').trim()
-                }
-                onClick={() => void openLoraOutputFolder()}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
-                  />
-                </svg>
-              </button>
+              {!isLoraTest && (
+                <button
+                  type="button"
+                  className="toolbar-icon-btn"
+                  title="Open output folder"
+                  aria-label="Open output folder"
+                  disabled={
+                    !(activeLoraJob?.job.training_folder || '').trim() ||
+                    !(activeLoraJob?.job.name || '').trim()
+                  }
+                  onClick={() => void openLoraOutputFolder()}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                    />
+                  </svg>
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1180,11 +1214,20 @@ export default function App() {
             <button
               type="button"
               role="tab"
-              className={`view-switch-seg${!isDatasetEdit ? ' active' : ''}`}
-              aria-selected={!isDatasetEdit}
+              className={`view-switch-seg${isLoraTrain ? ' active' : ''}`}
+              aria-selected={isLoraTrain}
               onClick={() => setActiveView('loraTrain')}
             >
               LoraTrain
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`view-switch-seg${isLoraTest ? ' active' : ''}`}
+              aria-selected={isLoraTest}
+              onClick={() => setActiveView('loraTest')}
+            >
+              LoraTest
             </button>
           </div>
         </div>
@@ -1227,6 +1270,15 @@ export default function App() {
           onLanguageChange={(code) => void onLanguageChange(code)}
           onSave={() => void saveCurrent()}
           onRecaption={() => void reCaptionCurrent()}
+        />
+      ) : isLoraTest ? (
+        <LoraTestView
+          job={activeLoraJob.job}
+          jobId={activeLoraJob.id}
+          draft={settings.loraTestDraft}
+          appSettings={settings.loraTrainApp}
+          onDraftChange={onLoraTestDraftChange}
+          onStatus={onLoraStatus}
         />
       ) : (
         <LoraTrainView
@@ -1271,9 +1323,9 @@ export default function App() {
                 )
               })()}
               <span className="image-count">
-                {activeLoraJob.job.datasets.filter((ds) => ds.folder_path?.trim()).length || 0}{' '}
-                dataset(s) · {activeLoraJob.job.train.steps} steps · lr{' '}
-                {activeLoraJob.job.train.lr}
+                {isLoraTest
+                  ? `${activeLoraJob.job.name} · LoraTest`
+                  : `${activeLoraJob.job.datasets.filter((ds) => ds.folder_path?.trim()).length || 0} dataset(s) · ${activeLoraJob.job.train.steps} steps · lr ${activeLoraJob.job.train.lr}`}
               </span>
             </>
           )}
@@ -1294,13 +1346,6 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onSave={onSaveSettings}
         onAutoSave={onAutoSaveSettings}
-      />
-
-      <LoraTrainSettingsDialog
-        open={loraSettingsOpen}
-        settings={settings.loraTrainApp}
-        onClose={() => setLoraSettingsOpen(false)}
-        onSave={onSaveLoraTrainApp}
       />
 
       <AnalysisDialog

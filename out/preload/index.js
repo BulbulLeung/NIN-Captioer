@@ -26,6 +26,22 @@ const api = {
     electron.ipcRenderer.on("python:installProgress", listener);
     return () => electron.ipcRenderer.removeListener("python:installProgress", listener);
   },
+  probeComfyBat: (batPath) => electron.ipcRenderer.invoke("comfy:probeBat", batPath),
+  installComfyUi: (opts) => electron.ipcRenderer.invoke("comfy:install", opts),
+  cancelComfyInstall: () => electron.ipcRenderer.invoke("comfy:cancelInstall"),
+  onComfyInstallProgress: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("comfy:installProgress", listener);
+    return () => electron.ipcRenderer.removeListener("comfy:installProgress", listener);
+  },
+  startComfyUi: (opts) => electron.ipcRenderer.invoke("comfy:start", opts),
+  stopComfyUi: () => electron.ipcRenderer.invoke("comfy:stop"),
+  comfyStatus: () => electron.ipcRenderer.invoke("comfy:status"),
+  comfyHttpRequest: (opts) => electron.ipcRenderer.invoke("comfy:httpRequest", opts),
+  comfyResolveImagePath: (img) => electron.ipcRenderer.invoke("comfy:resolveImagePath", img),
+  comfyGetOutputDir: () => electron.ipcRenderer.invoke("comfy:getOutputDir"),
+  loraTestSaveGeneratedImage: (opts) => electron.ipcRenderer.invoke("loraTest:saveGeneratedImage", opts),
+  loraTestListGallery: (opts) => electron.ipcRenderer.invoke("loraTest:listGallery", opts),
   startTrain: (opts) => electron.ipcRenderer.invoke("train:start", opts),
   stopTrain: () => electron.ipcRenderer.invoke("train:stop"),
   trainStatus: () => electron.ipcRenderer.invoke("train:status"),
