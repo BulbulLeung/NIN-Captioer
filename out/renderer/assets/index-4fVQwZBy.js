@@ -12852,8 +12852,6 @@ After processing, output exactly in this format and nothing else:
 ### 2. The Final Flux Style Caption
 Output ONLY the raw paragraph. Do not add any label, bracket, title, or extra text. Start directly with the first sentence.
 Write the full natural paragraph here.
-
-PNG Info Prompt of Image:
 `;
 const DEFAULT_CAPTION_PRESET_ID = "flux-krea2-lora-nsfw";
 function createDefaultCaptionPreset() {
@@ -12938,6 +12936,7 @@ const DEFAULT_LORA_TRAIN_JOB = {
   datasets: [
     {
       folder_path: "",
+      num_repeats: 1,
       caption_ext: "txt",
       caption_dropout_rate: 0.05,
       shuffle_tokens: false,
@@ -12956,6 +12955,8 @@ const DEFAULT_LORA_TRAIN_JOB = {
     noise_scheduler: "flowmatch",
     optimizer: "adamw8bit",
     lr: 1e-4,
+    lr_scheduler: "constant_with_warmup",
+    warmup_percent: 5,
     dtype: "bf16",
     skip_first_sample: false,
     disable_sampling: true,
@@ -12968,7 +12969,7 @@ const DEFAULT_LORA_TRAIN_JOB = {
     name_or_path: KREA2_RAW,
     train_name_or_path: KREA2_RAW,
     arch: "krea2",
-    quantize: false,
+    quantize: "none",
     low_vram: false,
     layer_offload: false,
     layer_offload_percent: 0
@@ -12990,6 +12991,24 @@ const DEFAULT_LORA_TRAIN_APP = {
   pythonPath: "",
   downloadFolder: "",
   huggingfaceToken: ""
+};
+const DEFAULT_LORA_TEST_DRAFT = {
+  prompt: `A striking, high-contrast waist-up front-facing portrait of an otherworldly, ethereal girl with glowing white starlight hair, looking directly at the viewer with eyes like pools of liquid silver. She is set against a deep, pitch-black cosmic abyss. Dominating the background are the large, massive letters 'LORA TEST', rendered entirely with a stunning, intricate crystalline effect, composed of thousands of faceted crystal structures and shards. These colossal crystal letters glow with intense internal light, creating dazzling prismatic flares of electric blue, magenta, white, and a wider range of cool tones. The individual crystal facets capture and refract light brilliantly, integrated into the celestial landscape like monumental frozen cosmic structures. Her pose, with fingers hovering near five diagonal parallel lines of pure white light slashing across the scene, remains unchanged. Her gown of woven starlight and transparent diamond-veil fabric continues to reflect intricate, glittering patterns. The thousands of sharp, highly-reflective crystal particles and shattered gemstone shards hovering frozen in space in the deep, pitch-black cosmic abyss are still present, scattering their brilliant, multi-colored flares. Her starlight hair floats over and is framed by these massive crystal letters. The overall atmosphere remains ethereal and dramatic, with the enhanced sense of crystal dominance. The depth of field ensures the girl is in sharp focus, while the textured crystal text recedes into the background but remains clear.`,
+  negative: "",
+  steps: 8,
+  cfg: 1,
+  seed: -1,
+  width: 1024,
+  height: 1024,
+  sampler: "euler",
+  scheduler: "simple",
+  comfyUiBatPath: "",
+  ditPath: "",
+  vaePath: "",
+  clipLPath: "",
+  t5Path: "",
+  loraStrength: 1,
+  selectedLoraSteps: []
 };
 const DEFAULT_LORA_TRAIN_JOB_PRESET_ID = "job-default";
 function createLoraTrainJobId() {
@@ -13015,6 +13034,22 @@ function asNumberArray(value, fallback) {
   const nums = value.filter((v) => typeof v === "number" && Number.isFinite(v));
   return nums.length > 0 ? nums : [...fallback];
 }
+function normalizeNumRepeats(value, fallback) {
+  const n = Math.round(asNumber(value, fallback));
+  return Number.isFinite(n) && n >= 1 ? n : Math.max(1, Math.round(fallback) || 1);
+}
+function normalizeLrScheduler(value, fallback) {
+  const raw = asString(value, fallback).toLowerCase();
+  if (raw === "cosine") return "cosine";
+  if (raw === "constant_with_warmup" || raw === "constant") return "constant_with_warmup";
+  return fallback;
+}
+function normalizeWarmupPercent(value, fallback) {
+  const n = Math.round(asNumber(value, fallback));
+  if (!Number.isFinite(n)) return fallback;
+  const clamped = Math.min(100, Math.max(0, n));
+  return Math.round(clamped / 5) * 5;
+}
 function normalizeDataset(raw, fallback) {
   const o = asRecord(raw);
   if (!o) {
@@ -13025,6 +13060,7 @@ function normalizeDataset(raw, fallback) {
   }
   return {
     folder_path: asString(o.folder_path, fallback.folder_path),
+    num_repeats: normalizeNumRepeats(o.num_repeats, fallback.num_repeats),
     caption_ext: "txt",
     caption_dropout_rate: asNumber(o.caption_dropout_rate, fallback.caption_dropout_rate),
     shuffle_tokens: asBool(o.shuffle_tokens, fallback.shuffle_tokens),
@@ -13046,6 +13082,15 @@ function normalizeNetworkType(value, fallback) {
 }
 function normalizeArch(value) {
   return value === "krea2" || value === "flux" ? "krea2" : "krea2";
+}
+function normalizeQuantizeMode(value, fallback) {
+  if (typeof value === "boolean") return value ? "int8" : "none";
+  const raw = asString(value, fallback).toLowerCase();
+  if (raw === "none" || raw === "-none-" || raw === "off" || raw === "false") return "none";
+  if (raw === "qfloat8") return "qfloat8";
+  if (raw === "float8") return "float8";
+  if (raw === "int8" || raw === "true") return "int8";
+  return fallback;
 }
 function normalizeSamplePrompts(raw, defaults) {
   if (!Array.isArray(raw)) {
@@ -13096,6 +13141,16 @@ function normalizeLoraTrainJob(raw) {
   } else {
     datasets = d.datasets.map((ds) => ({ ...ds, resolution: [...ds.resolution] }));
   }
+  if (datasets.length > 1) {
+    const shared = datasets[0];
+    datasets = datasets.map((ds) => ({
+      ...ds,
+      caption_dropout_rate: shared.caption_dropout_rate,
+      shuffle_tokens: shared.shuffle_tokens,
+      cache_latents_to_disk: shared.cache_latents_to_disk,
+      resolution: [...shared.resolution]
+    }));
+  }
   const legacyPath = asString(model.name_or_path, d.model.train_name_or_path);
   const trainPath = asString(model.train_name_or_path, legacyPath || d.model.train_name_or_path);
   return {
@@ -13138,6 +13193,15 @@ function normalizeLoraTrainJob(raw) {
       noise_scheduler: asString(train.noise_scheduler, d.train.noise_scheduler),
       optimizer: asString(train.optimizer, d.train.optimizer),
       lr: asNumber(train.lr, d.train.lr),
+      lr_scheduler: normalizeLrScheduler(train.lr_scheduler, d.train.lr_scheduler),
+      warmup_percent: (() => {
+        if (train.warmup_percent !== void 0) {
+          return normalizeWarmupPercent(train.warmup_percent, d.train.warmup_percent);
+        }
+        const legacy = asNumber(train.warmup_steps, -1);
+        if (legacy === 0) return 0;
+        return d.train.warmup_percent;
+      })(),
       dtype: asString(train.dtype, d.train.dtype),
       skip_first_sample: asBool(train.skip_first_sample, d.train.skip_first_sample),
       disable_sampling: asBool(train.disable_sampling, d.train.disable_sampling),
@@ -13150,7 +13214,7 @@ function normalizeLoraTrainJob(raw) {
       name_or_path: trainPath,
       train_name_or_path: trainPath,
       arch: normalizeArch(model.arch),
-      quantize: asBool(model.quantize, d.model.quantize),
+      quantize: normalizeQuantizeMode(model.quantize, d.model.quantize),
       low_vram: asBool(model.low_vram, d.model.low_vram),
       layer_offload: asBool(model.layer_offload, d.model.layer_offload),
       layer_offload_percent: (() => {
@@ -13213,6 +13277,37 @@ function normalizeLoraTrainApp(raw) {
     huggingfaceToken: asString(o.huggingfaceToken, d.huggingfaceToken)
   };
 }
+function normalizeLoraTestDraft(raw, legacyComfyUiBatPath) {
+  const d = DEFAULT_LORA_TEST_DRAFT;
+  const o = asRecord(raw) ?? {};
+  let selectedLoraSteps = asNumberArray(o.selectedLoraSteps, []).map((n) => Math.round(n)).filter((n, i, arr) => Number.isFinite(n) && arr.indexOf(n) === i).sort((a, b) => a - b);
+  if (selectedLoraSteps.length === 0) {
+    const legacy = o.loraStep;
+    if (typeof legacy === "number" && Number.isFinite(legacy)) {
+      selectedLoraSteps = [Math.round(legacy)];
+    }
+  }
+  const draftBat = asString(o.comfyUiBatPath, "");
+  const migratedBat = draftBat || (legacyComfyUiBatPath || "").trim() || d.comfyUiBatPath;
+  return {
+    prompt: asString(o.prompt, d.prompt),
+    negative: asString(o.negative, d.negative),
+    steps: Math.max(1, Math.round(asNumber(o.steps, d.steps))),
+    cfg: asNumber(o.cfg, d.cfg),
+    seed: Math.round(asNumber(o.seed, d.seed)),
+    width: Math.max(64, Math.round(asNumber(o.width, d.width))),
+    height: Math.max(64, Math.round(asNumber(o.height, d.height))),
+    sampler: asString(o.sampler, d.sampler) || d.sampler,
+    scheduler: asString(o.scheduler, d.scheduler) || d.scheduler,
+    comfyUiBatPath: migratedBat,
+    ditPath: asString(o.ditPath, d.ditPath),
+    vaePath: asString(o.vaePath, d.vaePath),
+    clipLPath: asString(o.clipLPath, d.clipLPath),
+    t5Path: asString(o.t5Path, d.t5Path),
+    loraStrength: Math.min(2, Math.max(0, asNumber(o.loraStrength, d.loraStrength))),
+    selectedLoraSteps
+  };
+}
 function pythonInstallPathFromDownloadFolder(downloadFolder) {
   const trimmed = downloadFolder.trim();
   return trimmed ? join(trimmed, "python") : void 0;
@@ -13222,7 +13317,9 @@ function modelDownloadPathFromDownloadFolder(downloadFolder) {
   return trimmed ? join(trimmed, "models") : void 0;
 }
 function normalizeActiveView(value) {
-  return value === "loraTrain" ? "loraTrain" : "datasetEdit";
+  if (value === "loraTrain") return "loraTrain";
+  if (value === "loraTest") return "loraTest";
+  return "datasetEdit";
 }
 const LANGUAGES = [
   { code: "zh-TW", label: "繁體中文" },
@@ -13247,6 +13344,7 @@ const DEFAULT_SETTINGS = {
   datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
+  appendPositivePrompt: true,
   captionFormat: DEFAULT_CAPTION_FORMAT,
   wd14: { ...DEFAULT_WD14_SETTINGS },
   sidebarWidth: 260,
@@ -13258,7 +13356,9 @@ const DEFAULT_SETTINGS = {
   activeView: "datasetEdit",
   loraTrainJobs: [createDefaultLoraTrainJobPreset()],
   activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
-  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP }
+  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP },
+  loraTestDraft: { ...DEFAULT_LORA_TEST_DRAFT },
+  uiGpuMode: "auto"
 };
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 480;
@@ -13281,6 +13381,12 @@ function clampThumbnailWidth(n) {
 }
 function normalizeListViewMode(value) {
   return value === "thumbnails" ? "thumbnails" : "list";
+}
+function normalizeUiGpuMode(raw) {
+  const mode = raw?.uiGpuMode;
+  if (mode === "auto" || mode === "onboard" || mode === "software") return mode;
+  if (raw?.disableUiGpu === true) return "software";
+  return "auto";
 }
 function normalizeDatasetFolders(raw, lastFolder) {
   const seen = /* @__PURE__ */ new Set();
@@ -13338,10 +13444,13 @@ function normalizeSettings(raw) {
       }
     };
   }
+  const loraTrainAppRaw = merged.loraTrainApp && typeof merged.loraTrainApp === "object" ? merged.loraTrainApp : {};
+  const legacyComfyUiBatPath = typeof loraTrainAppRaw.comfyUiBatPath === "string" ? loraTrainAppRaw.comfyUiBatPath : "";
   return {
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
+    appendPositivePrompt: merged.appendPositivePrompt !== false,
     captionFormat: normalizeCaptionFormat(merged.captionFormat),
     wd14: normalizeWd14Settings(merged.wd14),
     model: merged.model ?? "",
@@ -13356,7 +13465,12 @@ function normalizeSettings(raw) {
     activeView: normalizeActiveView(merged.activeView),
     loraTrainJobs,
     activeLoraTrainJobId,
-    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp)
+    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp),
+    loraTestDraft: normalizeLoraTestDraft(
+      rawRecord.loraTestDraft ?? merged.loraTestDraft,
+      legacyComfyUiBatPath
+    ),
+    uiGpuMode: normalizeUiGpuMode(rawRecord)
   };
 }
 function CaptionEditor({
@@ -17372,301 +17486,6 @@ function DeleteConfirmDialog({ open, fileName, onConfirm, onCancel }) {
     }
   );
 }
-function DownloadFolderField({ value, onChange, disabled = false }) {
-  const browse = async () => {
-    const dir = await window.api.openFolder();
-    if (!dir) return;
-    onChange(dir);
-  };
-  const useDefault = async () => {
-    const path = await window.api.defaultDownloadFolder();
-    onChange(path);
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Download folder" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "text",
-          value,
-          onChange: (e) => onChange(e.target.value),
-          placeholder: "Empty = AppData\\Roaming\\Captioer",
-          spellCheck: false,
-          disabled
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browse(), disabled, children: "Browse" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void useDefault(), disabled, children: "Default" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
-      "Shared by Python install and model downloads. Uses ",
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { children: [
-        "{folder}",
-        "/python"
-      ] }),
-      " and",
-      " ",
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { children: [
-        "{folder}",
-        "/models"
-      ] }),
-      ". Empty defaults to",
-      " ",
-      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "AppData\\Roaming\\Captioer" }),
-      "."
-    ] })
-  ] });
-}
-const DEFAULT_HINT = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-  "Shared by Dataset Edit (WD14 tagging) and LoRA Train. Leave empty to use",
-  " ",
-  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "python" }),
-  " from PATH."
-] });
-function PythonExecutableField({
-  value,
-  onChange,
-  downloadFolder,
-  enabled = true,
-  hint = DEFAULT_HINT
-}) {
-  const [probeStatus, setProbeStatus] = reactExports.useState("checking");
-  const [probeMsg, setProbeMsg] = reactExports.useState(null);
-  const [installing, setInstalling] = reactExports.useState(false);
-  const [installMsg, setInstallMsg] = reactExports.useState(null);
-  const [installPct, setInstallPct] = reactExports.useState(0);
-  const probeTimer = reactExports.useRef(null);
-  const offProgress = reactExports.useRef(null);
-  const runProbe = async (pythonPath) => {
-    setProbeStatus("checking");
-    setProbeMsg(null);
-    try {
-      const result = await window.api.probePython(pythonPath.trim() || void 0);
-      setProbeStatus(result.status);
-      setProbeMsg(result.message);
-    } catch (err) {
-      setProbeStatus("error");
-      setProbeMsg(err instanceof Error ? err.message : String(err));
-    }
-  };
-  reactExports.useEffect(() => {
-    if (!enabled) return;
-    if (probeTimer.current) clearTimeout(probeTimer.current);
-    probeTimer.current = setTimeout(() => {
-      void runProbe(value);
-    }, 400);
-    return () => {
-      if (probeTimer.current) clearTimeout(probeTimer.current);
-    };
-  }, [value, enabled]);
-  reactExports.useEffect(() => {
-    return () => {
-      offProgress.current?.();
-      offProgress.current = null;
-    };
-  }, []);
-  const browsePython = async () => {
-    const file = await window.api.openFile({
-      title: "Select Python executable",
-      filters: [
-        { name: "Python", extensions: ["exe"] },
-        { name: "All Files", extensions: ["*"] }
-      ]
-    });
-    if (!file) return;
-    onChange(file);
-  };
-  const startInstall = async () => {
-    if (installing) return;
-    setInstalling(true);
-    setInstallMsg("Starting…");
-    setInstallPct(0);
-    offProgress.current?.();
-    offProgress.current = window.api.onPythonInstallProgress((p) => {
-      setInstallMsg(p.message);
-      setInstallPct(p.pct);
-    });
-    try {
-      const result = await window.api.installPython({
-        installPath: pythonInstallPathFromDownloadFolder(downloadFolder)
-      });
-      if (result.ok && result.pythonPath) {
-        setInstallMsg(null);
-        onChange(result.pythonPath);
-      } else {
-        setInstallMsg(null);
-        setProbeStatus("error");
-        setProbeMsg(result.message || "Install failed");
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setInstallMsg(null);
-      setProbeStatus("error");
-      setProbeMsg(msg);
-    } finally {
-      offProgress.current?.();
-      offProgress.current = null;
-      setInstalling(false);
-    }
-  };
-  const cancelInstall = async () => {
-    await window.api.cancelPythonInstall();
-    setInstalling(false);
-    setInstallMsg(null);
-    setProbeMsg("Cancelled");
-    setProbeStatus("error");
-  };
-  const showDownload = !installing && (probeStatus === "missingPython" || probeStatus === "missingPackages" || probeStatus === "error");
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "python-executable-field", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Python executable" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "text",
-            value,
-            onChange: (e) => onChange(e.target.value),
-            placeholder: "e.g. C:\\Python311\\python.exe or python",
-            spellCheck: false,
-            disabled: installing
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browsePython(), disabled: installing, children: "Browse" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "field", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row python-probe-row", children: [
-      probeStatus === "checking" && !installing && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Checking Python…" }),
-      !installing && probeStatus === "ready" && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: probeMsg }),
-      !installing && (probeStatus === "missingPython" || probeStatus === "missingPackages" || probeStatus === "error") && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: probeMsg }),
-      showDownload && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => void startInstall(), children: "Download" }),
-      installing && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
-          installMsg || "Installing…",
-          installPct > 0 ? ` (${installPct}%)` : ""
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => void cancelInstall(), children: "Cancel" })
-      ] })
-    ] }) }),
-    hint != null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: hint })
-  ] });
-}
-function LoraTrainSettingsDialog({ open, settings, onClose, onSave }) {
-  const [draft, setDraft] = reactExports.useState(() => normalizeLoraTrainApp(settings));
-  const [saving, setSaving] = reactExports.useState(false);
-  reactExports.useEffect(() => {
-    if (!open) return;
-    setDraft(normalizeLoraTrainApp(settings));
-  }, [open, settings]);
-  if (!open) return null;
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave(normalizeLoraTrainApp(draft));
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-  const resetDefaults = () => {
-    setDraft({ ...DEFAULT_LORA_TRAIN_APP });
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "modal-backdrop",
-      onMouseDown: (e) => {
-        if (e.target === e.currentTarget) onClose();
-      },
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "div",
-        {
-          className: "modal modal-wide",
-          role: "dialog",
-          "aria-labelledby": "lora-settings-title",
-          onMouseDown: (e) => e.stopPropagation(),
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "lora-settings-title", children: "LoRA Train Settings" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Captioer native Krea 2 trainer preferences. Job hyper-parameters live on the LoRA Train panel. Train on Raw, use LoRA on Turbo." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              DownloadFolderField,
-              {
-                value: draft.downloadFolder,
-                onChange: (downloadFolder) => setDraft((prev) => ({ ...prev, downloadFolder }))
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              PythonExecutableField,
-              {
-                value: draft.pythonPath,
-                onChange: (pythonPath) => setDraft((prev) => ({ ...prev, pythonPath })),
-                downloadFolder: draft.downloadFolder,
-                enabled: open,
-                hint: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-                  "Same setting as Dataset Edit Settings. Download installs CUDA torch 2.9.1 (cu128), packages from ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "trainer/requirements.txt" }),
-                  " and",
-                  " ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "trainer/requirements-wd14.txt" }),
-                  ", and on Windows",
-                  " ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "triton-windows" }),
-                  " and ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "flash-attn" }),
-                  " (FA2 wheel)."
-                ] })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Hugging Face token (for gated Krea models)" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "password",
-                  value: draft.huggingfaceToken,
-                  onChange: (e) => setDraft((prev) => ({ ...prev, huggingfaceToken: e.target.value })),
-                  placeholder: "hf_… from huggingface.co/settings/tokens",
-                  autoComplete: "off"
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
-                "Also open",
-                " ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "a",
-                  {
-                    href: "https://huggingface.co/krea/Krea-2-Raw",
-                    target: "_blank",
-                    rel: "noreferrer",
-                    children: "krea/Krea-2-Raw"
-                  }
-                ),
-                " ",
-                "(and Turbo) while logged in and click Agree — token alone is not enough."
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetDefaults, children: "Reset defaults" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, children: "Cancel" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  type: "button",
-                  className: "primary",
-                  onClick: () => void handleSave(),
-                  disabled: saving,
-                  children: saving ? "Saving…" : "Save"
-                }
-              )
-            ] })
-          ]
-        }
-      )
-    }
-  );
-}
 function serializeTrainConfig(job, extras) {
   const payload = {
     ...job,
@@ -17986,30 +17805,36 @@ function ResourceMonitorPane({ device }) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-monitor-apps", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(MonitorHeader, { label: "VRAM apps" }),
-          appsAll.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無佔用行程" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-monitor-app-list", ref: appListRef, children: apps.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "li",
-            {
-              className: "lora-monitor-app-row",
-              title: `PID ${app.pid}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-app-name", children: app.name }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-app-mem", children: formatVramAppMem(app.memUsedMiB) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "button",
-                    className: "lora-monitor-app-kill",
-                    disabled: !app.killable || killingPid === app.pid,
-                    title: app.killable ? `結束 ${app.name}` : "系統行程，無法結束",
-                    "aria-label": app.killable ? `結束 ${app.name}` : "系統行程，無法結束",
-                    onClick: () => void onKill(app.pid),
-                    children: "×"
-                  }
-                )
-              ]
-            },
-            app.pid
-          )) })
+          appsAll.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無佔用行程" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-monitor-app-list", ref: appListRef, children: apps.map((app) => {
+            const isSelf = app.name === "Captioer" && !app.killable;
+            const isProtected = !app.killable && !isSelf;
+            const killHint = app.killable ? `結束 ${app.name}` : isSelf ? "Captioer 本體，無法結束" : "系統行程，無法結束";
+            const nameClass = isSelf ? "lora-monitor-app-name lora-monitor-app-name--self" : isProtected ? "lora-monitor-app-name lora-monitor-app-name--protected" : "lora-monitor-app-name";
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "li",
+              {
+                className: "lora-monitor-app-row",
+                title: `PID ${app.pid}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: nameClass, children: app.name }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-monitor-app-mem", children: formatVramAppMem(app.memUsedMiB) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      className: "lora-monitor-app-kill",
+                      disabled: !app.killable || killingPid === app.pid,
+                      title: killHint,
+                      "aria-label": killHint,
+                      onClick: () => void onKill(app.pid),
+                      children: "×"
+                    }
+                  )
+                ]
+              },
+              app.pid
+            );
+          }) })
         ] })
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無法讀取 GPU 狀態" })
     ] })
@@ -18052,6 +17877,7 @@ function folderLabel$1(dir) {
 }
 const TRAIN_LOG_MAX_LINES = 2e3;
 const LOSS_HISTORY_MAX_POINTS = 2e3;
+const LOSS_SPIKE_MAX = 200;
 function cumulativeAvgLoss(points, endIndex) {
   let sum = 0;
   for (let i = 0; i <= endIndex; i++) sum += points[i].loss;
@@ -18127,10 +17953,10 @@ function SamplePromptStrip({
 const SECTIONS = [
   { id: "basics", label: "Basics", hint: "Name, output, models" },
   { id: "dataset", label: "Dataset", hint: "Images + captions" },
-  { id: "train", label: "Train", hint: "Steps, LR, optimizer" },
+  { id: "train", label: "Train", hint: "Steps, LR, save, VRAM" },
   { id: "lora", label: "LoRA", hint: "Rank & alpha" },
   { id: "sample", label: "Sample", hint: "Preview during train" },
-  { id: "advanced", label: "Advanced", hint: "Save, EMA, VRAM" }
+  { id: "advanced", label: "Advanced", hint: "EMA, layer offload" }
 ];
 const RESOLUTION_OPTIONS = [256, 512, 768, 1024, 1280, 1328, 1536, 2048];
 const SEC_PER_STEP_AVG_WINDOW = 10;
@@ -18147,8 +17973,10 @@ function Field({
 }
 function LossChart({
   points,
+  spikes = [],
   showLoss = true,
-  showAvgLoss = true
+  showAvgLoss = true,
+  onSpikeClick
 }) {
   const wrapRef = reactExports.useRef(null);
   const [size, setSize] = reactExports.useState({ w: 640, h: 220 });
@@ -18175,6 +18003,8 @@ function LossChart({
   const padB = 28;
   const plotW = Math.max(1, vbW - padL - padR);
   const plotH = Math.max(1, vbH - padT - padB);
+  const thumbSize = 32;
+  const thumbGap = 6;
   if (points.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-chart-wrap", ref: wrapRef, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -18229,6 +18059,15 @@ function LossChart({
       }
     }
   }
+  for (const s of spikes) {
+    if (!showLoss) break;
+    if (s.step < minStep) minStep = s.step;
+    if (s.step > maxStep) maxStep = s.step;
+    if (s.loss > dataMaxLoss) {
+      dataMaxLoss = s.loss;
+      hasVisible = true;
+    }
+  }
   if (!hasVisible) dataMaxLoss = 0.1;
   const stepSpan = Math.max(1, maxStep - minStep);
   const lossMin = 0;
@@ -18252,56 +18091,97 @@ function LossChart({
   for (let i = 0; i <= 10; i++) {
     xTicks.push(Math.round(minStep + i / 10 * (maxStep - minStep)));
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-train-loss-chart-wrap", ref: wrapRef, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "svg",
-    {
-      className: "lora-train-loss-chart",
-      viewBox: `0 0 ${vbW} ${vbH}`,
-      width: vbW,
-      height: vbH,
-      role: "img",
-      "aria-label": `Loss chart, latest ${last.loss.toFixed(4)}, avg ${lastAvg.loss.toFixed(4)} at step ${last.step}`,
-      preserveAspectRatio: "none",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: padL, y: padT, width: plotW, height: plotH, className: "lora-train-loss-plot-bg" }),
-        yTicks.map((v, i) => {
-          const y = toY(v);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "line",
+  const visibleSpikes = showLoss ? spikes.filter((s) => s.step >= minStep && s.step <= maxStep && Number.isFinite(s.loss)) : [];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-chart-wrap", ref: wrapRef, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "svg",
+      {
+        className: "lora-train-loss-chart",
+        viewBox: `0 0 ${vbW} ${vbH}`,
+        width: vbW,
+        height: vbH,
+        role: "img",
+        "aria-label": `Loss chart, latest ${last.loss.toFixed(4)}, avg ${lastAvg.loss.toFixed(4)} at step ${last.step}`,
+        preserveAspectRatio: "none",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: padL, y: padT, width: plotW, height: plotH, className: "lora-train-loss-plot-bg" }),
+          yTicks.map((v, i) => {
+            const y = toY(v);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "line",
+                {
+                  x1: padL,
+                  y1: y,
+                  x2: padL + plotW,
+                  y2: y,
+                  className: "lora-train-loss-grid"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: padL - 8, y: y + 3, textAnchor: "end", className: "lora-train-loss-axis", children: v.toFixed(3) })
+            ] }, `y-${i}`);
+          }),
+          xTicks.map((v, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "text",
+            {
+              x: toX(v),
+              y: padT + plotH + 18,
+              textAnchor: "middle",
+              className: "lora-train-loss-axis",
+              children: v
+            },
+            `x-${i}`
+          )),
+          showLoss ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: polyline, fill: "none", className: "lora-train-loss-line" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: lastX, cy: lastY, r: 3.5, className: "lora-train-loss-dot" })
+          ] }) : null,
+          showAvgLoss ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: avgPolyline, fill: "none", className: "lora-train-loss-line-avg" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: lastAvgX, cy: lastAvgY, r: 3, className: "lora-train-loss-dot-avg" })
+          ] }) : null,
+          visibleSpikes.map((s) => {
+            const cx = toX(s.step);
+            const cy = toY(s.loss);
+            return /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "circle",
               {
-                x1: padL,
-                y1: y,
-                x2: padL + plotW,
-                y2: y,
-                className: "lora-train-loss-grid"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: padL - 8, y: y + 3, textAnchor: "end", className: "lora-train-loss-axis", children: v.toFixed(3) })
-          ] }, `y-${i}`);
-        }),
-        xTicks.map((v, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "text",
-          {
-            x: toX(v),
-            y: padT + plotH + 18,
-            textAnchor: "middle",
-            className: "lora-train-loss-axis",
-            children: v
+                cx,
+                cy,
+                r: 4.5,
+                className: "lora-train-loss-spike-dot"
+              },
+              `spike-dot-${s.step}-${s.path}`
+            );
+          })
+        ]
+      }
+    ),
+    visibleSpikes.map((s) => {
+      const cx = toX(s.step);
+      const cy = toY(s.loss);
+      const placeLeft = cx + thumbGap + thumbSize > vbW - 4;
+      const left = placeLeft ? Math.max(4, cx - thumbGap - thumbSize) : Math.min(vbW - thumbSize - 4, cx + thumbGap);
+      const top = Math.max(4, Math.min(vbH - thumbSize - 4, cy - thumbSize / 2));
+      const name = s.path.split(/[/\\]/).pop() ?? s.path;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "lora-train-loss-spike-thumb",
+          title: `Step ${s.step} · loss ${s.loss.toFixed(4)}
+${name}`,
+          style: { left, top, width: thumbSize, height: thumbSize },
+          onClick: (e) => {
+            e.stopPropagation();
+            onSpikeClick?.(s);
           },
-          `x-${i}`
-        )),
-        showLoss ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: polyline, fill: "none", className: "lora-train-loss-line" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: lastX, cy: lastY, r: 3.5, className: "lora-train-loss-dot" })
-        ] }) : null,
-        showAvgLoss ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: avgPolyline, fill: "none", className: "lora-train-loss-line-avg" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: lastAvgX, cy: lastAvgY, r: 3, className: "lora-train-loss-dot-avg" })
-        ] }) : null
-      ]
-    }
-  ) });
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: window.api.toLocalUrl(s.path), alt: "", draggable: false })
+        },
+        `spike-thumb-${s.step}-${s.path}`
+      );
+    })
+  ] });
 }
 function ToggleField({
   label,
@@ -18391,6 +18271,7 @@ function NumberField({
 }
 function LoraTrainView({
   job,
+  jobId,
   appSettings,
   datasetFolders,
   onChange,
@@ -18407,6 +18288,7 @@ function LoraTrainView({
   const [progress, setProgress] = reactExports.useState(null);
   const [trainLogs, setTrainLogs] = reactExports.useState([]);
   const [lossHistory, setLossHistory] = reactExports.useState([]);
+  const [lossSpikes, setLossSpikes] = reactExports.useState([]);
   const [showLossCurve, setShowLossCurve] = reactExports.useState(true);
   const [showAvgLossCurve, setShowAvgLossCurve] = reactExports.useState(true);
   const [resultsTab, setResultsTab] = reactExports.useState("loss");
@@ -18414,6 +18296,7 @@ function LoraTrainView({
   const [sampleLoading, setSampleLoading] = reactExports.useState(false);
   const [sampleError, setSampleError] = reactExports.useState(null);
   const [sampleLightboxPath, setSampleLightboxPath] = reactExports.useState(null);
+  const [spikeLightbox, setSpikeLightbox] = reactExports.useState(null);
   const [trainStartedAt, setTrainStartedAt] = reactExports.useState(null);
   const [finalElapsedMs, setFinalElapsedMs] = reactExports.useState(null);
   const [nowTick, setNowTick] = reactExports.useState(() => Date.now());
@@ -18459,6 +18342,39 @@ function LoraTrainView({
     stepTimingRef.current = [];
     setSecPerStepAvg(null);
   }, []);
+  const exitTrainSessionUi = reactExports.useCallback(() => {
+    setShowTrainSession(false);
+    setResultsTab("loss");
+    setSampleLightboxPath(null);
+    setSpikeLightbox(null);
+  }, []);
+  const resetTrainSessionData = reactExports.useCallback(() => {
+    setTrainComplete(false);
+    setTrainFailed(false);
+    setFinalElapsedMs(null);
+    setTrainStartedAt(null);
+    trainStartedAtRef.current = null;
+    resetStepTiming();
+    setLossHistory([]);
+    setLossSpikes([]);
+    setSpikeLightbox(null);
+    setTrainLogs([]);
+    setProgress(null);
+    setSampleLoading(false);
+    setSampleError(null);
+    setTrainSamples([]);
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current);
+      sampleRefreshTimer.current = null;
+    }
+  }, [resetStepTiming]);
+  const jobIdRef = reactExports.useRef(jobId);
+  reactExports.useEffect(() => {
+    if (jobIdRef.current === jobId) return;
+    jobIdRef.current = jobId;
+    exitTrainSessionUi();
+    resetTrainSessionData();
+  }, [jobId, exitTrainSessionUi, resetTrainSessionData]);
   const recordStepTiming = reactExports.useCallback((step) => {
     const now2 = Date.now();
     const hist = stepTimingRef.current;
@@ -18699,6 +18615,15 @@ function LoraTrainView({
       );
       queueRefreshTrainSamples(250);
     });
+    const offSpike = window.api.onTrainLossSpike((s) => {
+      if (!s.path?.trim() || !Number.isFinite(s.step) || !Number.isFinite(s.loss)) return;
+      setLossSpikes((prev) => {
+        const next = prev.length >= LOSS_SPIKE_MAX ? prev.slice(-LOSS_SPIKE_MAX + 1) : prev.slice();
+        const exists = next.some((x2) => x2.step === s.step && x2.path === s.path);
+        if (!exists) next.push({ step: s.step, loss: s.loss, path: s.path });
+        return next;
+      });
+    });
     const offLog = window.api.onTrainLog(({ line }) => {
       setTrainLogs((prev) => {
         const next = prev.length >= TRAIN_LOG_MAX_LINES ? prev.slice(-TRAIN_LOG_MAX_LINES + 1) : prev.slice();
@@ -18782,6 +18707,7 @@ function LoraTrainView({
     });
     return () => {
       offProg();
+      offSpike();
       offLog();
       offDone();
       offErr();
@@ -18844,7 +18770,15 @@ function LoraTrainView({
     };
   }, [draft, onChange]);
   const ds0 = draft.datasets[0];
-  const hasDataset = Boolean(ds0.folder_path?.trim());
+  const datasetEntries = draft.datasets;
+  const filledDatasets = datasetEntries.filter((ds) => Boolean(ds.folder_path?.trim()));
+  const hasDataset = filledDatasets.length > 0;
+  const patchSharedDataset = (updater) => {
+    patch((p) => ({
+      ...p,
+      datasets: p.datasets.map((ds) => updater(ds))
+    }));
+  };
   const statusForRole = (role) => modelStatuses.find((s) => s.role === role);
   const statusLabel = (status) => {
     if (!status) return modelChecking ? "Checking…" : "—";
@@ -18948,31 +18882,49 @@ function LoraTrainView({
     patch((prev) => ({ ...prev, training_folder: dir }));
   };
   const scanBuckets = async () => {
-    const ds = draftRef.current.datasets[0];
-    if (!ds?.folder_path?.trim()) {
+    const folders = draftRef.current.datasets.map((ds2) => ds2.folder_path?.trim() || "").filter(Boolean);
+    if (folders.length === 0) {
       setBucketScanError("Choose a dataset folder first");
       return;
     }
+    const ds = draftRef.current.datasets[0];
+    const resolutions = ds?.resolution?.length ? ds.resolution : [1024];
     setBucketScanBusy(true);
     setBucketScanError(null);
     try {
-      const resolutions = ds.resolution.length ? ds.resolution : [1024];
-      const result = await window.api.scanArBuckets({
-        folder: ds.folder_path,
-        resolutions,
-        pythonPath: appSettings.pythonPath.trim() || void 0
-      });
-      if (!result.ok) {
-        setBucketCounts(null);
-        setBucketScanMeta(null);
-        setBucketScanError(result.error || "Scan failed");
-        return;
+      const merged = /* @__PURE__ */ new Map();
+      let imageCount = 0;
+      let forcedUpscale = 0;
+      const folderNotes = [];
+      for (const folder of folders) {
+        const result = await window.api.scanArBuckets({
+          folder,
+          resolutions,
+          pythonPath: appSettings.pythonPath.trim() || void 0
+        });
+        if (!result.ok) {
+          setBucketCounts(null);
+          setBucketScanMeta(null);
+          setBucketScanError(result.error || `Scan failed for ${folderLabel$1(folder)}`);
+          return;
+        }
+        const n = result.imageCount ?? 0;
+        imageCount += n;
+        forcedUpscale += result.forcedUpscale ?? 0;
+        folderNotes.push(`${folderLabel$1(folder)}: ${n}`);
+        for (const row of result.countsOrdered || []) {
+          merged.set(row.bucket, (merged.get(row.bucket) || 0) + row.count);
+        }
       }
-      setBucketCounts(result.countsOrdered || []);
+      const countsOrdered = [...merged.entries()].map(([bucket, count]) => ({ bucket, count })).sort((a, b) => a.bucket.localeCompare(b.bucket));
+      setBucketCounts(countsOrdered);
       setBucketScanMeta({
-        imageCount: result.imageCount ?? 0,
-        forcedUpscale: result.forcedUpscale ?? 0
+        imageCount,
+        forcedUpscale
       });
+      if (folderNotes.length > 1) {
+        onStatus(`Buckets: ${folderNotes.join(" · ")}`);
+      }
     } catch (err) {
       setBucketScanError(err instanceof Error ? err.message : String(err));
       setBucketCounts(null);
@@ -18981,41 +18933,10 @@ function LoraTrainView({
       setBucketScanBusy(false);
     }
   };
-  const clearTrainSessionUi = () => {
-    setShowTrainSession(false);
-    setTrainComplete(false);
-    setTrainFailed(false);
-    setResultsTab("loss");
-    setSampleLightboxPath(null);
-    setFinalElapsedMs(null);
-    setTrainStartedAt(null);
-    trainStartedAtRef.current = null;
-    resetStepTiming();
-    setLossHistory([]);
-    setTrainLogs([]);
-    setProgress(null);
-    setSampleLoading(false);
-    setSampleError(null);
-    setTrainSamples([]);
-    if (sampleRefreshTimer.current) {
-      clearTimeout(sampleRefreshTimer.current);
-      sampleRefreshTimer.current = null;
-    }
-  };
-  const requestRestartTrain = () => {
-    if (outputCheckpoint) {
-      setShowRestartWarning(true);
-      return;
-    }
-    void startTrain("restart");
-  };
-  const confirmRestartTrain = () => {
-    setShowRestartWarning(false);
-    void startTrain("restart");
-  };
   const startTrain = async (mode = "restart") => {
     const normalized = normalizeLoraTrainJob(draftRef.current);
-    if (!normalized.datasets[0]?.folder_path) {
+    const hasFolder = normalized.datasets.some((ds) => Boolean(ds.folder_path?.trim()));
+    if (!hasFolder) {
       setActiveSection("dataset");
       onStatus("Choose a DatasetEdit preset first", true);
       return;
@@ -19033,10 +18954,7 @@ function LoraTrainView({
     }
     const py = appSettings.pythonPath.trim();
     userStoppedTrainRef.current = false;
-    setProgress(null);
-    setTrainLogs([]);
-    setLossHistory([]);
-    resetStepTiming();
+    resetTrainSessionData();
     const started = Date.now();
     setTrainStartedAt(started);
     trainStartedAtRef.current = started;
@@ -19063,7 +18981,8 @@ function LoraTrainView({
     });
     if (!result.ok) {
       setTraining(false);
-      clearTrainSessionUi();
+      exitTrainSessionUi();
+      resetTrainSessionData();
       onStatus(result.error || "Failed to start training", true);
       void refreshResumeTarget();
     }
@@ -19072,13 +18991,32 @@ function LoraTrainView({
     userStoppedTrainRef.current = true;
     await window.api.stopTrain();
     setTraining(false);
-    clearTrainSessionUi();
+    const started = trainStartedAtRef.current;
+    if (started != null) {
+      setFinalElapsedMs((prev) => prev != null ? prev : Date.now() - started);
+    }
+    setTrainFailed(true);
+    exitTrainSessionUi();
     onStatus("Training stopped");
     void refreshResumeTarget();
   };
   const backFromTrainSession = () => {
-    clearTrainSessionUi();
+    exitTrainSessionUi();
     void refreshResumeTarget();
+  };
+  const viewTrainResults = () => {
+    setShowTrainSession(true);
+  };
+  const requestRestartTrain = () => {
+    if (outputCheckpoint) {
+      setShowRestartWarning(true);
+      return;
+    }
+    void startTrain("restart");
+  };
+  const confirmRestartTrain = () => {
+    setShowRestartWarning(false);
+    void startTrain("restart");
   };
   const elapsedMs = finalElapsedMs !== null ? finalElapsedMs : trainStartedAt !== null ? Math.max(0, nowTick - trainStartedAt) : 0;
   const etaMs = trainComplete || trainFailed ? 0 : progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0 ? (progress.total - progress.step) * elapsedMs / progress.step : null;
@@ -19160,6 +19098,17 @@ function LoraTrainView({
     ]
   );
   reactExports.useEffect(() => {
+    if (!spikeLightbox) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSpikeLightbox(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [spikeLightbox]);
+  reactExports.useEffect(() => {
     if (resultsTab !== "sample") setSampleLightboxPath(null);
   }, [resultsTab]);
   reactExports.useEffect(() => {
@@ -19214,7 +19163,7 @@ function LoraTrainView({
     return entry?.prompt?.trim() || "";
   };
   const sectionTitle = SECTIONS.find((s) => s.id === activeSection)?.label ?? "";
-  const trainSessionTitle = trainComplete ? "Training done" : trainFailed ? "Training failed" : "Training...";
+  const trainSessionTitle = trainComplete ? "Training done" : trainFailed ? userStoppedTrainRef.current ? "Training stopped" : "Training failed" : "Training...";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train", children: [
     showBanner && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-model-banner", role: "status", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
@@ -19242,57 +19191,41 @@ function LoraTrainView({
             "ETA: ",
             etaMs !== null ? formatHms(etaMs) : "--:--:--"
           ] })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-nav-items", children: [
-          SECTIONS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              className: `lora-nav-item${activeSection === s.id ? " active" : ""}`,
-              "aria-current": activeSection === s.id ? "page" : void 0,
-              onClick: () => setActiveSection(s.id),
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-nav-label", children: s.label }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-nav-hint", children: s.hint })
-              ]
-            },
-            s.id
-          )),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lora-nav-note", children: [
-            "Required: DatasetEdit preset + Train base (Raw)",
-            !hasDataset ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              " ",
-              "·",
-              " ",
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  type: "button",
-                  className: "linkish",
-                  onClick: () => setActiveSection("dataset"),
-                  children: "Set dataset"
-                }
-              )
-            ] }) : null
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-nav-actions", children: training ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => void stopTrain(), children: "Stop" }) : showTrainSession ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: backFromTrainSession, children: "Back" }) : outputCheckpoint?.kind === "resume" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestRestartTrain, children: "Restart" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              className: "primary",
-              onClick: () => void startTrain("resume"),
-              children: [
-                "Resume from ",
-                outputCheckpoint.step
-              ]
-            }
-          )
-        ] }) : outputCheckpoint?.kind === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestRestartTrain, children: "Restart" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", disabled: true, "aria-disabled": "true", children: "Train Done" })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: requestRestartTrain, children: "Start Train" }) })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-nav-items", children: SECTIONS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            className: `lora-nav-item${activeSection === s.id ? " active" : ""}`,
+            "aria-current": activeSection === s.id ? "page" : void 0,
+            onClick: () => setActiveSection(s.id),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-nav-label", children: s.label }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-nav-hint", children: s.hint })
+            ]
+          },
+          s.id
+        )) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-nav-actions", children: training ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => void stopTrain(), children: "Stop" }) : showTrainSession ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: backFromTrainSession, children: "Back" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          lossHistory.length > 0 || trainLogs.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: viewTrainResults, children: "View results" }) : null,
+          outputCheckpoint?.kind === "resume" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestRestartTrain, children: "Restart" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: "primary",
+                onClick: () => void startTrain("resume"),
+                children: [
+                  "Resume from ",
+                  outputCheckpoint.step
+                ]
+              }
+            )
+          ] }) : outputCheckpoint?.kind === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestRestartTrain, children: "Restart" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", disabled: true, "aria-disabled": "true", children: "Train Done" })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: requestRestartTrain, children: "Start Train" })
+        ] }) })
       ] }),
       showTrainSession ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-mid", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-loss-panel", children: [
@@ -19373,8 +19306,10 @@ function LoraTrainView({
             LossChart,
             {
               points: lossHistory,
+              spikes: lossSpikes,
               showLoss: showLossCurve,
-              showAvgLoss: showAvgLossCurve
+              showAvgLoss: showAvgLossCurve,
+              onSpikeClick: (s) => setSpikeLightbox(s)
             }
           ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-train-sample-panel", children: [
             sampleError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: sampleError }) : null,
@@ -19530,45 +19465,106 @@ function LoraTrainView({
           )
         ] }),
         activeSection === "dataset" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            Field,
-            {
-              label: "Dataset",
-              hint: "Select a dataset preset from DatasetEdit (images with matching .txt captions)",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-datasets", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-datasets-header", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Datasets" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Each row is a DatasetEdit folder with its own repeats. Resolution / dropout / shuffle / cache are shared." })
+            ] }),
+            datasetEntries.map((ds, index2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-dataset-row", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: index2 === 0 ? "Folder" : `Folder ${index2 + 1}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "select",
                 {
                   className: "lora-folder-pick",
-                  "aria-label": "DatasetEdit preset",
-                  disabled: training || datasetFolders.length === 0 && !ds0.folder_path,
-                  value: ds0.folder_path || "",
+                  "aria-label": `DatasetEdit preset ${index2 + 1}`,
+                  disabled: training || datasetFolders.length === 0 && !ds.folder_path,
+                  value: ds.folder_path || "",
                   onChange: (e) => {
                     const v = e.target.value;
                     patch((p) => ({
                       ...p,
                       datasets: p.datasets.map(
-                        (ds, i) => i === 0 ? { ...ds, folder_path: v } : ds
+                        (row, i) => i === index2 ? { ...row, folder_path: v } : row
                       )
                     }));
                   },
-                  title: ds0.folder_path || void 0,
+                  title: ds.folder_path || void 0,
                   children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: datasetFolders.length === 0 ? "No DatasetEdit presets — add one in DatasetEdit" : "Select DatasetEdit preset…" }),
-                    ds0.folder_path && !datasetFolders.includes(ds0.folder_path) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: ds0.folder_path, children: [
-                      folderLabel$1(ds0.folder_path),
+                    ds.folder_path && !datasetFolders.includes(ds.folder_path) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: ds.folder_path, children: [
+                      folderLabel$1(ds.folder_path),
                       " (not in DatasetEdit)"
                     ] }) : null,
                     datasetFolders.map((dir) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: dir, title: dir, children: folderLabel$1(dir) }, dir))
                   ]
                 }
+              ) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Repeats", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                NumberField,
+                {
+                  min: 1,
+                  value: ds.num_repeats,
+                  emptyFallback: 1,
+                  disabled: training,
+                  onChange: (n) => patch((p) => ({
+                    ...p,
+                    datasets: p.datasets.map(
+                      (row, i) => i === index2 ? { ...row, num_repeats: Math.max(1, Math.round(n)) } : row
+                    )
+                  }))
+                }
+              ) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: "lora-prompt-remove",
+                  disabled: training || datasetEntries.length <= 1,
+                  title: datasetEntries.length <= 1 ? "At least one dataset row is required" : "Remove dataset",
+                  onClick: () => patch((p) => ({
+                    ...p,
+                    datasets: p.datasets.length <= 1 ? p.datasets : p.datasets.filter((_, i) => i !== index2)
+                  })),
+                  children: "−"
+                }
               )
-            }
-          ),
+            ] }, `ds-${index2}`)),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-prompt-add", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                disabled: training,
+                onClick: () => patch((p) => {
+                  const base = p.datasets[0] ?? {
+                    caption_dropout_rate: 0.05,
+                    shuffle_tokens: false,
+                    cache_latents_to_disk: true,
+                    resolution: [1024]
+                  };
+                  return {
+                    ...p,
+                    datasets: [
+                      ...p.datasets,
+                      {
+                        folder_path: "",
+                        num_repeats: 1,
+                        caption_ext: "txt",
+                        caption_dropout_rate: base.caption_dropout_rate,
+                        shuffle_tokens: base.shuffle_tokens,
+                        cache_latents_to_disk: base.cache_latents_to_disk,
+                        resolution: [...base.resolution]
+                      }
+                    ]
+                  };
+                }),
+                children: "Add dataset"
+              }
+            ) })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Field,
             {
               label: "Resolutions",
-              hint: "Enabled resolution tiers and pixel budget. Always AR bucket (step=64); long side picks closest tier without unnecessary upscale.",
+              hint: "Shared for all datasets. Always AR bucket (step=64); long side picks closest tier without unnecessary upscale.",
               children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-resolution-grid", role: "group", "aria-label": "Resolutions", children: RESOLUTION_OPTIONS.map((size) => {
                 const on2 = ds0.resolution.includes(size);
                 return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -19589,24 +19585,20 @@ function LoraTrainView({
                             setBucketCounts(null);
                             setBucketScanMeta(null);
                             setBucketScanError(null);
-                            patch((p) => ({
-                              ...p,
-                              datasets: p.datasets.map((ds, i) => {
-                                if (i !== 0) return ds;
-                                const has = ds.resolution.includes(size);
-                                if (has) {
-                                  const next = ds.resolution.filter((r) => r !== size);
-                                  return {
-                                    ...ds,
-                                    resolution: next.length > 0 ? next : [size]
-                                  };
-                                }
+                            patchSharedDataset((ds) => {
+                              const has = ds.resolution.includes(size);
+                              if (has) {
+                                const next = ds.resolution.filter((r) => r !== size);
                                 return {
                                   ...ds,
-                                  resolution: [...ds.resolution, size].sort((a, b) => a - b)
+                                  resolution: next.length > 0 ? next : [size]
                                 };
-                              })
-                            }));
+                              }
+                              return {
+                                ...ds,
+                                resolution: [...ds.resolution, size].sort((a, b) => a - b)
+                              };
+                            });
                           },
                           children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
                         }
@@ -19624,7 +19616,7 @@ function LoraTrainView({
               "button",
               {
                 type: "button",
-                disabled: training || bucketScanBusy || !ds0.folder_path.trim(),
+                disabled: training || bucketScanBusy || !hasDataset,
                 onClick: () => void scanBuckets(),
                 children: bucketScanBusy ? "Scanning…" : "Scan buckets"
               }
@@ -19632,8 +19624,9 @@ function LoraTrainView({
             bucketScanError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: bucketScanError }) : null,
             bucketScanMeta ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
               bucketScanMeta.imageCount,
-              " images · forced upscale",
-              " ",
+              " images",
+              filledDatasets.length > 1 ? ` · ${filledDatasets.length} folders` : "",
+              " · forced upscale ",
               bucketScanMeta.forcedUpscale,
               " · tiers",
               " ",
@@ -19653,12 +19646,7 @@ function LoraTrainView({
               value: ds0.caption_dropout_rate,
               emptyFallback: 0,
               disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                datasets: p.datasets.map(
-                  (ds, i) => i === 0 ? { ...ds, caption_dropout_rate: n } : ds
-                )
-              }))
+              onChange: (n) => patchSharedDataset((ds) => ({ ...ds, caption_dropout_rate: n }))
             }
           ) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19667,12 +19655,7 @@ function LoraTrainView({
               label: "Shuffle caption tokens",
               checked: ds0.shuffle_tokens,
               disabled: training,
-              onChange: (v) => patch((p) => ({
-                ...p,
-                datasets: p.datasets.map(
-                  (ds, i) => i === 0 ? { ...ds, shuffle_tokens: v } : ds
-                )
-              }))
+              onChange: (v) => patchSharedDataset((ds) => ({ ...ds, shuffle_tokens: v }))
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19682,12 +19665,7 @@ function LoraTrainView({
               hint: "Encode images once with VAE. Off = encode every step (high VRAM, ~40GB+)",
               checked: ds0.cache_latents_to_disk,
               disabled: training,
-              onChange: (v) => patch((p) => ({
-                ...p,
-                datasets: p.datasets.map(
-                  (ds, i) => i === 0 ? { ...ds, cache_latents_to_disk: v } : ds
-                )
-              }))
+              onChange: (v) => patchSharedDataset((ds) => ({ ...ds, cache_latents_to_disk: v }))
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19705,95 +19683,186 @@ function LoraTrainView({
           )
         ] }),
         activeSection === "train" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Training steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              min: 1,
-              value: draft.train.steps,
-              emptyFallback: 1,
-              disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                train: { ...p.train, steps: n }
-              }))
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Batch size", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              min: 1,
-              value: draft.train.batch_size,
-              emptyFallback: 1,
-              disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                train: { ...p.train, batch_size: n }
-              }))
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Learning rate", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              min: 0,
-              step: "any",
-              value: draft.train.lr,
-              emptyFallback: 0,
-              disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                train: { ...p.train, lr: n }
-              }))
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Optimizer", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: draft.train.optimizer,
-              disabled: training,
-              onChange: (e) => patch((p) => ({
-                ...p,
-                train: { ...p.train, optimizer: e.target.value }
-              })),
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adamw8bit", children: "adamw8bit" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adamw", children: "adamw" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prodigy", children: "prodigy" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adafactor", children: "adafactor" })
-              ]
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Precision (dtype)", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: draft.train.dtype,
-              disabled: training,
-              onChange: (e) => patch((p) => ({
-                ...p,
-                train: { ...p.train, dtype: e.target.value }
-              })),
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "bf16", children: "bf16" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp16", children: "fp16" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp32", children: "fp32" })
-              ]
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Gradient accumulation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              min: 1,
-              value: draft.train.gradient_accumulation_steps,
-              emptyFallback: 1,
-              disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                train: {
-                  ...p.train,
-                  gradient_accumulation_steps: n
-                }
-              }))
-            }
-          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row lora-field-row-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Training steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.train.steps,
+                emptyFallback: 1,
+                disabled: training,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  train: { ...p.train, steps: n }
+                }))
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Batch size", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.train.batch_size,
+                emptyFallback: 1,
+                disabled: training,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  train: { ...p.train, batch_size: n }
+                }))
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Gradient accumulation", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.train.gradient_accumulation_steps,
+                emptyFallback: 1,
+                disabled: training,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  train: {
+                    ...p.train,
+                    gradient_accumulation_steps: n
+                  }
+                }))
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Learning rate", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 0,
+                step: "any",
+                value: draft.train.lr,
+                emptyFallback: 0,
+                disabled: training,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  train: { ...p.train, lr: n }
+                }))
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Optimizer", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                value: draft.train.optimizer,
+                disabled: training,
+                onChange: (e) => patch((p) => ({
+                  ...p,
+                  train: { ...p.train, optimizer: e.target.value }
+                })),
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adamw8bit", children: "adamw8bit" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adamw", children: "adamw" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prodigy", children: "prodigy" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "adafactor", children: "adafactor" })
+                ]
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Field,
+              {
+                label: "LR scheduler",
+                hint: "Warmup then hold peak LR, or warmup then cosine decay",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "select",
+                  {
+                    value: draft.train.lr_scheduler,
+                    disabled: training,
+                    onChange: (e) => patch((p) => ({
+                      ...p,
+                      train: {
+                        ...p.train,
+                        lr_scheduler: e.target.value === "cosine" ? "cosine" : "constant_with_warmup"
+                      }
+                    })),
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "constant_with_warmup", children: "constant_with_warmup" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "cosine", children: "cosine" })
+                    ]
+                  }
+                )
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Field,
+              {
+                label: "Warmup %",
+                hint: (() => {
+                  const updates = Math.ceil(
+                    Math.max(1, draft.train.steps) / Math.max(1, draft.train.gradient_accumulation_steps)
+                  );
+                  if (draft.train.warmup_percent <= 0) return "0% = off";
+                  const n = Math.min(
+                    Math.max(0, Math.round(updates * (draft.train.warmup_percent / 100))),
+                    Math.max(0, updates - 1)
+                  );
+                  return `≈ ${n} / ${updates} optimizer updates`;
+                })(),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-offload-pct", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "range",
+                      min: 0,
+                      max: 100,
+                      step: 5,
+                      value: draft.train.warmup_percent,
+                      disabled: training,
+                      onChange: (e) => patch((p) => ({
+                        ...p,
+                        train: {
+                          ...p.train,
+                          warmup_percent: Math.min(
+                            100,
+                            Math.max(0, Math.round(Number(e.target.value) / 5) * 5)
+                          )
+                        }
+                      }))
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-offload-pct-value", "aria-label": "Warmup percent", children: draft.train.warmup_percent <= 0 ? "Off" : `${draft.train.warmup_percent}%` })
+                ] })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Precision (dtype)", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                value: draft.train.dtype,
+                disabled: training,
+                onChange: (e) => patch((p) => ({
+                  ...p,
+                  train: { ...p.train, dtype: e.target.value }
+                })),
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "bf16", children: "bf16" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp16", children: "fp16" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp32", children: "fp32" })
+                ]
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Quantize", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                value: draft.model.quantize,
+                disabled: training,
+                onChange: (e) => patch((p) => ({
+                  ...p,
+                  model: { ...p.model, quantize: e.target.value }
+                })),
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "none", children: "-NONE-" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "qfloat8", children: "qfloat8" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "float8", children: "float8" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "int8", children: "INT8" })
+                ]
+              }
+            ) })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Noise scheduler", hint: "Krea 2 uses flow matching", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "select",
             {
@@ -19810,19 +19879,78 @@ function LoraTrainView({
               ]
             }
           ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ToggleField,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ToggleField,
+              {
+                label: "Low VRAM mode",
+                hint: "On: stage TE/VAE off GPU when DiT is busy + force gradient checkpointing. Does not control DiT layer offload.",
+                checked: draft.model.low_vram,
+                disabled: training,
+                onChange: (v) => patch((p) => ({ ...p, model: { ...p.model, low_vram: v } }))
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ToggleField,
+              {
+                label: "Gradient checkpointing",
+                hint: "Uses less VRAM; slightly slower",
+                checked: draft.train.gradient_checkpointing,
+                disabled: training,
+                onChange: (v) => patch((p) => ({
+                  ...p,
+                  train: { ...p.train, gradient_checkpointing: v }
+                }))
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Save weights dtype", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
             {
-              label: "Gradient checkpointing",
-              hint: "Uses less VRAM; slightly slower",
-              checked: draft.train.gradient_checkpointing,
+              value: draft.save.dtype,
               disabled: training,
-              onChange: (v) => patch((p) => ({
+              onChange: (e) => patch((p) => ({
                 ...p,
-                train: { ...p.train, gradient_checkpointing: v }
-              }))
+                save: { ...p.save, dtype: e.target.value }
+              })),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "bf16", children: "bf16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp16", children: "fp16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp32", children: "fp32" })
+              ]
             }
-          )
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-field-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Save every N steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.save.save_every,
+                emptyFallback: 1,
+                disabled: training,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  save: { ...p.save, save_every: n }
+                }))
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Max checkpoints to keep", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                min: 1,
+                value: draft.save.max_step_saves_to_keep,
+                emptyFallback: 1,
+                disabled: training,
+                onChange: (n) => patch((p) => ({
+                  ...p,
+                  save: {
+                    ...p.save,
+                    max_step_saves_to_keep: n
+                  }
+                }))
+              }
+            ) })
+          ] })
         ] }),
         activeSection === "lora" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Network type", hint: "locon uses PEFT LoHa (LyCORIS)", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -20105,51 +20233,6 @@ function LoraTrainView({
           ] })
         ] }),
         activeSection === "advanced" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-grid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Save every N steps", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              min: 1,
-              value: draft.save.save_every,
-              emptyFallback: 1,
-              disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                save: { ...p.save, save_every: n }
-              }))
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Max checkpoints to keep", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              min: 1,
-              value: draft.save.max_step_saves_to_keep,
-              emptyFallback: 1,
-              disabled: training,
-              onChange: (n) => patch((p) => ({
-                ...p,
-                save: {
-                  ...p.save,
-                  max_step_saves_to_keep: n
-                }
-              }))
-            }
-          ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Save weights dtype", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: draft.save.dtype,
-              disabled: training,
-              onChange: (e) => patch((p) => ({
-                ...p,
-                save: { ...p.save, dtype: e.target.value }
-              })),
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "bf16", children: "bf16" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp16", children: "fp16" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "fp32", children: "fp32" })
-              ]
-            }
-          ) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             ToggleField,
             {
@@ -20186,25 +20269,6 @@ function LoraTrainView({
               }))
             }
           ) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ToggleField,
-            {
-              label: "Quantize",
-              checked: draft.model.quantize,
-              disabled: training,
-              onChange: (v) => patch((p) => ({ ...p, model: { ...p.model, quantize: v } }))
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ToggleField,
-            {
-              label: "Low VRAM mode",
-              hint: "On: stage TE/VAE off GPU when DiT is busy + force gradient checkpointing. Does not control DiT layer offload.",
-              checked: draft.model.low_vram,
-              disabled: training,
-              onChange: (v) => patch((p) => ({ ...p, model: { ...p.model, low_vram: v } }))
-            }
-          ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             ToggleField,
             {
@@ -20264,6 +20328,47 @@ function LoraTrainView({
         onConfirm: confirmRestartTrain
       }
     ),
+    spikeLightbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modal-backdrop lora-spike-lightbox-backdrop",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "High-loss image preview",
+        onMouseDown: (e) => {
+          if (e.target === e.currentTarget) setSpikeLightbox(null);
+        },
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            className: "lora-spike-lightbox",
+            title: "Click to close",
+            onClick: () => setSpikeLightbox(null),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "img",
+                {
+                  src: window.api.toLocalUrl(spikeLightbox.path),
+                  alt: "",
+                  className: "lora-spike-lightbox-image",
+                  draggable: false
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-spike-lightbox-meta", children: [
+                "Step ",
+                spikeLightbox.step,
+                " · loss ",
+                spikeLightbox.loss.toFixed(4),
+                " ·",
+                " ",
+                spikeLightbox.path.split(/[/\\]/).pop() ?? spikeLightbox.path
+              ] })
+            ]
+          }
+        )
+      }
+    ) : null,
     sampleLightboxItem ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
@@ -20354,6 +20459,885 @@ function LoraTrainView({
       }
     ) : null
   ] });
+}
+const COMFY_BASE_URL = "http://127.0.0.1:8188";
+function clientId() {
+  return `captioer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+async function comfyHttp(url, init) {
+  return window.api.comfyHttpRequest({
+    url,
+    method: init?.method || "GET",
+    headers: init?.body ? { "Content-Type": "application/json" } : void 0,
+    body: init?.body,
+    timeoutMs: init?.timeoutMs
+  });
+}
+function buildKrea2TestWorkflow(p) {
+  const strength = p.loraStrength ?? 1;
+  const clipName = (p.t5Name || "").trim();
+  return {
+    "1": {
+      class_type: "UNETLoader",
+      inputs: {
+        unet_name: p.ditName,
+        weight_dtype: "default"
+      }
+    },
+    "10": {
+      class_type: "CLIPLoader",
+      inputs: {
+        clip_name: clipName,
+        type: "krea2",
+        device: "default"
+      }
+    },
+    "11": {
+      class_type: "VAELoader",
+      inputs: {
+        vae_name: p.vaeName
+      }
+    },
+    "2": {
+      class_type: "LoraLoader",
+      inputs: {
+        model: ["1", 0],
+        clip: ["10", 0],
+        lora_name: p.loraName,
+        strength_model: strength,
+        strength_clip: strength
+      }
+    },
+    "3": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: p.prompt,
+        clip: ["2", 1]
+      }
+    },
+    "4": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: p.negative || "",
+        clip: ["2", 1]
+      }
+    },
+    "6": {
+      class_type: "EmptySD3LatentImage",
+      inputs: {
+        width: p.width,
+        height: p.height,
+        batch_size: 1
+      }
+    },
+    "7": {
+      class_type: "KSampler",
+      inputs: {
+        seed: p.seed,
+        steps: p.steps,
+        cfg: p.cfg,
+        sampler_name: p.sampler,
+        scheduler: p.scheduler,
+        denoise: 1,
+        model: ["2", 0],
+        positive: ["3", 0],
+        negative: ["4", 0],
+        latent_image: ["6", 0]
+      }
+    },
+    "8": {
+      class_type: "VAEDecode",
+      inputs: {
+        samples: ["7", 0],
+        vae: ["11", 0]
+      }
+    },
+    "9": {
+      class_type: "SaveImage",
+      inputs: {
+        filename_prefix: (p.savePrefix || "Captioer_LoraTest").trim() || "Captioer_LoraTest",
+        images: ["8", 0]
+      }
+    }
+  };
+}
+async function queuePrompt(workflow, baseUrl, cid) {
+  const url = `${baseUrl}/prompt`;
+  const res = await comfyHttp(url, {
+    method: "POST",
+    body: JSON.stringify({ prompt: workflow, client_id: cid }),
+    timeoutMs: 6e4
+  });
+  if (res.error && !res.status) {
+    throw new Error(`ComfyUI /prompt failed: ${res.error}`);
+  }
+  if (!res.ok) {
+    throw new Error(`ComfyUI /prompt failed (${res.status}): ${res.text.slice(0, 500)}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(res.text);
+  } catch {
+    throw new Error(`ComfyUI /prompt invalid JSON: ${res.text.slice(0, 300)}`);
+  }
+  if (!data.prompt_id) {
+    throw new Error(`ComfyUI rejected prompt: ${res.text.slice(0, 500)}`);
+  }
+  return data.prompt_id;
+}
+async function historyEntry(promptId, baseUrl) {
+  const res = await comfyHttp(`${baseUrl}/history/${promptId}`, { timeoutMs: 3e4 });
+  if (!res.ok) return null;
+  try {
+    const data = JSON.parse(res.text);
+    return data[promptId] ?? null;
+  } catch {
+    return null;
+  }
+}
+function formatComfyExecutionError(entry) {
+  const messages = entry.status?.messages || [];
+  for (const msg of messages) {
+    if (!Array.isArray(msg) || msg[0] !== "execution_error") continue;
+    const detail = msg[1] || {};
+    const type = detail.exception_type || "Error";
+    const text = (detail.exception_message || "").trim().replace(/\s+/g, " ");
+    const node = detail.node_type && detail.node_id ? ` @ ${detail.node_type}#${detail.node_id}` : detail.node_type ? ` @ ${detail.node_type}` : "";
+    if (text) return `ComfyUI execution error${node}: ${type}: ${text.slice(0, 400)}`;
+  }
+  return "ComfyUI execution error";
+}
+async function waitForPromptDone(promptId, baseUrl, signal) {
+  const started = Date.now();
+  while (Date.now() - started < 6e5) {
+    if (signal?.aborted) throw new Error("Cancelled");
+    const entry = await historyEntry(promptId, baseUrl);
+    if (entry) {
+      const statusStr = entry.status?.status_str || "";
+      if (statusStr === "error") {
+        throw new Error(formatComfyExecutionError(entry));
+      }
+      if (entry.outputs && Object.keys(entry.outputs).length > 0) {
+        return;
+      }
+      if (entry.status?.completed) {
+        return;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 750));
+  }
+  throw new Error("Timed out waiting for ComfyUI generation");
+}
+async function historyImages(promptId, baseUrl) {
+  const entry = await historyEntry(promptId, baseUrl);
+  if (!entry?.outputs) return [];
+  const images = [];
+  for (const node of Object.values(entry.outputs)) {
+    if (node.images?.length) images.push(...node.images);
+  }
+  return images;
+}
+function comfyViewUrl(img, baseUrl = COMFY_BASE_URL) {
+  const q = new URLSearchParams({
+    filename: img.filename,
+    subfolder: img.subfolder || "",
+    type: img.type || "output"
+  });
+  return `${baseUrl}/view?${q.toString()}`;
+}
+async function comfyDisplayUrl(img, baseUrl = COMFY_BASE_URL) {
+  const resolved = await window.api.comfyResolveImagePath(img);
+  if (resolved.ok && resolved.path) {
+    return window.api.toLocalUrl(resolved.path);
+  }
+  return comfyViewUrl(img, baseUrl);
+}
+async function generateWithComfy(params, opts) {
+  const baseUrl = opts?.baseUrl || COMFY_BASE_URL;
+  const probe = await comfyHttp(`${baseUrl}/system_stats`, { timeoutMs: 5e3 });
+  if (!probe.ok) {
+    throw new Error(
+      `ComfyUI not reachable (${probe.status || 0}): ${probe.error || probe.text || "offline"}`
+    );
+  }
+  const savePrefix = `Captioer_LoraTest_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const workflow = buildKrea2TestWorkflow({ ...params, savePrefix });
+  const cid = clientId();
+  if (opts?.signal?.aborted) throw new Error("Cancelled");
+  const promptId = await queuePrompt(workflow, baseUrl, cid);
+  if (opts?.signal?.aborted) throw new Error("Cancelled");
+  await waitForPromptDone(promptId, baseUrl, opts?.signal);
+  const images = await historyImages(promptId, baseUrl);
+  if (!images.length) throw new Error("ComfyUI finished but returned no images");
+  const imageUrl = await comfyDisplayUrl(images[0], baseUrl);
+  const pathRes = await window.api.comfyResolveImagePath(images[0]);
+  return { imageUrl, images, filePath: pathRes.path };
+}
+function loraNameFromPath(fullPath) {
+  const parts = fullPath.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || fullPath;
+}
+function parentDir(fullPath) {
+  const normalized = fullPath.replace(/\\/g, "/");
+  const idx = normalized.lastIndexOf("/");
+  return idx >= 0 ? normalized.slice(0, idx) : "";
+}
+const SAMPLERS = [
+  "euler",
+  "euler_ancestral",
+  "heun",
+  "dpmpp_2m",
+  "dpmpp_2m_sde",
+  "dpmpp_sde",
+  "uni_pc",
+  "lms",
+  "ddim"
+];
+const SCHEDULERS = [
+  "simple",
+  "normal",
+  "karras",
+  "exponential",
+  "sgm_uniform",
+  "ddim_uniform",
+  "beta"
+];
+function basename(fullPath) {
+  return loraNameFromPath(fullPath);
+}
+function checkBasenameConflicts(paths) {
+  const map = /* @__PURE__ */ new Map();
+  for (const { label, path } of paths) {
+    const name = basename(path).toLowerCase();
+    if (!name) continue;
+    const prev = map.get(name);
+    if (prev && prev !== path) {
+      return `Duplicate filename "${basename(path)}" used by ${label} and another model path`;
+    }
+    map.set(name, path);
+  }
+  return null;
+}
+function parseLoratestMeta(fileName) {
+  const stem = fileName.replace(/\.[^.]+$/, "");
+  const withWeight = /^step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_\d+)?$/i.exec(stem);
+  if (withWeight) {
+    return {
+      loraStep: Number(withWeight[1]),
+      loraStrength: Number(withWeight[2]),
+      seed: Number(withWeight[3])
+    };
+  }
+  const legacy = /^step(\d+)_seed(\d+)(?:_\d+)?$/i.exec(stem);
+  if (legacy) {
+    return {
+      loraStep: Number(legacy[1]),
+      loraStrength: null,
+      seed: Number(legacy[2])
+    };
+  }
+  return { loraStep: null, loraStrength: null, seed: null };
+}
+function formatMetaValue(v, digits) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  if (digits != null) return v.toFixed(digits);
+  return String(v);
+}
+function LoraTestView({
+  job,
+  jobId,
+  draft,
+  appSettings,
+  onDraftChange,
+  onStatus
+}) {
+  const [local, setLocal] = reactExports.useState(() => normalizeLoraTestDraft(draft));
+  const [checkpoints, setCheckpoints] = reactExports.useState([]);
+  const [comfyOnline, setComfyOnline] = reactExports.useState(false);
+  const [generating, setGenerating] = reactExports.useState(false);
+  const [genProgress, setGenProgress] = reactExports.useState(null);
+  const [genError, setGenError] = reactExports.useState(null);
+  const [history, setHistory] = reactExports.useState([]);
+  const [activeIndex, setActiveIndex] = reactExports.useState(0);
+  const [startingComfy, setStartingComfy] = reactExports.useState(false);
+  const persistTimer = reactExports.useRef(null);
+  const skipPersist = reactExports.useRef(true);
+  const abortRef = reactExports.useRef(null);
+  const seededJobRef = reactExports.useRef(null);
+  const patch = reactExports.useCallback((partial) => {
+    setLocal((prev) => normalizeLoraTestDraft({ ...prev, ...partial }));
+  }, []);
+  reactExports.useEffect(() => {
+    skipPersist.current = true;
+    setLocal(normalizeLoraTestDraft(draft));
+  }, [draft]);
+  reactExports.useEffect(() => {
+    if (skipPersist.current) {
+      skipPersist.current = false;
+      return;
+    }
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      onDraftChange(normalizeLoraTestDraft(local));
+    }, 400);
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+    };
+  }, [local, onDraftChange]);
+  reactExports.useEffect(() => {
+    if (seededJobRef.current === jobId) return;
+    seededJobRef.current = jobId;
+    const sample = job.sample;
+    const first = sample.prompts[0];
+    const trigger = (job.trigger_word || "").trim();
+    setLocal((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      if (!prev.prompt.trim()) {
+        const base = first?.prompt || "";
+        next.prompt = trigger ? `${trigger}, ${base}` : base;
+        changed = true;
+      }
+      if (!prev.negative.trim() && sample.neg) {
+        next.negative = sample.neg;
+        changed = true;
+      }
+      if (prev.steps === 20 && sample.sample_steps) {
+        next.steps = sample.sample_steps;
+        changed = true;
+      }
+      if (prev.cfg === 3.5 && sample.guidance_scale) {
+        next.cfg = sample.guidance_scale;
+        changed = true;
+      }
+      if (first?.width) {
+        next.width = first.width;
+        changed = true;
+      }
+      if (first?.height) {
+        next.height = first.height;
+        changed = true;
+      }
+      if (first?.seed != null) {
+        next.seed = first.seed;
+        changed = true;
+      }
+      if (changed) skipPersist.current = true;
+      return normalizeLoraTestDraft(next);
+    });
+  }, [jobId, job]);
+  reactExports.useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const el = document.activeElement;
+      if (el) {
+        const tag = el.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (el.isContentEditable) return;
+      }
+      if (history.length < 2) return;
+      const cur = Math.min(Math.max(0, activeIndex), history.length - 1);
+      const next = e.key === "ArrowLeft" ? Math.max(0, cur - 1) : Math.min(history.length - 1, cur + 1);
+      if (next === cur) return;
+      e.preventDefault();
+      setActiveIndex(next);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [history, activeIndex]);
+  const activeItem = history[activeIndex] ?? null;
+  const imageUrl = activeItem?.url ?? null;
+  const refreshGallery = reactExports.useCallback(async () => {
+    const folder = (job.training_folder || "").trim();
+    const name = (job.name || "").trim();
+    if (!folder || !name) {
+      setHistory([]);
+      setActiveIndex(0);
+      return;
+    }
+    try {
+      const result = await window.api.loraTestListGallery({
+        trainingFolder: folder,
+        jobName: name
+      });
+      if (!result.ok) {
+        setHistory([]);
+        setActiveIndex(0);
+        return;
+      }
+      const items = result.images.map((img) => {
+        const meta = parseLoratestMeta(img.name);
+        return {
+          url: window.api.toLocalUrl(img.path),
+          filePath: img.path,
+          loraStep: meta.loraStep,
+          loraStrength: meta.loraStrength,
+          seed: meta.seed
+        };
+      });
+      setHistory(items);
+      setActiveIndex(0);
+    } catch {
+      setHistory([]);
+      setActiveIndex(0);
+    }
+  }, [job.training_folder, job.name]);
+  const refreshCheckpoints = reactExports.useCallback(async () => {
+    const folder = (job.training_folder || "").trim();
+    const name = (job.name || "").trim();
+    if (!folder || !name) {
+      setCheckpoints([]);
+      return;
+    }
+    try {
+      const result = await window.api.listTrainCheckpoints({
+        trainingFolder: folder,
+        jobName: name
+      });
+      if (result.ok) {
+        setCheckpoints(result.checkpoints);
+        setLocal((prev) => {
+          const available = new Set(result.checkpoints.map((c) => c.step));
+          let selected = prev.selectedLoraSteps.filter((s) => available.has(s));
+          if (selected.length === 0 && result.checkpoints.length > 0) {
+            selected = [result.checkpoints[result.checkpoints.length - 1].step];
+          }
+          if (selected.length === prev.selectedLoraSteps.length && selected.every((s, i) => s === prev.selectedLoraSteps[i])) {
+            return prev;
+          }
+          return normalizeLoraTestDraft({ ...prev, selectedLoraSteps: selected });
+        });
+      } else {
+        setCheckpoints([]);
+      }
+    } catch {
+      setCheckpoints([]);
+    }
+  }, [job.training_folder, job.name]);
+  reactExports.useEffect(() => {
+    void refreshCheckpoints();
+  }, [refreshCheckpoints, jobId]);
+  reactExports.useEffect(() => {
+    void refreshGallery();
+  }, [refreshGallery, jobId]);
+  const refreshComfyStatus = reactExports.useCallback(async () => {
+    try {
+      const st = await window.api.comfyStatus();
+      setComfyOnline(st.online);
+      return st.online;
+    } catch {
+      setComfyOnline(false);
+      return false;
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void refreshComfyStatus();
+    const t = setInterval(() => void refreshComfyStatus(), 5e3);
+    return () => clearInterval(t);
+  }, [refreshComfyStatus]);
+  const toggleLoraStep = (step) => {
+    setLocal((prev) => {
+      const set = new Set(prev.selectedLoraSteps);
+      if (set.has(step)) set.delete(step);
+      else set.add(step);
+      return normalizeLoraTestDraft({
+        ...prev,
+        selectedLoraSteps: [...set].sort((a, b) => a - b)
+      });
+    });
+  };
+  const modelFolders = () => {
+    const dit = parentDir(local.ditPath.trim());
+    const vae = parentDir(local.vaePath.trim());
+    const t5 = parentDir(local.t5Path.trim());
+    return {
+      ditFolders: dit ? [dit] : [],
+      vaeFolders: vae ? [vae] : [],
+      clipFolders: t5 ? [t5] : []
+    };
+  };
+  const ensureComfy = async () => {
+    const bat = local.comfyUiBatPath.trim();
+    if (!bat) {
+      setGenError("Set ComfyUI launch bat in LoraTest Settings (or Download ComfyUI)");
+      return false;
+    }
+    setStartingComfy(true);
+    onStatus("Starting ComfyUI…");
+    try {
+      const modelsRoot = modelDownloadPathFromDownloadFolder(appSettings.downloadFolder);
+      const loraFolder = joinPath(job.training_folder, job.name);
+      const folders = modelFolders();
+      const result = await window.api.startComfyUi({
+        batPath: bat,
+        pythonPath: appSettings.pythonPath.trim() || void 0,
+        modelsRoot,
+        loraFolders: loraFolder ? [loraFolder] : [],
+        ...folders
+      });
+      if (!result.ok) {
+        setGenError(result.error || "Failed to start ComfyUI");
+        onStatus(result.error || "Failed to start ComfyUI", true);
+        return false;
+      }
+      setComfyOnline(true);
+      onStatus(result.alreadyRunning ? "ComfyUI ready" : "ComfyUI ready");
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setGenError(msg);
+      onStatus(msg, true);
+      return false;
+    } finally {
+      setStartingComfy(false);
+    }
+  };
+  const onGenerate = async () => {
+    if (generating) return;
+    setGenError(null);
+    const ditPath = local.ditPath.trim();
+    const vaePath = local.vaePath.trim();
+    const t5Path = local.t5Path.trim();
+    if (!ditPath || !vaePath || !t5Path) {
+      const msg = "Set DiT, VAE, and Text Encoder (Qwen) in LoraTest Settings";
+      setGenError(msg);
+      onStatus(msg, true);
+      return;
+    }
+    const conflict = checkBasenameConflicts(
+      [
+        { label: "DiT", path: ditPath },
+        { label: "VAE", path: vaePath },
+        { label: "Text Encoder", path: t5Path }
+      ].filter((x2) => x2.path)
+    );
+    if (conflict) {
+      setGenError(conflict);
+      onStatus(conflict, true);
+      return;
+    }
+    if (local.selectedLoraSteps.length < 1) {
+      const msg = "Select at least one trained LoRA checkpoint";
+      setGenError(msg);
+      onStatus(msg, true);
+      return;
+    }
+    if (checkpoints.length === 0) {
+      const msg = "No trained LoRA checkpoints for this job";
+      setGenError(msg);
+      onStatus(msg, true);
+      return;
+    }
+    const selected = local.selectedLoraSteps.map((step) => checkpoints.find((c) => c.step === step)).filter((c) => Boolean(c));
+    if (selected.length < 1) {
+      const msg = "Selected LoRA checkpoints not found on disk";
+      setGenError(msg);
+      onStatus(msg, true);
+      return;
+    }
+    const trainingFolder = (job.training_folder || "").trim();
+    const jobName = (job.name || "").trim();
+    if (!trainingFolder || !jobName) {
+      const msg = "Set Job name and Output Folder in LoraTrain settings";
+      setGenError(msg);
+      onStatus(msg, true);
+      return;
+    }
+    const ok = await ensureComfy();
+    if (!ok) return;
+    setGenerating(true);
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const runSeed = local.seed === -1 ? Math.floor(Math.random() * 4294967295) : Math.max(0, Math.round(local.seed));
+    const shared = {
+      prompt: local.prompt,
+      negative: local.negative,
+      steps: local.steps,
+      cfg: local.cfg,
+      seed: runSeed,
+      width: local.width,
+      height: local.height,
+      sampler: local.sampler,
+      scheduler: local.scheduler,
+      ditName: basename(ditPath),
+      vaeName: basename(vaePath),
+      t5Name: basename(t5Path),
+      loraStrength: local.loraStrength
+    };
+    try {
+      let doneCount = 0;
+      for (let i = 0; i < selected.length; i++) {
+        if (ac.signal.aborted) throw new Error("Cancelled");
+        const ckpt = selected[i];
+        setGenProgress(`Generating ${i + 1}/${selected.length} (step ${ckpt.step})…`);
+        onStatus(`Generating ${i + 1}/${selected.length}…`);
+        const result = await generateWithComfy(
+          {
+            ...shared,
+            loraName: loraNameFromPath(ckpt.path)
+          },
+          { signal: ac.signal }
+        );
+        if (!result.filePath) {
+          throw new Error("ComfyUI finished but local image path was not resolved");
+        }
+        const weightTag = Number(local.loraStrength).toFixed(2);
+        const saved = await window.api.loraTestSaveGeneratedImage({
+          sourcePath: result.filePath,
+          trainingFolder,
+          jobName,
+          fileName: `step${String(ckpt.step).padStart(6, "0")}_w${weightTag}_seed${runSeed}`
+        });
+        if (!saved.ok || !saved.path) {
+          throw new Error(saved.error || "Failed to save image into loratest folder");
+        }
+        doneCount += 1;
+        await refreshGallery();
+      }
+      setGenProgress(null);
+      onStatus(`Generate done (${doneCount} image${doneCount === 1 ? "" : "s"})`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setGenError(msg);
+      onStatus(msg, true);
+      setGenProgress(null);
+    } finally {
+      setGenerating(false);
+    }
+  };
+  const stopComfy = async () => {
+    await window.api.stopComfyUi();
+    setComfyOnline(false);
+    onStatus("ComfyUI stopped");
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-body", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lora-test-settings", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-settings-scroll", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-comfy-row", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: `lora-test-comfy-dot${comfyOnline ? " online" : ""}`,
+              title: comfyOnline ? "ComfyUI online" : "ComfyUI offline"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-test-comfy-label", children: comfyOnline ? "ComfyUI online" : startingComfy ? "Starting…" : "ComfyUI offline" }),
+          comfyOnline ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "toolbar-icon-btn", onClick: () => void stopComfy(), children: "Stop" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "toolbar-icon-btn",
+              disabled: startingComfy || !local.comfyUiBatPath.trim(),
+              onClick: () => void ensureComfy(),
+              children: "Start"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Prompt" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "textarea",
+            {
+              rows: 6,
+              value: local.prompt,
+              onChange: (e) => patch({ prompt: e.target.value })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Negative" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "textarea",
+            {
+              rows: 2,
+              value: local.negative,
+              onChange: (e) => patch({ negative: e.target.value })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Steps" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: 1,
+                max: 150,
+                value: local.steps,
+                onChange: (e) => patch({ steps: Number(e.target.value) })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "CFG / Guidance" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: 0,
+                max: 20,
+                step: 0.1,
+                value: local.cfg,
+                onChange: (e) => patch({ cfg: Number(e.target.value) })
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Width" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: 64,
+                step: 64,
+                value: local.width,
+                onChange: (e) => patch({ width: Number(e.target.value) })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Height" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: 64,
+                step: 64,
+                value: local.height,
+                onChange: (e) => patch({ height: Number(e.target.value) })
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Seed" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: -1,
+                value: local.seed,
+                onChange: (e) => patch({ seed: Number(e.target.value) })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => patch({ seed: -1 }), children: "Random" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Sampler" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "select",
+              {
+                value: local.sampler,
+                onChange: (e) => patch({ sampler: e.target.value }),
+                children: SAMPLERS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: s, children: s }, s))
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Scheduler" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "select",
+              {
+                value: local.scheduler,
+                onChange: (e) => patch({ scheduler: e.target.value }),
+                children: SCHEDULERS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: s, children: s }, s))
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-lora-block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-test-lora-heading", children: "Trained LoRAs" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Select at least one. Each selected LoRA generates one image." }),
+          checkpoints.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "No checkpoints for this job yet." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-test-lora-list", children: checkpoints.map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "checkbox-field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: local.selectedLoraSteps.includes(c.step),
+                onChange: () => toggleLoraStep(c.step)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { title: c.path, children: [
+              "step ",
+              c.step,
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-test-lora-file", children: [
+                " ",
+                basename(c.path)
+              ] })
+            ] })
+          ] }) }, c.step)) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LoRA strength (shared)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: 0,
+                max: 2,
+                step: 0.05,
+                value: local.loraStrength,
+                onChange: (e) => patch({ loraStrength: Number(e.target.value) })
+              }
+            )
+          ] })
+        ] }),
+        genProgress && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: genProgress }),
+        genError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-error", children: genError })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-generate-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "primary lora-test-generate-btn",
+          disabled: generating || startingComfy,
+          onClick: () => void onGenerate(),
+          children: generating ? genProgress || "Generating…" : "Generate"
+        }
+      ) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "lora-test-viewer", children: [
+      activeItem && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-viewer-meta", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "LoRA step ",
+          formatMetaValue(activeItem.loraStep)
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "Weight ",
+          formatMetaValue(activeItem.loraStrength, 2)
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "Seed ",
+          formatMetaValue(activeItem.seed)
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-viewer-main", children: imageUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageUrl, alt: "Generated", className: "lora-test-viewer-img" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-viewer-empty", children: "Generated images appear here" }) }),
+      history.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-history", children: history.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: `lora-test-history-thumb${idx === activeIndex ? " active" : ""}`,
+          onClick: () => setActiveIndex(idx),
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: item.url, alt: "" })
+        },
+        item.url
+      )) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ResourceMonitorPane, { device: job.device })
+  ] }) });
+}
+function joinPath(a, b) {
+  const left = (a || "").trim().replace(/[/\\]+$/, "");
+  const right = (b || "").trim().replace(/^[/\\]+/, "");
+  if (!left || !right) return "";
+  return `${left}\\${right}`;
 }
 function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCancel }) {
   const [focusBtn, setFocusBtn] = reactExports.useState("cancel");
@@ -20941,11 +21925,353 @@ async function listWd14ModelReposOrFallback(signal) {
     };
   }
 }
+function ComfyUiBatField({
+  value,
+  onChange,
+  downloadFolder,
+  pythonPath,
+  enabled = true
+}) {
+  const [probeOk, setProbeOk] = reactExports.useState(null);
+  const [probeMsg, setProbeMsg] = reactExports.useState(null);
+  const [installing, setInstalling] = reactExports.useState(false);
+  const [installMsg, setInstallMsg] = reactExports.useState(null);
+  const [installPct, setInstallPct] = reactExports.useState(0);
+  const probeTimer = reactExports.useRef(null);
+  const offProgress = reactExports.useRef(null);
+  const runProbe = async (batPath) => {
+    if (!batPath.trim()) {
+      setProbeOk(false);
+      setProbeMsg("Not set — Download installs ComfyUI and writes run_captioer.bat");
+      return;
+    }
+    try {
+      const result = await window.api.probeComfyBat(batPath.trim());
+      setProbeOk(result.ok);
+      setProbeMsg(result.message);
+    } catch (err) {
+      setProbeOk(false);
+      setProbeMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+  reactExports.useEffect(() => {
+    if (!enabled) return;
+    if (probeTimer.current) clearTimeout(probeTimer.current);
+    probeTimer.current = setTimeout(() => {
+      void runProbe(value);
+    }, 400);
+    return () => {
+      if (probeTimer.current) clearTimeout(probeTimer.current);
+    };
+  }, [value, enabled]);
+  reactExports.useEffect(() => {
+    return () => {
+      offProgress.current?.();
+      offProgress.current = null;
+    };
+  }, []);
+  const browseBat = async () => {
+    const file = await window.api.openFile({
+      title: "Select ComfyUI launch bat",
+      filters: [
+        { name: "Batch", extensions: ["bat", "cmd"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    if (!file) return;
+    onChange(file);
+  };
+  const startInstall = async () => {
+    if (installing) return;
+    setInstalling(true);
+    setInstallMsg("Starting…");
+    setInstallPct(0);
+    offProgress.current?.();
+    offProgress.current = window.api.onComfyInstallProgress((p) => {
+      setInstallMsg(p.message);
+      setInstallPct(p.pct);
+    });
+    try {
+      const result = await window.api.installComfyUi({
+        downloadFolder: downloadFolder.trim() || void 0,
+        pythonPath: pythonPath.trim() || void 0
+      });
+      if (result.ok && result.batPath) {
+        setInstallMsg(null);
+        onChange(result.batPath);
+      } else {
+        setInstallMsg(null);
+        setProbeOk(false);
+        setProbeMsg(result.message || "Install failed");
+      }
+    } catch (err) {
+      setInstallMsg(null);
+      setProbeOk(false);
+      setProbeMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      offProgress.current?.();
+      offProgress.current = null;
+      setInstalling(false);
+    }
+  };
+  const cancelInstall = async () => {
+    await window.api.cancelComfyInstall();
+    setInstalling(false);
+    setInstallMsg(null);
+    setProbeMsg("Cancelled");
+    setProbeOk(false);
+  };
+  const showDownload = !installing && probeOk === false;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "ComfyUI launch bat" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          value,
+          onChange: (e) => onChange(e.target.value),
+          placeholder: "Path to run_captioer.bat (or your ComfyUI .bat)",
+          spellCheck: false
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browseBat(), disabled: installing, children: "Browse" }),
+      showDownload && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => void startInstall(), children: "Download" }),
+      installing && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void cancelInstall(), children: "Cancel" })
+    ] }),
+    installing && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+      "Installing… ",
+      installPct,
+      "% — ",
+      installMsg || "…"
+    ] }),
+    !installing && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `field-hint${probeOk === false ? " field-hint-warn" : ""}`, children: probeMsg }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+      "Download clones ComfyUI via git into",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "{downloadFolder}/ComfyUI" }),
+      ", installs requirements with the Python above, and writes ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "run_captioer.bat" }),
+      ". Requires Git on PATH."
+    ] })
+  ] });
+}
+function DownloadFolderField({ value, onChange, disabled = false }) {
+  const browse = async () => {
+    const dir = await window.api.openFolder();
+    if (!dir) return;
+    onChange(dir);
+  };
+  const useDefault = async () => {
+    const path = await window.api.defaultDownloadFolder();
+    onChange(path);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Download folder" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          value,
+          onChange: (e) => onChange(e.target.value),
+          placeholder: "Empty = AppData\\Roaming\\Captioer",
+          spellCheck: false,
+          disabled
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browse(), disabled, children: "Browse" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void useDefault(), disabled, children: "Default" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+      "Shared by Python install and model downloads. Uses ",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { children: [
+        "{folder}",
+        "/python"
+      ] }),
+      " and",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { children: [
+        "{folder}",
+        "/models"
+      ] }),
+      ". Empty defaults to",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "AppData\\Roaming\\Captioer" }),
+      "."
+    ] })
+  ] });
+}
+const DEFAULT_HINT = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+  "Shared by Dataset Edit (WD14 tagging) and LoRA Train. Leave empty to use",
+  " ",
+  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "python" }),
+  " from PATH."
+] });
+function PythonExecutableField({
+  value,
+  onChange,
+  downloadFolder,
+  enabled = true,
+  hint = DEFAULT_HINT
+}) {
+  const [probeStatus, setProbeStatus] = reactExports.useState("checking");
+  const [probeMsg, setProbeMsg] = reactExports.useState(null);
+  const [installing, setInstalling] = reactExports.useState(false);
+  const [installMsg, setInstallMsg] = reactExports.useState(null);
+  const [installPct, setInstallPct] = reactExports.useState(0);
+  const probeTimer = reactExports.useRef(null);
+  const offProgress = reactExports.useRef(null);
+  const runProbe = async (pythonPath) => {
+    setProbeStatus("checking");
+    setProbeMsg(null);
+    try {
+      const result = await window.api.probePython(pythonPath.trim() || void 0);
+      setProbeStatus(result.status);
+      setProbeMsg(result.message);
+    } catch (err) {
+      setProbeStatus("error");
+      setProbeMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+  reactExports.useEffect(() => {
+    if (!enabled) return;
+    if (probeTimer.current) clearTimeout(probeTimer.current);
+    probeTimer.current = setTimeout(() => {
+      void runProbe(value);
+    }, 400);
+    return () => {
+      if (probeTimer.current) clearTimeout(probeTimer.current);
+    };
+  }, [value, enabled]);
+  reactExports.useEffect(() => {
+    return () => {
+      offProgress.current?.();
+      offProgress.current = null;
+    };
+  }, []);
+  const browsePython = async () => {
+    const file = await window.api.openFile({
+      title: "Select Python executable",
+      filters: [
+        { name: "Python", extensions: ["exe"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    if (!file) return;
+    onChange(file);
+  };
+  const startInstall = async () => {
+    if (installing) return;
+    setInstalling(true);
+    setInstallMsg("Starting…");
+    setInstallPct(0);
+    offProgress.current?.();
+    offProgress.current = window.api.onPythonInstallProgress((p) => {
+      setInstallMsg(p.message);
+      setInstallPct(p.pct);
+    });
+    try {
+      const result = await window.api.installPython({
+        installPath: pythonInstallPathFromDownloadFolder(downloadFolder)
+      });
+      if (result.ok && result.pythonPath) {
+        setInstallMsg(null);
+        onChange(result.pythonPath);
+      } else {
+        setInstallMsg(null);
+        setProbeStatus("error");
+        setProbeMsg(result.message || "Install failed");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setInstallMsg(null);
+      setProbeStatus("error");
+      setProbeMsg(msg);
+    } finally {
+      offProgress.current?.();
+      offProgress.current = null;
+      setInstalling(false);
+    }
+  };
+  const cancelInstall = async () => {
+    await window.api.cancelPythonInstall();
+    setInstalling(false);
+    setInstallMsg(null);
+    setProbeMsg("Cancelled");
+    setProbeStatus("error");
+  };
+  const showDownload = !installing && (probeStatus === "missingPython" || probeStatus === "missingPackages" || probeStatus === "error");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "python-executable-field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Python executable" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            value,
+            onChange: (e) => onChange(e.target.value),
+            placeholder: "e.g. C:\\Python311\\python.exe or python",
+            spellCheck: false,
+            disabled: installing
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void browsePython(), disabled: installing, children: "Browse" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "field", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row python-probe-row", children: [
+      probeStatus === "checking" && !installing && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Checking Python…" }),
+      !installing && probeStatus === "ready" && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: probeMsg }),
+      !installing && (probeStatus === "missingPython" || probeStatus === "missingPackages" || probeStatus === "error") && probeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: probeMsg }),
+      showDownload && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => void startInstall(), children: "Download" }),
+      installing && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+          installMsg || "Installing…",
+          installPct > 0 ? ` (${installPct}%)` : ""
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => void cancelInstall(), children: "Cancel" })
+      ] })
+    ] }) }),
+    hint != null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: hint })
+  ] });
+}
 function newPresetId() {
   return `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+function tabFromActiveView(view) {
+  if (view === "datasetEdit") return "datasetEdit";
+  if (view === "loraTrain") return "loraTrain";
+  if (view === "loraTest") return "loraTest";
+  return "general";
+}
+const TABS = [
+  { id: "general", label: "General" },
+  { id: "datasetEdit", label: "Dataset Edit" },
+  { id: "loraTrain", label: "Lora Train" },
+  { id: "loraTest", label: "Lora Test" }
+];
+const LORA_TEST_MODEL_REPO = "AlperKTS/Krea2_FP8";
+const LORA_TEST_MODEL_SPECS = {
+  ditPath: {
+    label: "Checkpoint",
+    filename: "krea2_turbo_fp8.safetensors"
+  },
+  vaePath: {
+    label: "VAE",
+    filename: "qwen_image_vae.safetensors"
+  },
+  t5Path: {
+    label: "Text Encoder",
+    filename: "qwen3vl_4b_fp8_scaled.safetensors"
+  }
+};
+function isSafetensorsPath(value) {
+  return value.trim().toLowerCase().endsWith(".safetensors");
+}
 function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
   const [draft, setDraft] = reactExports.useState(settings);
+  const [tab, setTab] = reactExports.useState(() => tabFromActiveView(settings.activeView));
   const [models, setModels] = reactExports.useState([]);
   const [loadingModels, setLoadingModels] = reactExports.useState(false);
   const [modelsError, setModelsError] = reactExports.useState(null);
@@ -20957,6 +22283,9 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
   const [testResult, setTestResult] = reactExports.useState(null);
   const [testError, setTestError] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
+  const [loraTestDownloadKey, setLoraTestDownloadKey] = reactExports.useState(null);
+  const [loraTestDownloadPct, setLoraTestDownloadPct] = reactExports.useState(0);
+  const [loraTestDownloadError, setLoraTestDownloadError] = reactExports.useState(null);
   const fetchId = reactExports.useRef(0);
   const wd14FetchId = reactExports.useRef(0);
   const urlDebounce = reactExports.useRef(null);
@@ -21026,6 +22355,7 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
     skipUrlFetch.current = true;
     skipPromptSave.current = true;
     setDraft(normalizeSettings(settings));
+    setTab(tabFromActiveView(settings.activeView));
     setTestResult(null);
     setTestError(null);
     setModelsError(null);
@@ -21061,11 +22391,38 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
     return () => {
       if (promptDebounce.current) clearTimeout(promptDebounce.current);
     };
-  }, [open, draft.captionPresets, draft.activeCaptionPresetId, onAutoSave]);
+  }, [open, draft.captionPresets, draft.activeCaptionPresetId, draft.appendPositivePrompt, onAutoSave]);
   const modelOptions = reactExports.useMemo(() => {
     if (draft.model && !models.includes(draft.model)) return [draft.model, ...models];
     return models;
   }, [draft.model, models]);
+  reactExports.useEffect(() => {
+    const offProgress = window.api.onModelDownloadProgress((payload) => {
+      if (payload.repoId !== LORA_TEST_MODEL_REPO) return;
+      setLoraTestDownloadPct(payload.pct);
+    });
+    const offDone = window.api.onModelDownloadDone((payload) => {
+      if (payload.repoId !== LORA_TEST_MODEL_REPO) return;
+      const activeKey = loraTestDownloadKey;
+      setLoraTestDownloadKey(null);
+      setLoraTestDownloadPct(100);
+      if (!activeKey || !payload.filePath) return;
+      setDraft((prev) => ({
+        ...prev,
+        loraTestDraft: { ...prev.loraTestDraft, [activeKey]: payload.filePath }
+      }));
+    });
+    const offError = window.api.onModelDownloadError((payload) => {
+      if (payload.repoId !== LORA_TEST_MODEL_REPO) return;
+      setLoraTestDownloadKey(null);
+      setLoraTestDownloadError(payload.message);
+    });
+    return () => {
+      offProgress();
+      offDone();
+      offError();
+    };
+  }, [loraTestDownloadKey]);
   if (!open) return null;
   const setProvider = (provider) => {
     setDraft((prev) => ({ ...prev, provider }));
@@ -21110,6 +22467,38 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       };
     });
   };
+  const browseSafetensors = async (key, title) => {
+    const file = await window.api.openFile({
+      title,
+      filters: [
+        { name: "Safetensors", extensions: ["safetensors"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    if (!file) return;
+    setDraft((prev) => ({
+      ...prev,
+      loraTestDraft: { ...prev.loraTestDraft, [key]: file }
+    }));
+  };
+  const downloadLoraTestModel = async (key) => {
+    if (loraTestDownloadKey) return;
+    setLoraTestDownloadError(null);
+    setLoraTestDownloadKey(key);
+    setLoraTestDownloadPct(0);
+    const spec = LORA_TEST_MODEL_SPECS[key];
+    const result = await window.api.downloadModel({
+      pythonPath: draft.loraTrainApp.pythonPath,
+      downloadPath: modelDownloadPathFromDownloadFolder(draft.loraTrainApp.downloadFolder),
+      token: draft.loraTrainApp.huggingfaceToken,
+      repoId: LORA_TEST_MODEL_REPO,
+      fileName: spec.filename
+    });
+    if (!result.ok) {
+      setLoraTestDownloadKey(null);
+      setLoraTestDownloadError(result.error || `Failed to download ${spec.label}`);
+    }
+  };
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
@@ -21129,7 +22518,18 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(normalizeSettings(draft));
+      const next = normalizeSettings(draft);
+      const needsRestart = next.uiGpuMode !== settings.uiGpuMode;
+      await onSave(next);
+      if (needsRestart) {
+        const restart = window.confirm(
+          "UI GPU rendering setting changed. Restart Captioer now for it to take effect?"
+        );
+        if (restart) {
+          await window.api.relaunchApp();
+          return;
+        }
+      }
       onClose();
     } finally {
       setSaving(false);
@@ -21154,7 +22554,9 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       activeView: draft.activeView,
       loraTrainJobs: draft.loraTrainJobs,
       activeLoraTrainJobId: draft.activeLoraTrainJobId,
-      loraTrainApp: draft.loraTrainApp
+      loraTrainApp: draft.loraTrainApp,
+      loraTestDraft: draft.loraTestDraft,
+      uiGpuMode: draft.uiGpuMode
     });
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -21167,268 +22569,533 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
-          className: "modal modal-wide",
+          className: "modal modal-wide settings-modal",
           role: "dialog",
           "aria-labelledby": "settings-title",
           onMouseDown: (e) => e.stopPropagation(),
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "settings-title", children: "Settings" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Translation provider" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "radio-row", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      type: "radio",
-                      name: "provider",
-                      checked: draft.provider === "lmstudio",
-                      onChange: () => setProvider("lmstudio")
-                    }
-                  ),
-                  "LM Studio"
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "settings-tabs view-switch", role: "tablist", "aria-label": "Settings sections", children: TABS.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                role: "tab",
+                className: `view-switch-seg${tab === t.id ? " active" : ""}`,
+                "aria-selected": tab === t.id,
+                onClick: () => setTab(t.id),
+                children: t.label
+              },
+              t.id
+            )) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-tab-body", children: [
+              tab === "general" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section settings-section-first", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Display" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "UI GPU rendering" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "radio-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(
+                          "input",
+                          {
+                            type: "radio",
+                            name: "uiGpuMode",
+                            checked: draft.uiGpuMode === "auto",
+                            onChange: () => setDraft((prev) => ({ ...prev, uiGpuMode: "auto" }))
+                          }
+                        ),
+                        "Auto"
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(
+                          "input",
+                          {
+                            type: "radio",
+                            name: "uiGpuMode",
+                            checked: draft.uiGpuMode === "onboard",
+                            onChange: () => setDraft((prev) => ({ ...prev, uiGpuMode: "onboard" }))
+                          }
+                        ),
+                        "Onboard GPU"
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(
+                          "input",
+                          {
+                            type: "radio",
+                            name: "uiGpuMode",
+                            checked: draft.uiGpuMode === "software",
+                            onChange: () => setDraft((prev) => ({ ...prev, uiGpuMode: "software" }))
+                          }
+                        ),
+                        "Software"
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Auto: OS/driver chooses. Onboard: force integrated GPU (frees dedicated VRAM when dual-GPU). Software: CPU/RAM only. Does not affect training or AI. Requires restart. Windows Graphics settings for Captioer may override Onboard." })
+                  ] })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Environment" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
+                    DownloadFolderField,
                     {
-                      type: "radio",
-                      name: "provider",
-                      checked: draft.provider === "ollama",
-                      onChange: () => setProvider("ollama")
+                      value: draft.loraTrainApp.downloadFolder,
+                      onChange: (downloadFolder) => setDraft((prev) => ({
+                        ...prev,
+                        loraTrainApp: { ...prev.loraTrainApp, downloadFolder }
+                      }))
                     }
                   ),
-                  "Ollama"
-                ] })
-              ] })
-            ] }),
-            draft.provider === "lmstudio" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LM Studio Base URL" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "text",
-                  value: draft.lmStudioBaseUrl,
-                  onChange: (e) => setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
-                }
-              )
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Ollama Base URL" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "text",
-                    value: draft.ollamaBaseUrl,
-                    onChange: (e) => setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
-                  }
-                )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
-                "Interactive translation / captioning has priority; analysis pauses until idle. Optional: ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "OLLAMA_NUM_PARALLEL=2" }),
-                " for hard concurrency (restart Ollama)."
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "select",
-                  {
-                    value: draft.model,
-                    onChange: (e) => setDraft((prev) => ({ ...prev, model: e.target.value })),
-                    disabled: loadingModels && modelOptions.length === 0,
-                    "aria-label": "Select model",
-                    children: modelOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingModels ? "Detecting…" : "No models available" }) : modelOptions.map((name) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: name, children: name }, name))
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "button",
-                    onClick: () => void fetchModels(draft),
-                    disabled: loadingModels,
-                    children: loadingModels ? "Detecting…" : "Refresh"
-                  }
-                )
-              ] }),
-              modelsError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: modelsError }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used for translation, Natural Auto Caption / reCaption, and analysis." })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field checkbox-field", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "checkbox-row", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "checkbox",
-                    checked: draft.autoAnalysis,
-                    onChange: (e) => setDraft((prev) => ({ ...prev, autoAnalysis: e.target.checked }))
-                  }
-                ),
-                "Auto analysis"
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "On: analyze captions in the background. Off: only while the Analyze dialog is open." })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "WD14 Tagging" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                DownloadFolderField,
-                {
-                  value: draft.loraTrainApp.downloadFolder,
-                  onChange: (downloadFolder) => setDraft((prev) => ({
-                    ...prev,
-                    loraTrainApp: { ...prev.loraTrainApp, downloadFolder }
-                  }))
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                PythonExecutableField,
-                {
-                  value: draft.loraTrainApp.pythonPath,
-                  onChange: (pythonPath) => setDraft((prev) => ({
-                    ...prev,
-                    loraTrainApp: { ...prev.loraTrainApp, pythonPath }
-                  })),
-                  downloadFolder: draft.loraTrainApp.downloadFolder,
-                  enabled: open
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used when Caption format is set to Danbooru Tags(SD/XL). Download installs WD14 + training packages into the download folder's python venv." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model repo" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "select",
+                    PythonExecutableField,
                     {
-                      value: draft.wd14.modelRepoId,
-                      onChange: (e) => setDraft((prev) => ({
+                      value: draft.loraTrainApp.pythonPath,
+                      onChange: (pythonPath) => setDraft((prev) => ({
                         ...prev,
-                        wd14: { ...prev.wd14, modelRepoId: e.target.value }
+                        loraTrainApp: { ...prev.loraTrainApp, pythonPath }
                       })),
-                      disabled: loadingWd14Repos && wd14RepoOptions.length === 0,
-                      "aria-label": "WD14 model repo",
-                      children: wd14RepoOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingWd14Repos ? "Loading…" : "No models available" }) : wd14RepoOptions.map((repo) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: repo, children: repo.replace(/^SmilingWolf\//, "") }, repo))
+                      downloadFolder: draft.loraTrainApp.downloadFolder,
+                      enabled: open,
+                      hint: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                        "Shared by Dataset Edit (WD14), LoraTrain, and ComfyUI install. Download installs CUDA torch 2.9.1 (cu128), packages from",
+                        " ",
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "trainer/requirements.txt" }),
+                        " and",
+                        " ",
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "trainer/requirements-wd14.txt" }),
+                        ", and on Windows",
+                        " ",
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "triton-windows" }),
+                        " and ",
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "flash-attn" }),
+                        " (FA2 wheel)."
+                      ] })
                     }
                   ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Hugging Face token (for gated Krea models)" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "password",
+                        value: draft.loraTrainApp.huggingfaceToken,
+                        onChange: (e) => setDraft((prev) => ({
+                          ...prev,
+                          loraTrainApp: {
+                            ...prev.loraTrainApp,
+                            huggingfaceToken: e.target.value
+                          }
+                        })),
+                        placeholder: "hf_… from huggingface.co/settings/tokens",
+                        autoComplete: "off"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+                      "Also open",
+                      " ",
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "a",
+                        {
+                          href: "https://huggingface.co/krea/Krea-2-Raw",
+                          target: "_blank",
+                          rel: "noreferrer",
+                          children: "krea/Krea-2-Raw"
+                        }
+                      ),
+                      " ",
+                      "(and Turbo) while logged in and click Agree — token alone is not enough."
+                    ] })
+                  ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "button",
+                    ComfyUiBatField,
                     {
-                      type: "button",
-                      onClick: () => void fetchWd14Repos(),
-                      disabled: loadingWd14Repos,
-                      children: loadingWd14Repos ? "Loading…" : "Refresh"
+                      value: draft.loraTestDraft.comfyUiBatPath,
+                      onChange: (comfyUiBatPath) => setDraft((prev) => ({
+                        ...prev,
+                        loraTestDraft: { ...prev.loraTestDraft, comfyUiBatPath }
+                      })),
+                      downloadFolder: draft.loraTrainApp.downloadFolder,
+                      pythonPath: draft.loraTrainApp.pythonPath,
+                      enabled: open
                     }
                   )
-                ] }),
-                wd14ReposError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: wd14ReposError }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
-                  wd14ReposFromNetwork ? "Listed from Hugging Face (ONNX + selected_tags.csv)." : "Offline fallback list — click Refresh when online.",
-                  " ",
-                  "Full id: ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: draft.wd14.modelRepoId || "—" })
                 ] })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", style: { flex: 1 }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Threshold" }),
+              tab === "datasetEdit" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Translation provider" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "radio-row", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "radio",
+                          name: "provider",
+                          checked: draft.provider === "lmstudio",
+                          onChange: () => setProvider("lmstudio")
+                        }
+                      ),
+                      "LM Studio"
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "radio",
+                          name: "provider",
+                          checked: draft.provider === "ollama",
+                          onChange: () => setProvider("ollama")
+                        }
+                      ),
+                      "Ollama"
+                    ] })
+                  ] })
+                ] }),
+                draft.provider === "lmstudio" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LM Studio Base URL" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "input",
                     {
-                      type: "number",
-                      min: 0,
-                      max: 1,
-                      step: 0.05,
-                      value: draft.wd14.threshold,
-                      onChange: (e) => setDraft((prev) => ({
-                        ...prev,
-                        wd14: {
-                          ...prev.wd14,
-                          threshold: Number(e.target.value)
-                        }
-                      }))
+                      type: "text",
+                      value: draft.lmStudioBaseUrl,
+                      onChange: (e) => setDraft((prev) => ({ ...prev, lmStudioBaseUrl: e.target.value }))
                     }
                   )
+                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Ollama Base URL" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "text",
+                        value: draft.ollamaBaseUrl,
+                        onChange: (e) => setDraft((prev) => ({ ...prev, ollamaBaseUrl: e.target.value }))
+                      }
+                    )
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+                    "Interactive translation / captioning has priority; analysis pauses until idle. Optional: ",
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "OLLAMA_NUM_PARALLEL=2" }),
+                    " for hard concurrency (restart Ollama)."
+                  ] })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", style: { flex: 1 }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Character threshold" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      type: "number",
-                      min: 0,
-                      max: 1,
-                      step: 0.05,
-                      value: draft.wd14.characterThreshold,
-                      onChange: (e) => setDraft((prev) => ({
-                        ...prev,
-                        wd14: {
-                          ...prev.wd14,
-                          characterThreshold: Number(e.target.value)
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "select",
+                      {
+                        value: draft.model,
+                        onChange: (e) => setDraft((prev) => ({ ...prev, model: e.target.value })),
+                        disabled: loadingModels && modelOptions.length === 0,
+                        "aria-label": "Select model",
+                        children: modelOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingModels ? "Detecting…" : "No models available" }) : modelOptions.map((name) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: name, children: name }, name))
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        onClick: () => void fetchModels(draft),
+                        disabled: loadingModels,
+                        children: loadingModels ? "Detecting…" : "Refresh"
+                      }
+                    )
+                  ] }),
+                  modelsError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: modelsError }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used for translation, Natural Auto Caption / reCaption, and analysis." })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "WD14 Tagging" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used when Caption format is set to Danbooru Tags(SD/XL). Python / download folder are configured on the General tab." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Model repo" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "select",
+                        {
+                          value: draft.wd14.modelRepoId,
+                          onChange: (e) => setDraft((prev) => ({
+                            ...prev,
+                            wd14: { ...prev.wd14, modelRepoId: e.target.value }
+                          })),
+                          disabled: loadingWd14Repos && wd14RepoOptions.length === 0,
+                          "aria-label": "WD14 model repo",
+                          children: wd14RepoOptions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: loadingWd14Repos ? "Loading…" : "No models available" }) : wd14RepoOptions.map((repo) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: repo, children: repo.replace(/^SmilingWolf\//, "") }, repo))
                         }
-                      }))
-                    }
-                  )
-                ] })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Auto Caption prompt" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used only for Natural Language(Flux/Krea2) format. Danbooru Tags ignores these prompts." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "select",
-                    {
-                      value: draft.activeCaptionPresetId,
-                      onChange: (e) => setDraft((prev) => ({ ...prev, activeCaptionPresetId: e.target.value })),
-                      "aria-label": "Caption prompt preset",
-                      children: draft.captionPresets.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.id, children: p.name }, p.id))
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: addPreset, children: "Add" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: deletePreset, children: "Delete" })
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          type: "button",
+                          onClick: () => void fetchWd14Repos(),
+                          disabled: loadingWd14Repos,
+                          children: loadingWd14Repos ? "Loading…" : "Refresh"
+                        }
+                      )
+                    ] }),
+                    wd14ReposError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint warn", children: wd14ReposError }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "field-hint", children: [
+                      wd14ReposFromNetwork ? "Listed from Hugging Face (ONNX + selected_tags.csv)." : "Offline fallback list — click Refresh when online.",
+                      " ",
+                      "Full id: ",
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: draft.wd14.modelRepoId || "—" })
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", style: { flex: 1 }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Threshold" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.05,
+                          value: draft.wd14.threshold,
+                          onChange: (e) => setDraft((prev) => ({
+                            ...prev,
+                            wd14: {
+                              ...prev.wd14,
+                              threshold: Number(e.target.value)
+                            }
+                          }))
+                        }
+                      )
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", style: { flex: 1 }, children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Character threshold" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.05,
+                          value: draft.wd14.characterThreshold,
+                          onChange: (e) => setDraft((prev) => ({
+                            ...prev,
+                            wd14: {
+                              ...prev.wd14,
+                              characterThreshold: Number(e.target.value)
+                            }
+                          }))
+                        }
+                      )
+                    ] })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Auto analysis" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "div",
+                      {
+                        className: `settings-toggle-row lora-toggle${draft.autoAnalysis ? " is-on" : ""}`,
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "button",
+                            {
+                              type: "button",
+                              role: "switch",
+                              className: "lora-switch",
+                              "aria-checked": draft.autoAnalysis,
+                              "aria-label": "Auto analysis",
+                              onClick: () => setDraft((prev) => ({
+                                ...prev,
+                                autoAnalysis: !prev.autoAnalysis
+                              })),
+                              children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+                            }
+                          ),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-toggle-label", children: "Background analysis" })
+                        ]
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "On: analyze captions in the background. Off: only while the Analyze dialog is open." })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-section", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Auto Caption prompt" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Used only for Natural Language(Flux/Krea2) format. Danbooru Tags ignores these prompts." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "model-row", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "select",
+                        {
+                          value: draft.activeCaptionPresetId,
+                          onChange: (e) => setDraft((prev) => ({
+                            ...prev,
+                            activeCaptionPresetId: e.target.value
+                          })),
+                          "aria-label": "Caption prompt preset",
+                          children: draft.captionPresets.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.id, children: p.name }, p.id))
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: addPreset, children: "Add" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: deletePreset, children: "Delete" })
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset name" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "text",
+                        value: activePreset?.name ?? "",
+                        onChange: (e) => updateActivePreset({ name: e.target.value })
+                      }
+                    )
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Caption Prompt" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "textarea",
+                      {
+                        className: "prompt-textarea",
+                        value: activePreset?.prompt ?? "",
+                        onChange: (e) => updateActivePreset({ prompt: e.target.value }),
+                        spellCheck: false
+                      }
+                    )
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "div",
+                      {
+                        className: `lora-toggle${draft.appendPositivePrompt ? " is-on" : ""}`,
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "button",
+                            {
+                              type: "button",
+                              role: "switch",
+                              className: "lora-switch",
+                              "aria-checked": draft.appendPositivePrompt,
+                              "aria-label": "Append positive Prompt",
+                              onClick: () => setDraft((prev) => ({
+                                ...prev,
+                                appendPositivePrompt: !prev.appendPositivePrompt
+                              })),
+                              children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+                            }
+                          ),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-toggle-label", children: "Append positive Prompt" })
+                        ]
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "On: append PNG Info positive prompt to the bottom of the Auto Caption prompt at runtime." })
+                  ] })
                 ] })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Preset name" }),
+              tab === "loraTrain" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Job hyper-parameters (network, steps, datasets, model path, sampling) are edited on the LoraTrain panel. Shared environment settings live on the General tab." }),
+              tab === "loraTest" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Base models for ComfyUI generation. ComfyUI launch bat is on the General tab." }),
+                loraTestDownloadError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: loraTestDownloadError }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
+                  PathBrowseField,
                   {
-                    type: "text",
-                    value: activePreset?.name ?? "",
-                    onChange: (e) => updateActivePreset({ name: e.target.value })
+                    label: LORA_TEST_MODEL_SPECS.ditPath.label,
+                    value: draft.loraTestDraft.ditPath,
+                    onChange: (ditPath) => setDraft((prev) => ({
+                      ...prev,
+                      loraTestDraft: { ...prev.loraTestDraft, ditPath }
+                    })),
+                    onBrowse: () => void browseSafetensors("ditPath", "Select DiT safetensors"),
+                    showDownload: !isSafetensorsPath(draft.loraTestDraft.ditPath),
+                    downloading: loraTestDownloadKey === "ditPath",
+                    downloadLabel: loraTestDownloadKey === "ditPath" ? `Downloading ${loraTestDownloadPct}%` : "Download",
+                    onDownload: () => void downloadLoraTestModel("ditPath")
                   }
-                )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Prompt (auto-saved; PNG Info is appended at runtime)" }),
+                ),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "textarea",
+                  PathBrowseField,
                   {
-                    className: "prompt-textarea",
-                    value: activePreset?.prompt ?? "",
-                    onChange: (e) => updateActivePreset({ prompt: e.target.value }),
-                    spellCheck: false
+                    label: "VAE",
+                    value: draft.loraTestDraft.vaePath,
+                    onChange: (vaePath) => setDraft((prev) => ({
+                      ...prev,
+                      loraTestDraft: { ...prev.loraTestDraft, vaePath }
+                    })),
+                    onBrowse: () => void browseSafetensors("vaePath", "Select VAE safetensors"),
+                    showDownload: !isSafetensorsPath(draft.loraTestDraft.vaePath),
+                    downloading: loraTestDownloadKey === "vaePath",
+                    downloadLabel: loraTestDownloadKey === "vaePath" ? `Downloading ${loraTestDownloadPct}%` : "Download",
+                    onDownload: () => void downloadLoraTestModel("vaePath")
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  PathBrowseField,
+                  {
+                    label: LORA_TEST_MODEL_SPECS.t5Path.label,
+                    value: draft.loraTestDraft.t5Path,
+                    onChange: (t5Path) => setDraft((prev) => ({
+                      ...prev,
+                      loraTestDraft: { ...prev.loraTestDraft, t5Path }
+                    })),
+                    onBrowse: () => void browseSafetensors("t5Path", "Select Qwen text encoder"),
+                    showDownload: !isSafetensorsPath(draft.loraTestDraft.t5Path),
+                    downloading: loraTestDownloadKey === "t5Path",
+                    downloadLabel: loraTestDownloadKey === "t5Path" ? `Downloading ${loraTestDownloadPct}%` : "Download",
+                    onDownload: () => void downloadLoraTestModel("t5Path")
                   }
                 )
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetDefaults, children: "Reset default URLs" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleTest, disabled: testing, children: testing ? "Testing…" : "Test connection" }),
+              tab === "datasetEdit" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetDefaults, children: "Reset default URLs" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleTest(), disabled: testing, children: testing ? "Testing…" : "Test connection" })
+              ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, children: "Cancel" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: handleSave, disabled: saving, children: saving ? "Saving…" : "Save" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: "primary",
+                  onClick: () => void handleSave(),
+                  disabled: saving,
+                  children: saving ? "Saving…" : "Save"
+                }
+              )
             ] }),
-            testResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: testResult }),
-            testError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: testError })
+            tab === "datasetEdit" && testResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-ok", children: testResult }),
+            tab === "datasetEdit" && testError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "test-err", children: testError })
           ]
         }
       )
     }
   );
+}
+function PathBrowseField({
+  label,
+  value,
+  onChange,
+  onBrowse,
+  showDownload = false,
+  downloading = false,
+  downloadLabel = "Download",
+  onDownload
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          value,
+          onChange: (e) => onChange(e.target.value),
+          placeholder: `${label} .safetensors path`,
+          spellCheck: false
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onBrowse, children: "Browse" }),
+      showDownload && onDownload && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: onDownload, disabled: downloading, children: downloadLabel })
+    ] })
+  ] });
 }
 function UnsavedDialog({ open, onSave, onDiscard, onCancel }) {
   if (!open) return null;
@@ -22571,13 +24238,25 @@ async function generateCaptionForImage(settings, imagePath, signal) {
   const presetPrompt = activePresetPrompt(settings);
   if (!presetPrompt) throw new Error("No caption prompt preset selected");
   try {
-    const [{ positivePrompt }, { mimeType, base64 }] = await Promise.all([
-      window.api.readImageMeta(imagePath),
-      window.api.readImageBase64(imagePath)
-    ]);
-    const pngInfo = positivePrompt.trim() || "(no PNG Info / positive prompt found in image metadata)";
-    const fullPrompt = `${presetPrompt}
+    let fullPrompt = presetPrompt;
+    let mimeType;
+    let base64;
+    if (settings.appendPositivePrompt) {
+      const [{ positivePrompt }, image] = await Promise.all([
+        window.api.readImageMeta(imagePath),
+        window.api.readImageBase64(imagePath)
+      ]);
+      mimeType = image.mimeType;
+      base64 = image.base64;
+      const pngInfo = positivePrompt.trim() || "(no PNG Info / positive prompt found in image metadata)";
+      fullPrompt = `${presetPrompt}
+PNG Info Prompt of Image:
 ${pngInfo}`;
+    } else {
+      const image = await window.api.readImageBase64(imagePath);
+      mimeType = image.mimeType;
+      base64 = image.base64;
+    }
     if (settings.provider === "lmstudio") {
       return await captionWithLmStudio(settings, fullPrompt, mimeType, base64, signal);
     }
@@ -22703,8 +24382,8 @@ function App() {
   const [savedEnglish, setSavedEnglish] = reactExports.useState("");
   const [translated, setTranslated] = reactExports.useState("");
   const [settings, setSettings] = reactExports.useState(() => normalizeSettings(null));
+  const [settingsReady, setSettingsReady] = reactExports.useState(false);
   const [settingsOpen, setSettingsOpen] = reactExports.useState(false);
-  const [loraSettingsOpen, setLoraSettingsOpen] = reactExports.useState(false);
   const [analysisOpen, setAnalysisOpen] = reactExports.useState(false);
   const [unsavedOpen, setUnsavedOpen] = reactExports.useState(false);
   const [deleteOpen, setDeleteOpen] = reactExports.useState(false);
@@ -22728,6 +24407,8 @@ function App() {
   const jobMenuRef = reactExports.useRef(null);
   const settingsRef = reactExports.useRef(settings);
   settingsRef.current = settings;
+  const settingsReadyRef = reactExports.useRef(settingsReady);
+  settingsReadyRef.current = settingsReady;
   const selectedPathRef = reactExports.useRef(selectedPath);
   selectedPathRef.current = selectedPath;
   const dirty = english !== savedEnglish;
@@ -22832,6 +24513,7 @@ function App() {
         }
         setStatus("");
         if (persist) {
+          if (!settingsReadyRef.current) return true;
           setSettings((prev) => {
             const folders = prev.datasetFolders.includes(dir) ? prev.datasetFolders : [...prev.datasetFolders, dir];
             const next = normalizeSettings({
@@ -22839,6 +24521,7 @@ function App() {
               lastFolder: dir,
               datasetFolders: folders
             });
+            settingsRef.current = next;
             void window.api.setSettings(next);
             return next;
           });
@@ -22856,7 +24539,8 @@ function App() {
       const next = normalizeSettings(s);
       settingsRef.current = next;
       setSettings(next);
-      if (next.activeView === "loraTrain") return;
+      setSettingsReady(true);
+      if (next.activeView === "loraTrain" || next.activeView === "loraTest") return;
       if (next.lastFolder) {
         await loadFolder(next.lastFolder, false);
       }
@@ -22982,6 +24666,7 @@ function App() {
         datasetFolders: remaining,
         lastFolder: prev.lastFolder === removing ? remaining[0] ?? null : prev.lastFolder
       });
+      settingsRef.current = next;
       void window.api.setSettings(next);
       return next;
     });
@@ -23008,6 +24693,7 @@ function App() {
         datasetFolders: remaining,
         lastFolder: nextFolder
       });
+      settingsRef.current = next;
       void window.api.setSettings(next);
       return next;
     });
@@ -23033,22 +24719,28 @@ function App() {
     scheduleTargetToEnglish(value);
   };
   const onLanguageChange = async (code) => {
-    const next = normalizeSettings({ ...settings, targetLanguage: code });
+    if (!settingsReadyRef.current) return;
+    const next = normalizeSettings({ ...settingsRef.current, targetLanguage: code });
+    settingsRef.current = next;
     setSettings(next);
     await window.api.setSettings(next);
   };
   const onSaveSettings = async (next) => {
+    if (!settingsReadyRef.current) return;
     const normalized = normalizeSettings(next);
+    settingsRef.current = normalized;
     await window.api.setSettings(normalized);
     setSettings(normalized);
   };
   const onAutoSaveSettings = reactExports.useCallback(async (next) => {
+    if (!settingsReadyRef.current) return;
     const normalized = normalizeSettings(next);
     settingsRef.current = normalized;
     setSettings(normalized);
     await window.api.setSettings(normalized);
   }, []);
   const persistSettingsPatch = reactExports.useCallback((patch) => {
+    if (!settingsReadyRef.current) return;
     const next = normalizeSettings({ ...settingsRef.current, ...patch });
     settingsRef.current = next;
     setSettings(next);
@@ -23079,7 +24771,7 @@ function App() {
       statusClearTimerRef.current = setTimeout(() => setStatus(""), 4e3);
       return;
     }
-    if (view === "loraTrain") {
+    if (view === "loraTrain" || view === "loraTest") {
       stopAllLocalAi();
       setStatus("Local AI stopped");
       setError(null);
@@ -23154,11 +24846,12 @@ function App() {
       activeLoraTrainJobId: remaining[0].id
     });
   };
-  const onSaveLoraTrainApp = async (loraTrainApp) => {
-    const next = normalizeSettings({ ...settingsRef.current, loraTrainApp });
-    await window.api.setSettings(next);
-    setSettings(next);
-  };
+  const onLoraTestDraftChange = reactExports.useCallback(
+    (loraTestDraft) => {
+      persistSettingsPatch({ loraTestDraft });
+    },
+    [persistSettingsPatch]
+  );
   const onLoraStatus = reactExports.useCallback(
     (message, isError, options) => {
       if (statusClearTimerRef.current) {
@@ -23178,6 +24871,23 @@ function App() {
     },
     [setError]
   );
+  const openLoraOutputFolder = async () => {
+    const folder2 = (activeLoraJob?.job.training_folder || "").trim();
+    const jobName = (activeLoraJob?.job.name || "").trim();
+    if (!folder2) {
+      onLoraStatus("Set an Output folder in Basics first", true);
+      return;
+    }
+    if (!jobName) {
+      onLoraStatus("Set a Job name in Basics first", true);
+      return;
+    }
+    const jobOut = folder2.replace(/[/\\]+$/, "") + "/" + jobName;
+    const result = await window.api.openPathInExplorer(jobOut);
+    if (!result.ok) {
+      onLoraStatus(result.error || "Could not open output folder", true);
+    }
+  };
   const runCaptionForPath = async (imagePath) => {
     captionAbortRef.current?.abort();
     const ac = new AbortController();
@@ -23343,7 +25053,7 @@ function App() {
       }
       if (isCaptionFocused()) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (deleteOpen || unsavedOpen || settingsOpen || loraSettingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return;
+      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return;
       if (settingsRef.current.activeView !== "datasetEdit") return;
       if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
         e.preventDefault();
@@ -23393,7 +25103,6 @@ function App() {
     deleteOpen,
     unsavedOpen,
     settingsOpen,
-    loraSettingsOpen,
     removeDatasetOpen,
     removeLoraJobOpen,
     missingDatasetOpen
@@ -23402,13 +25111,17 @@ function App() {
   const toolbarStatus = status || error || (translating ? "Translating…" : analysisAnalyzing ? analysisProgress ? `Analyzing ${analysisProgress.done}/${analysisProgress.total}…` : "Analyzing…" : "");
   const toolbarStatusIsError = Boolean(error && !status);
   const persistPaneWidths = reactExports.useCallback((next) => {
+    if (!settingsReadyRef.current) return;
     const normalized = normalizeSettings(next);
+    settingsRef.current = normalized;
     setSettings(normalized);
     void window.api.setSettings(normalized);
   }, []);
   const persistListView = reactExports.useCallback(
     (patch) => {
+      if (!settingsReadyRef.current) return;
       const next = normalizeSettings({ ...settingsRef.current, ...patch });
+      settingsRef.current = next;
       setSettings(next);
       void window.api.setSettings(next);
     },
@@ -23470,6 +25183,8 @@ function App() {
     target.addEventListener("pointercancel", onUp);
   };
   const isDatasetEdit = settings.activeView === "datasetEdit";
+  const isLoraTrain = settings.activeView === "loraTrain";
+  const isLoraTest = settings.activeView === "loraTest";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "app", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "header",
@@ -23564,7 +25279,15 @@ function App() {
                 }
               )
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setSettingsOpen(true), children: "Settings" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                disabled: !settingsReady,
+                onClick: () => setSettingsOpen(true),
+                children: "Settings"
+              }
+            ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
@@ -23608,7 +25331,7 @@ function App() {
                 }
               ) }, preset.id)) })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
+            !isLoraTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
                 type: "button",
@@ -23626,7 +25349,7 @@ function App() {
                 ) })
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
+            !isLoraTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
                 type: "button",
@@ -23644,7 +25367,33 @@ function App() {
                 ) })
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setLoraSettingsOpen(true), children: "Settings" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                disabled: !settingsReady,
+                onClick: () => setSettingsOpen(true),
+                children: "Settings"
+              }
+            ),
+            !isLoraTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-icon-btn",
+                title: "Open output folder",
+                "aria-label": "Open output folder",
+                disabled: !(activeLoraJob?.job.training_folder || "").trim() || !(activeLoraJob?.job.name || "").trim(),
+                onClick: () => void openLoraOutputFolder(),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    fill: "currentColor",
+                    d: "M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                  }
+                ) })
+              }
+            )
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "toolbar-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
@@ -23671,10 +25420,21 @@ function App() {
                   {
                     type: "button",
                     role: "tab",
-                    className: `view-switch-seg${!isDatasetEdit ? " active" : ""}`,
-                    "aria-selected": !isDatasetEdit,
+                    className: `view-switch-seg${isLoraTrain ? " active" : ""}`,
+                    "aria-selected": isLoraTrain,
                     onClick: () => setActiveView("loraTrain"),
                     children: "LoraTrain"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    role: "tab",
+                    className: `view-switch-seg${isLoraTest ? " active" : ""}`,
+                    "aria-selected": isLoraTest,
+                    onClick: () => setActiveView("loraTest"),
+                    children: "LoraTest"
                   }
                 )
               ]
@@ -23718,10 +25478,21 @@ function App() {
         onSave: () => void saveCurrent(),
         onRecaption: () => void reCaptionCurrent()
       }
+    ) : isLoraTest ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoraTestView,
+      {
+        job: activeLoraJob.job,
+        jobId: activeLoraJob.id,
+        draft: settings.loraTestDraft,
+        appSettings: settings.loraTrainApp,
+        onDraftChange: onLoraTestDraftChange,
+        onStatus: onLoraStatus
+      }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       LoraTrainView,
       {
         job: activeLoraJob.job,
+        jobId: activeLoraJob.id,
         appSettings: settings.loraTrainApp,
         datasetFolders: settings.datasetFolders,
         onChange: onLoraJobChange,
@@ -23737,12 +25508,14 @@ function App() {
           " image(s)"
         ] })
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "folder-path", title: activeLoraJob.job.datasets[0]?.folder_path, children: activeLoraJob.job.datasets[0]?.folder_path || "No train dataset" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "image-count", children: [
-          activeLoraJob.job.train.steps,
-          " steps · lr ",
-          activeLoraJob.job.train.lr
-        ] })
+        (() => {
+          const folders = activeLoraJob.job.datasets.map((ds) => ds.folder_path?.trim() || "").filter(Boolean);
+          const first = folders[0];
+          const extra = folders.length > 1 ? ` +${folders.length - 1}` : "";
+          const title = folders.join("\n") || void 0;
+          return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "folder-path", title, children: first ? `${first}${extra}` : folders.length === 0 ? "No train dataset" : `${folders.length} datasets` });
+        })(),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "image-count", children: isLoraTest ? `${activeLoraJob.job.name} · LoraTest` : `${activeLoraJob.job.datasets.filter((ds) => ds.folder_path?.trim()).length || 0} dataset(s) · ${activeLoraJob.job.train.steps} steps · lr ${activeLoraJob.job.train.lr}` })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "system-bar-right", children: [
         toolbarStatus && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `status-msg${toolbarStatusIsError ? " is-error" : ""}`, children: toolbarStatus }),
@@ -23757,15 +25530,6 @@ function App() {
         onClose: () => setSettingsOpen(false),
         onSave: onSaveSettings,
         onAutoSave: onAutoSaveSettings
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      LoraTrainSettingsDialog,
-      {
-        open: loraSettingsOpen,
-        settings: settings.loraTrainApp,
-        onClose: () => setLoraSettingsOpen(false),
-        onSave: onSaveLoraTrainApp
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(

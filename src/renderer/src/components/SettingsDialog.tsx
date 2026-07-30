@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppSettings, CaptionPreset, TranslationProvider } from '../types'
-import { DEFAULT_SETTINGS, normalizeSettings } from '../types'
+import { DEFAULT_SETTINGS, modelDownloadPathFromDownloadFolder, normalizeSettings } from '../types'
 import { createDefaultCaptionPreset } from '../defaults/captionPresets'
 import { listModels, testConnection } from '../services/translation'
 import {
@@ -10,6 +10,7 @@ import {
 import { ComfyUiBatField } from './ComfyUiBatField'
 import { DownloadFolderField } from './DownloadFolderField'
 import { PythonExecutableField } from './PythonExecutableField'
+import { parentDir } from '../services/comfyGenerate'
 
 type SettingsTab = 'general' | 'datasetEdit' | 'loraTrain' | 'loraTest'
 
@@ -42,6 +43,31 @@ const TABS: { id: SettingsTab; label: string }[] = [
 
 type ModelPathKey = 'ditPath' | 'vaePath' | 't5Path'
 
+type LoraTestModelSpec = {
+  label: string
+  filename: string
+}
+
+const LORA_TEST_MODEL_REPO = 'AlperKTS/Krea2_FP8'
+const LORA_TEST_MODEL_SPECS: Record<ModelPathKey, LoraTestModelSpec> = {
+  ditPath: {
+    label: 'Checkpoint',
+    filename: 'krea2_turbo_fp8.safetensors'
+  },
+  vaePath: {
+    label: 'VAE',
+    filename: 'qwen_image_vae.safetensors'
+  },
+  t5Path: {
+    label: 'Text Encoder',
+    filename: 'qwen3vl_4b_fp8_scaled.safetensors'
+  }
+}
+
+function isSafetensorsPath(value: string): boolean {
+  return value.trim().toLowerCase().endsWith('.safetensors')
+}
+
 export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: Props) {
   const [draft, setDraft] = useState<AppSettings>(settings)
   const [tab, setTab] = useState<SettingsTab>(() => tabFromActiveView(settings.activeView))
@@ -56,6 +82,9 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [loraTestDownloadKey, setLoraTestDownloadKey] = useState<ModelPathKey | null>(null)
+  const [loraTestDownloadPct, setLoraTestDownloadPct] = useState(0)
+  const [loraTestDownloadError, setLoraTestDownloadError] = useState<string | null>(null)
   const fetchId = useRef(0)
   const wd14FetchId = useRef(0)
   const urlDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -181,6 +210,37 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
     return models
   }, [draft.model, models])
 
+  useEffect(() => {
+    const offProgress = window.api.onModelDownloadProgress((payload) => {
+      if (payload.repoId !== LORA_TEST_MODEL_REPO) return
+      setLoraTestDownloadPct(payload.pct)
+    })
+    const offDone = window.api.onModelDownloadDone((payload) => {
+      if (payload.repoId !== LORA_TEST_MODEL_REPO) return
+      const activeKey = loraTestDownloadKey
+      setLoraTestDownloadKey(null)
+      setLoraTestDownloadPct(100)
+      if (!activeKey || !payload.filePath) return
+      setDraft((prev) => {
+        const nextDraft = { ...prev.loraTestDraft, [activeKey]: payload.filePath }
+        if (activeKey === 'ditPath') {
+          nextDraft.checkpointFolder = parentDir(payload.filePath)
+        }
+        return { ...prev, loraTestDraft: nextDraft }
+      })
+    })
+    const offError = window.api.onModelDownloadError((payload) => {
+      if (payload.repoId !== LORA_TEST_MODEL_REPO) return
+      setLoraTestDownloadKey(null)
+      setLoraTestDownloadError(payload.message)
+    })
+    return () => {
+      offProgress()
+      offDone()
+      offError()
+    }
+  }, [loraTestDownloadKey])
+
   if (!open) return null
 
   const setProvider = (provider: TranslationProvider) => {
@@ -243,6 +303,34 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
       ...prev,
       loraTestDraft: { ...prev.loraTestDraft, [key]: file }
     }))
+  }
+
+  const browseCheckpointFolder = async () => {
+    const dir = await window.api.openFolder()
+    if (!dir) return
+    setDraft((prev) => ({
+      ...prev,
+      loraTestDraft: { ...prev.loraTestDraft, checkpointFolder: dir }
+    }))
+  }
+
+  const downloadLoraTestModel = async (key: ModelPathKey) => {
+    if (loraTestDownloadKey) return
+    setLoraTestDownloadError(null)
+    setLoraTestDownloadKey(key)
+    setLoraTestDownloadPct(0)
+    const spec = LORA_TEST_MODEL_SPECS[key]
+    const result = await window.api.downloadModel({
+      pythonPath: draft.loraTrainApp.pythonPath,
+      downloadPath: modelDownloadPathFromDownloadFolder(draft.loraTrainApp.downloadFolder),
+      token: draft.loraTrainApp.huggingfaceToken,
+      repoId: LORA_TEST_MODEL_REPO,
+      fileName: spec.filename
+    })
+    if (!result.ok) {
+      setLoraTestDownloadKey(null)
+      setLoraTestDownloadError(result.error || `Failed to download ${spec.label}`)
+    }
   }
 
   const handleTest = async () => {
@@ -762,16 +850,24 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
               <p className="field-hint">
                 Base models for ComfyUI generation. ComfyUI launch bat is on the General tab.
               </p>
+              {loraTestDownloadError && <p className="test-err">{loraTestDownloadError}</p>}
               <PathBrowseField
-                label="DiT"
-                value={draft.loraTestDraft.ditPath}
-                onChange={(ditPath) =>
+                label={LORA_TEST_MODEL_SPECS.ditPath.label}
+                value={draft.loraTestDraft.checkpointFolder}
+                onChange={(checkpointFolder) =>
                   setDraft((prev) => ({
                     ...prev,
-                    loraTestDraft: { ...prev.loraTestDraft, ditPath }
+                    loraTestDraft: { ...prev.loraTestDraft, checkpointFolder }
                   }))
                 }
-                onBrowse={() => void browseSafetensors('ditPath', 'Select DiT safetensors')}
+                onBrowse={() => void browseCheckpointFolder()}
+                placeholder="Checkpoint folder path"
+                showDownload={!draft.loraTestDraft.checkpointFolder.trim()}
+                downloading={loraTestDownloadKey === 'ditPath'}
+                downloadLabel={
+                  loraTestDownloadKey === 'ditPath' ? `Downloading ${loraTestDownloadPct}%` : 'Download'
+                }
+                onDownload={() => void downloadLoraTestModel('ditPath')}
               />
               <PathBrowseField
                 label="VAE"
@@ -783,9 +879,15 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
                   }))
                 }
                 onBrowse={() => void browseSafetensors('vaePath', 'Select VAE safetensors')}
+                showDownload={!isSafetensorsPath(draft.loraTestDraft.vaePath)}
+                downloading={loraTestDownloadKey === 'vaePath'}
+                downloadLabel={
+                  loraTestDownloadKey === 'vaePath' ? `Downloading ${loraTestDownloadPct}%` : 'Download'
+                }
+                onDownload={() => void downloadLoraTestModel('vaePath')}
               />
               <PathBrowseField
-                label="Text Encoder (Qwen)"
+                label={LORA_TEST_MODEL_SPECS.t5Path.label}
                 value={draft.loraTestDraft.t5Path}
                 onChange={(t5Path) =>
                   setDraft((prev) => ({
@@ -796,6 +898,12 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
                 onBrowse={() =>
                   void browseSafetensors('t5Path', 'Select Qwen text encoder')
                 }
+                showDownload={!isSafetensorsPath(draft.loraTestDraft.t5Path)}
+                downloading={loraTestDownloadKey === 't5Path'}
+                downloadLabel={
+                  loraTestDownloadKey === 't5Path' ? `Downloading ${loraTestDownloadPct}%` : 'Download'
+                }
+                onDownload={() => void downloadLoraTestModel('t5Path')}
               />
             </>
           )}
@@ -837,12 +945,22 @@ function PathBrowseField({
   label,
   value,
   onChange,
-  onBrowse
+  onBrowse,
+  placeholder,
+  showDownload = false,
+  downloading = false,
+  downloadLabel = 'Download',
+  onDownload
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   onBrowse: () => void
+  placeholder?: string
+  showDownload?: boolean
+  downloading?: boolean
+  downloadLabel?: string
+  onDownload?: () => void
 }) {
   return (
     <label className="field">
@@ -852,12 +970,17 @@ function PathBrowseField({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={`${label} .safetensors path`}
+          placeholder={placeholder ?? `${label} .safetensors path`}
           spellCheck={false}
         />
         <button type="button" onClick={onBrowse}>
           Browse
         </button>
+        {showDownload && onDownload && (
+          <button type="button" className="primary" onClick={onDownload} disabled={downloading}>
+            {downloadLabel}
+          </button>
+        )}
       </div>
     </label>
   )

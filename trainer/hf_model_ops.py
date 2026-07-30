@@ -37,6 +37,11 @@ def local_dir_for(download_path: str, repo_id: str) -> Path:
     return Path(download_path).expanduser().resolve() / sanitize_repo_id(repo_id)
 
 
+def is_safe_repo_file_name(value: str) -> bool:
+    s = value.strip()
+    return bool(s) and "/" not in s and "\\" not in s and ".." not in s
+
+
 def read_sidecar(directory: Path) -> dict[str, Any] | None:
     path = directory / SIDECAR_NAME
     if not path.is_file():
@@ -292,10 +297,14 @@ def cmd_download(args: argparse.Namespace) -> int:
     from huggingface_hub.utils import tqdm as hf_tqdm
 
     repo_id = (args.repo_id or "").strip()
+    file_name = (args.file_name or "").strip()
     download_path = (args.download_path or "").strip()
     token = (args.token or "").strip() or None
     if not repo_id or not is_hf_repo_id(repo_id):
         print(f"CAPTIOER_MODEL_ERROR message=Invalid repo id: {repo_id}", flush=True)
+        return 1
+    if file_name and not is_safe_repo_file_name(file_name):
+        print(f"CAPTIOER_MODEL_ERROR message=Invalid file name: {file_name}", flush=True)
         return 1
     if not download_path:
         print("CAPTIOER_MODEL_ERROR message=download_path required", flush=True)
@@ -308,6 +317,8 @@ def cmd_download(args: argparse.Namespace) -> int:
     try:
         info = HfApi(token=token).model_info(repo_id, token=token, files_metadata=True)
         for sib in getattr(info, "siblings", None) or []:
+            if file_name and getattr(sib, "rfilename", "") != file_name:
+                continue
             size = getattr(sib, "size", None)
             if isinstance(size, int) and size > 0:
                 repo_total += size
@@ -399,16 +410,31 @@ def cmd_download(args: argparse.Namespace) -> int:
             )
             return 1
         revision = remote_revision(repo_id, token)
-        snapshot_download(
-            repo_id=repo_id,
-            local_dir=str(local_dir),
-            revision=revision,
-            token=token,
-            tqdm_class=ProgressTqdm,
-        )
+        snapshot_download_kwargs: dict[str, Any] = {
+            "repo_id": repo_id,
+            "local_dir": str(local_dir),
+            "revision": revision,
+            "token": token,
+            "tqdm_class": ProgressTqdm,
+        }
+        if file_name:
+            snapshot_download_kwargs["allow_patterns"] = [file_name]
+        snapshot_download(**snapshot_download_kwargs)
         write_sidecar(local_dir, repo_id, revision)
+        file_path = ""
+        if file_name:
+            downloaded = local_dir / file_name
+            if not downloaded.is_file():
+                print(
+                    f"CAPTIOER_MODEL_ERROR message=Downloaded file missing after snapshot: {downloaded}",
+                    flush=True,
+                )
+                return 1
+            file_path = str(downloaded)
         print(
-            f"CAPTIOER_MODEL_DONE repo={repo_id} path={local_dir} revision={revision}",
+            "CAPTIOER_MODEL_DONE "
+            f"repo={repo_id} path={local_dir} revision={revision}"
+            + (f" file={file_path}" if file_path else ""),
             flush=True,
         )
         return 0
@@ -436,6 +462,7 @@ def main() -> int:
     p_dl.add_argument("--download-path", required=True)
     p_dl.add_argument("--token", default="")
     p_dl.add_argument("--repo-id", required=True)
+    p_dl.add_argument("--file-name", default="")
 
     args = parser.parse_args()
     if args.command == "check":

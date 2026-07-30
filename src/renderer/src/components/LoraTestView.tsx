@@ -35,9 +35,16 @@ interface CheckpointItem {
   path: string
 }
 
+interface DitCheckpointItem {
+  name: string
+  path: string
+}
+
 interface HistoryItem {
   url: string
   filePath: string
+  promptIndex: number | null
+  checkpointName: string | null
   loraStep: number | null
   loraStrength: number | null
   seed: number | null
@@ -56,6 +63,10 @@ function basename(fullPath: string): string {
   return loraNameFromPath(fullPath)
 }
 
+function pathKey(p: string): string {
+  return p.replace(/\\/g, '/').toLowerCase()
+}
+
 function checkBasenameConflicts(paths: { label: string; path: string }[]): string | null {
   const map = new Map<string, string>()
   for (const { label, path } of paths) {
@@ -70,30 +81,76 @@ function checkBasenameConflicts(paths: { label: string; path: string }[]): strin
   return null
 }
 
-/** Parse Captioer loratest filenames: stepNNNNNN_w1.00_seed123 or legacy stepNNNNNN_seed123. */
+/** Parse Captioer loratest filenames: [pNN_]stepNNNNNN_w1.00_seed123[_ckpt_NAME] or legacy. */
 function parseLoratestMeta(fileName: string): {
+  promptIndex: number | null
+  checkpointName: string | null
   loraStep: number | null
   loraStrength: number | null
   seed: number | null
 } {
   const stem = fileName.replace(/\.[^.]+$/, '')
+  const withPrompt =
+    /^p(\d+)_step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_ckpt_(.+?))?(?:_\d{10,})?$/i.exec(
+      stem
+    )
+  if (withPrompt) {
+    const rawCkpt = (withPrompt[5] || '').trim()
+    return {
+      promptIndex: Number(withPrompt[1]),
+      loraStep: Number(withPrompt[2]),
+      loraStrength: Number(withPrompt[3]),
+      seed: Number(withPrompt[4]),
+      checkpointName: rawCkpt || null
+    }
+  }
+  const withCkpt =
+    /^step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_ckpt_(.+?))?(?:_\d{10,})?$/i.exec(stem)
+  if (withCkpt) {
+    const rawCkpt = (withCkpt[4] || '').trim()
+    return {
+      promptIndex: null,
+      loraStep: Number(withCkpt[1]),
+      loraStrength: Number(withCkpt[2]),
+      seed: Number(withCkpt[3]),
+      checkpointName: rawCkpt || null
+    }
+  }
   const withWeight = /^step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_\d+)?$/i.exec(stem)
   if (withWeight) {
     return {
+      promptIndex: null,
       loraStep: Number(withWeight[1]),
       loraStrength: Number(withWeight[2]),
-      seed: Number(withWeight[3])
+      seed: Number(withWeight[3]),
+      checkpointName: null
     }
   }
   const legacy = /^step(\d+)_seed(\d+)(?:_\d+)?$/i.exec(stem)
   if (legacy) {
     return {
+      promptIndex: null,
       loraStep: Number(legacy[1]),
       loraStrength: null,
-      seed: Number(legacy[2])
+      seed: Number(legacy[2]),
+      checkpointName: null
     }
   }
-  return { loraStep: null, loraStrength: null, seed: null }
+  return {
+    promptIndex: null,
+    checkpointName: null,
+    loraStep: null,
+    loraStrength: null,
+    seed: null
+  }
+}
+
+function sanitizeCheckpointTag(name: string): string {
+  return name
+    .replace(/\.safetensors$/i, '')
+    .replace(/[<>:"/\\|?*\x00-\x1f]+/g, '_')
+    .replace(/\s+/g, '_')
+    .trim()
 }
 
 function formatMetaValue(v: number | null, digits?: number): string {
@@ -112,6 +169,7 @@ export function LoraTestView({
 }: Props) {
   const [local, setLocal] = useState(() => normalizeLoraTestDraft(draft))
   const [checkpoints, setCheckpoints] = useState<CheckpointItem[]>([])
+  const [ditFiles, setDitFiles] = useState<DitCheckpointItem[]>([])
   const [comfyOnline, setComfyOnline] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genProgress, setGenProgress] = useState<string | null>(null)
@@ -119,6 +177,8 @@ export function LoraTestView({
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [startingComfy, setStartingComfy] = useState(false)
+  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null)
+  const [editingPromptDraft, setEditingPromptDraft] = useState('')
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipPersist = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
@@ -156,9 +216,18 @@ export function LoraTestView({
     setLocal((prev) => {
       const next = { ...prev }
       let changed = false
-      if (!prev.prompt.trim()) {
-        const base = first?.prompt || ''
-        next.prompt = trigger ? `${trigger}, ${base}` : base
+      if (prev.prompts.every((p) => !p.text.trim())) {
+        const seeded = sample.prompts
+          .map((sp) => {
+            const base = (sp.prompt || '').trim()
+            if (!base) return null
+            return {
+              text: trigger ? `${trigger}, ${base}` : base,
+              enabled: true
+            }
+          })
+          .filter((p): p is { text: string; enabled: boolean } => p != null)
+        next.prompts = seeded.length > 0 ? seeded : [{ text: '', enabled: true }]
         changed = true
       }
       if (!prev.negative.trim() && sample.neg) {
@@ -241,6 +310,8 @@ export function LoraTestView({
         return {
           url: window.api.toLocalUrl(img.path),
           filePath: img.path,
+          promptIndex: meta.promptIndex,
+          checkpointName: meta.checkpointName,
           loraStep: meta.loraStep,
           loraStrength: meta.loraStrength,
           seed: meta.seed
@@ -290,6 +361,42 @@ export function LoraTestView({
     }
   }, [job.training_folder, job.name])
 
+  const refreshDitCheckpoints = useCallback(async () => {
+    const folder = local.checkpointFolder.trim()
+    if (!folder) {
+      setDitFiles([])
+      setLocal((prev) => (prev.ditPath ? normalizeLoraTestDraft({ ...prev, ditPath: '' }) : prev))
+      return
+    }
+    try {
+      const result = await window.api.loraTestListDitCheckpoints(folder)
+      if (!result.ok) {
+        setDitFiles([])
+        return
+      }
+      const files = result.files
+      setDitFiles(files)
+      setLocal((prev) => {
+        if (files.length === 0) {
+          return prev.ditPath ? normalizeLoraTestDraft({ ...prev, ditPath: '' }) : prev
+        }
+        const match = files.find((f) => pathKey(f.path) === pathKey(prev.ditPath))
+        if (match) {
+          return match.path === prev.ditPath
+            ? prev
+            : normalizeLoraTestDraft({ ...prev, ditPath: match.path })
+        }
+        return normalizeLoraTestDraft({ ...prev, ditPath: files[0].path })
+      })
+    } catch {
+      setDitFiles([])
+    }
+  }, [local.checkpointFolder])
+
+  useEffect(() => {
+    void refreshDitCheckpoints()
+  }, [refreshDitCheckpoints])
+
   useEffect(() => {
     void refreshCheckpoints()
   }, [refreshCheckpoints, jobId])
@@ -318,8 +425,12 @@ export function LoraTestView({
   const toggleLoraStep = (step: number) => {
     setLocal((prev) => {
       const set = new Set(prev.selectedLoraSteps)
-      if (set.has(step)) set.delete(step)
-      else set.add(step)
+      if (set.has(step)) {
+        if (set.size <= 1) return prev
+        set.delete(step)
+      } else {
+        set.add(step)
+      }
       return normalizeLoraTestDraft({
         ...prev,
         selectedLoraSteps: [...set].sort((a, b) => a - b)
@@ -424,6 +535,20 @@ export function LoraTestView({
       return
     }
 
+    const promptEntries = local.prompts
+      .map((entry, index) => ({
+        text: entry.text.trim(),
+        enabled: entry.enabled !== false,
+        index
+      }))
+      .filter((p) => p.enabled && p.text)
+    if (promptEntries.length < 1) {
+      const msg = 'Enable at least one non-empty prompt'
+      setGenError(msg)
+      onStatus(msg, true)
+      return
+    }
+
     const trainingFolder = (job.training_folder || '').trim()
     const jobName = (job.name || '').trim()
     if (!trainingFolder || !jobName) {
@@ -444,8 +569,7 @@ export function LoraTestView({
       local.seed === -1
         ? Math.floor(Math.random() * 0xffffffff)
         : Math.max(0, Math.round(local.seed))
-    const shared = {
-      prompt: local.prompt,
+    const sharedBase = {
       negative: local.negative,
       steps: local.steps,
       cfg: local.cfg,
@@ -459,36 +583,47 @@ export function LoraTestView({
       t5Name: basename(t5Path),
       loraStrength: local.loraStrength
     }
+    const total = promptEntries.length * selected.length
 
     try {
       let doneCount = 0
-      for (let i = 0; i < selected.length; i++) {
-        if (ac.signal.aborted) throw new Error('Cancelled')
-        const ckpt = selected[i]
-        setGenProgress(`Generating ${i + 1}/${selected.length} (step ${ckpt.step})…`)
-        onStatus(`Generating ${i + 1}/${selected.length}…`)
-        const result = await generateWithComfy(
-          {
-            ...shared,
-            loraName: loraNameFromPath(ckpt.path)
-          },
-          { signal: ac.signal }
-        )
-        if (!result.filePath) {
-          throw new Error('ComfyUI finished but local image path was not resolved')
+      for (const { text: promptText, index: promptIndex } of promptEntries) {
+        for (let i = 0; i < selected.length; i++) {
+          if (ac.signal.aborted) throw new Error('Cancelled')
+          const ckpt = selected[i]
+          const n = doneCount + 1
+          setGenProgress(
+            `Generating ${n}/${total} (prompt ${promptIndex + 1}, step ${ckpt.step})…`
+          )
+          onStatus(`Generating ${n}/${total}…`)
+          const result = await generateWithComfy(
+            {
+              ...sharedBase,
+              prompt: promptText,
+              loraName: loraNameFromPath(ckpt.path)
+            },
+            { signal: ac.signal }
+          )
+          if (!result.filePath) {
+            throw new Error('ComfyUI finished but local image path was not resolved')
+          }
+          const weightTag = Number(local.loraStrength).toFixed(2)
+          const ckptTag = sanitizeCheckpointTag(basename(ditPath))
+          const promptTag = `p${String(promptIndex + 1).padStart(2, '0')}`
+          const saved = await window.api.loraTestSaveGeneratedImage({
+            sourcePath: result.filePath,
+            trainingFolder,
+            jobName,
+            fileName: `${promptTag}_step${String(ckpt.step).padStart(6, '0')}_w${weightTag}_seed${runSeed}${
+              ckptTag ? `_ckpt_${ckptTag}` : ''
+            }`
+          })
+          if (!saved.ok || !saved.path) {
+            throw new Error(saved.error || 'Failed to save image into loratest folder')
+          }
+          doneCount += 1
+          await refreshGallery()
         }
-        const weightTag = Number(local.loraStrength).toFixed(2)
-        const saved = await window.api.loraTestSaveGeneratedImage({
-          sourcePath: result.filePath,
-          trainingFolder,
-          jobName,
-          fileName: `step${String(ckpt.step).padStart(6, '0')}_w${weightTag}_seed${runSeed}`
-        })
-        if (!saved.ok || !saved.path) {
-          throw new Error(saved.error || 'Failed to save image into loratest folder')
-        }
-        doneCount += 1
-        await refreshGallery()
       }
       setGenProgress(null)
       onStatus(`Generate done (${doneCount} image${doneCount === 1 ? '' : 's'})`)
@@ -508,7 +643,74 @@ export function LoraTestView({
     onStatus('ComfyUI stopped')
   }
 
+  const openPromptEditor = (index: number) => {
+    setEditingPromptIndex(index)
+    setEditingPromptDraft(local.prompts[index]?.text ?? '')
+  }
+
+  const closePromptEditor = (save: boolean) => {
+    if (save && editingPromptIndex != null) {
+      const next = local.prompts.map((p, i) =>
+        i === editingPromptIndex ? { ...p, text: editingPromptDraft } : p
+      )
+      patch({ prompts: next })
+    }
+    setEditingPromptIndex(null)
+    setEditingPromptDraft('')
+  }
+
+  const addPrompt = () => {
+    patch({ prompts: [...local.prompts, { text: '', enabled: true }] })
+  }
+
+  const removePrompt = (index: number) => {
+    if (local.prompts.length <= 1) {
+      patch({ prompts: [{ text: '', enabled: true }] })
+      return
+    }
+    const next = local.prompts.filter((_, i) => i !== index)
+    if (!next.some((p) => p.enabled)) {
+      next[0] = { ...next[0], enabled: true }
+    }
+    patch({ prompts: next })
+  }
+
+  const togglePromptEnabled = (index: number) => {
+    const entry = local.prompts[index]
+    if (!entry) return
+    if (entry.enabled) {
+      const enabledCount = local.prompts.filter((p) => p.enabled).length
+      if (enabledCount <= 1) return
+    }
+    patch({
+      prompts: local.prompts.map((p, i) =>
+        i === index ? { ...p, enabled: !p.enabled } : p
+      )
+    })
+  }
+
+  useEffect(() => {
+    if (editingPromptIndex == null) return
+    const idx = editingPromptIndex
+    const draftText = editingPromptDraft
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      setLocal((prev) => {
+        const next = prev.prompts.map((p, i) =>
+          i === idx ? { ...p, text: draftText } : p
+        )
+        return normalizeLoraTestDraft({ ...prev, prompts: next })
+      })
+      setEditingPromptIndex(null)
+      setEditingPromptDraft('')
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [editingPromptIndex, editingPromptDraft])
+
   return (
+    <>
     <div className="lora-test">
       <div className="lora-test-body">
         <aside className="lora-test-settings">
@@ -538,13 +740,93 @@ export function LoraTestView({
             </div>
 
             <label className="field">
-              <span>Prompt</span>
-              <textarea
-                rows={6}
-                value={local.prompt}
-                onChange={(e) => patch({ prompt: e.target.value })}
-              />
+              <span>Checkpoint</span>
+              <select
+                value={local.ditPath}
+                disabled={ditFiles.length === 0}
+                onChange={(e) => patch({ ditPath: e.target.value })}
+              >
+                {ditFiles.length === 0 ? (
+                  <option value="">No safetensors in folder</option>
+                ) : (
+                  ditFiles.map((f) => (
+                    <option key={f.path} value={f.path}>
+                      {f.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </label>
+
+            <div className="lora-test-prompt-groups">
+              <div className="lora-test-prompt-groups-header">
+                <span>Prompts</span>
+              </div>
+              {local.prompts.map((entry, index) => {
+                const enabledCount = local.prompts.filter((p) => p.enabled).length
+                const lockOn = entry.enabled && enabledCount <= 1
+                return (
+                <div key={index} className="lora-test-prompt-row">
+                  <label className="field">
+                    <span>Prompt {index + 1}</span>
+                    <div className="lora-test-prompt-input-row">
+                      <div
+                        className={`lora-toggle lora-test-prompt-toggle${
+                          entry.enabled ? ' is-on' : ''
+                        }${lockOn ? ' is-disabled' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          role="switch"
+                          className="lora-switch"
+                          aria-checked={entry.enabled}
+                          aria-label={`Enable prompt ${index + 1}`}
+                          title={
+                            lockOn
+                              ? 'At least one prompt must stay on'
+                              : entry.enabled
+                                ? 'Enabled for generate'
+                                : 'Skipped when generating'
+                          }
+                          disabled={lockOn}
+                          onClick={() => togglePromptEnabled(index)}
+                        >
+                          <span className="lora-switch-knob" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        className="lora-test-prompt-input"
+                        value={entry.text}
+                        readOnly
+                        placeholder="Click to edit…"
+                        title={entry.text || undefined}
+                        onClick={() => openPromptEditor(index)}
+                        onFocus={(e) => {
+                          e.target.blur()
+                          openPromptEditor(index)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="lora-test-prompt-remove"
+                        title="Remove prompt"
+                        disabled={local.prompts.length <= 1}
+                        onClick={() => removePrompt(index)}
+                      >
+                        −
+                      </button>
+                    </div>
+                  </label>
+                </div>
+                )
+              })}
+              <div className="lora-test-prompt-add">
+                <button type="button" onClick={addPrompt}>
+                  +
+                </button>
+              </div>
+            </div>
 
             <label className="field">
               <span>Negative</span>
@@ -648,26 +930,39 @@ export function LoraTestView({
 
             <div className="lora-test-lora-block">
               <span className="lora-test-lora-heading">Trained LoRAs</span>
-              <p className="field-hint">Select at least one. Each selected LoRA generates one image.</p>
-              {checkpoints.length === 0 ? (
-                <p className="field-hint">No checkpoints for this job yet.</p>
-              ) : (
+              {checkpoints.length > 0 && (
                 <ul className="lora-test-lora-list">
-                  {checkpoints.map((c) => (
-                    <li key={c.step}>
-                      <label className="checkbox-field">
-                        <input
-                          type="checkbox"
-                          checked={local.selectedLoraSteps.includes(c.step)}
-                          onChange={() => toggleLoraStep(c.step)}
-                        />
-                        <span title={c.path}>
-                          step {c.step}
-                          <span className="lora-test-lora-file"> {basename(c.path)}</span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
+                  {checkpoints.map((c) => {
+                    const on = local.selectedLoraSteps.includes(c.step)
+                    const lockOn = on && local.selectedLoraSteps.length <= 1
+                    return (
+                      <li key={c.step}>
+                        <div
+                          className={`lora-toggle lora-test-lora-toggle${on ? ' is-on' : ''}${
+                            lockOn ? ' is-disabled' : ''
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            role="switch"
+                            className="lora-switch"
+                            aria-checked={on}
+                            aria-label={`Select LoRA step ${c.step}`}
+                            title={
+                              lockOn ? 'At least one LoRA step must stay on' : c.path
+                            }
+                            disabled={lockOn}
+                            onClick={() => toggleLoraStep(c.step)}
+                          >
+                            <span className="lora-switch-knob" aria-hidden="true" />
+                          </button>
+                          <span className="lora-toggle-label" title={c.path}>
+                            step {c.step}
+                          </span>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
               <label className="field">
@@ -702,6 +997,12 @@ export function LoraTestView({
         <section className="lora-test-viewer">
           {activeItem && (
             <div className="lora-test-viewer-meta">
+              {activeItem.promptIndex != null && (
+                <span>Prompt {activeItem.promptIndex}</span>
+              )}
+              <span title={activeItem.checkpointName || undefined}>
+                {activeItem.checkpointName || '—'}
+              </span>
               <span>LoRA step {formatMetaValue(activeItem.loraStep)}</span>
               <span>Weight {formatMetaValue(activeItem.loraStrength, 2)}</span>
               <span>Seed {formatMetaValue(activeItem.seed)}</span>
@@ -733,6 +1034,40 @@ export function LoraTestView({
         <ResourceMonitorPane device={job.device} />
       </div>
     </div>
+    {editingPromptIndex != null && (
+      <div
+        className="modal-backdrop"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) closePromptEditor(true)
+        }}
+      >
+        <div
+          className="modal modal-wide"
+          role="dialog"
+          aria-labelledby="lora-test-prompt-edit-title"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <h2 id="lora-test-prompt-edit-title">Prompt {editingPromptIndex + 1}</h2>
+          <textarea
+            className="prompt-textarea"
+            value={editingPromptDraft}
+            onChange={(e) => setEditingPromptDraft(e.target.value)}
+            autoFocus
+            spellCheck={false}
+          />
+          <div className="modal-actions">
+            <button type="button" onClick={() => closePromptEditor(false)}>
+              Cancel
+            </button>
+            <div className="spacer" />
+            <button type="button" className="primary" onClick={() => closePromptEditor(true)}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 

@@ -42,6 +42,7 @@ const api = {
   comfyGetOutputDir: () => electron.ipcRenderer.invoke("comfy:getOutputDir"),
   loraTestSaveGeneratedImage: (opts) => electron.ipcRenderer.invoke("loraTest:saveGeneratedImage", opts),
   loraTestListGallery: (opts) => electron.ipcRenderer.invoke("loraTest:listGallery", opts),
+  loraTestListDitCheckpoints: (folder) => electron.ipcRenderer.invoke("loraTest:listDitCheckpoints", folder),
   startTrain: (opts) => electron.ipcRenderer.invoke("train:start", opts),
   stopTrain: () => electron.ipcRenderer.invoke("train:stop"),
   trainStatus: () => electron.ipcRenderer.invoke("train:status"),

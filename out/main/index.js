@@ -2151,6 +2151,38 @@ electron.app.whenReady().then(async () => {
     }
   );
   electron.ipcMain.handle(
+    "loraTest:listDitCheckpoints",
+    async (_event, folder) => {
+      const dir = (folder || "").trim();
+      if (!dir) {
+        return { ok: true, files: [] };
+      }
+      try {
+        await promises.access(dir, promises.constants.R_OK);
+      } catch {
+        return { ok: true, files: [] };
+      }
+      try {
+        const entries = await promises.readdir(dir, { withFileTypes: true });
+        const files = [];
+        for (const ent of entries) {
+          if (!ent.isFile()) continue;
+          const name = ent.name;
+          if (!name.toLowerCase().endsWith(".safetensors")) continue;
+          files.push({ name, path: path.join(dir, name) });
+        }
+        files.sort((a, b) => a.name.localeCompare(b.name, void 0, { sensitivity: "base" }));
+        return { ok: true, files };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          files: []
+        };
+      }
+    }
+  );
+  electron.ipcMain.handle(
     "train:listSamples",
     async (_event, opts) => {
       const trainingFolder = (opts?.trainingFolder || "").trim();
@@ -2514,12 +2546,14 @@ ${e.stderr || ""}`;
         return { ok: false, error: `Model ops script not found: ${script}` };
       }
       const repoId = (opts.repoId || "").trim();
+      const fileName = (opts.fileName || "").trim();
       if (!repoId) {
         return { ok: false, error: "repoId required" };
       }
       const py = opts.pythonPath && opts.pythonPath.trim() || "python";
       const downloadPath = resolveModelDownloadPath(opts.downloadPath);
       const args = [script, "download", "--download-path", downloadPath, "--repo-id", repoId];
+      if (fileName) args.push("--file-name", fileName);
       const token = (opts.token || "").trim();
       if (token) args.push("--token", token);
       try {
@@ -2555,14 +2589,15 @@ ${e.stderr || ""}`;
               continue;
             }
             const done = line.match(
-              /^CAPTIOER_MODEL_DONE\s+repo=(\S+)\s+path=(.+?)\s+revision=(\S+)\s*$/
+              /^CAPTIOER_MODEL_DONE\s+repo=(\S+)\s+path=(.+?)\s+revision=(\S+)(?:\s+file=(.+))?\s*$/
             );
             if (done) {
               finished = true;
               emitModel("model:downloadDone", {
                 repoId: done[1],
                 path: done[2].trim(),
-                revision: done[3]
+                revision: done[3],
+                filePath: done[4]?.trim() || void 0
               });
               continue;
             }

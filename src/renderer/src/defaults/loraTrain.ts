@@ -130,9 +130,17 @@ export interface LoraTrainAppSettings {
   huggingfaceToken: string
 }
 
+/** One LoraTest prompt row (can be toggled off without deleting). */
+export interface LoraTestPromptEntry {
+  text: string
+  /** When false, skipped during Generate. */
+  enabled: boolean
+}
+
 /** Persisted LoraTest generation form (shared across jobs; LoRA pick refreshes per job). */
 export interface LoraTestDraft {
-  prompt: string
+  /** One or more positive prompts; Generate runs each enabled × selected LoRAs. */
+  prompts: LoraTestPromptEntry[]
   negative: string
   steps: number
   cfg: number
@@ -143,7 +151,9 @@ export interface LoraTestDraft {
   scheduler: string
   /** Absolute path to ComfyUI launch .bat; empty = not configured. */
   comfyUiBatPath: string
-  /** Absolute path to DiT / UNET .safetensors. */
+  /** Folder containing DiT / UNET .safetensors (Settings). */
+  checkpointFolder: string
+  /** Absolute path to selected DiT / UNET .safetensors (LoraTest dropdown). */
   ditPath: string
   /** Absolute path to VAE .safetensors. */
   vaePath: string
@@ -259,16 +269,22 @@ export const DEFAULT_LORA_TRAIN_APP: LoraTrainAppSettings = {
 }
 
 export const DEFAULT_LORA_TEST_DRAFT: LoraTestDraft = {
-  prompt: '',
+  prompts: [
+    {
+      enabled: true,
+      text: `A striking, high-contrast waist-up front-facing portrait of an otherworldly, ethereal girl with glowing white starlight hair, looking directly at the viewer with eyes like pools of liquid silver. She is set against a deep, pitch-black cosmic abyss. Dominating the background are the large, massive letters 'LORA TEST', rendered entirely with a stunning, intricate crystalline effect, composed of thousands of faceted crystal structures and shards. These colossal crystal letters glow with intense internal light, creating dazzling prismatic flares of electric blue, magenta, white, and a wider range of cool tones. The individual crystal facets capture and refract light brilliantly, integrated into the celestial landscape like monumental frozen cosmic structures. Her pose, with fingers hovering near five diagonal parallel lines of pure white light slashing across the scene, remains unchanged. Her gown of woven starlight and transparent diamond-veil fabric continues to reflect intricate, glittering patterns. The thousands of sharp, highly-reflective crystal particles and shattered gemstone shards hovering frozen in space in the deep, pitch-black cosmic abyss are still present, scattering their brilliant, multi-colored flares. Her starlight hair floats over and is framed by these massive crystal letters. The overall atmosphere remains ethereal and dramatic, with the enhanced sense of crystal dominance. The depth of field ensures the girl is in sharp focus, while the textured crystal text recedes into the background but remains clear.`
+    }
+  ],
   negative: '',
-  steps: 20,
-  cfg: 3.5,
-  seed: 42,
+  steps: 8,
+  cfg: 1,
+  seed: -1,
   width: 1024,
   height: 1024,
   sampler: 'euler',
   scheduler: 'simple',
   comfyUiBatPath: '',
+  checkpointFolder: '',
   ditPath: '',
   vaePath: '',
   clipLPath: '',
@@ -306,6 +322,36 @@ function asNumberArray(value: unknown, fallback: number[]): number[] {
   if (!Array.isArray(value)) return [...fallback]
   const nums = value.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   return nums.length > 0 ? nums : [...fallback]
+}
+
+function normalizeLoraTestPromptEntry(
+  raw: unknown,
+  fallbackEnabled = true
+): LoraTestPromptEntry {
+  if (typeof raw === 'string') {
+    return { text: raw, enabled: fallbackEnabled }
+  }
+  const o = asRecord(raw)
+  if (!o) return { text: '', enabled: fallbackEnabled }
+  return {
+    text: asString(o.text ?? o.prompt, ''),
+    enabled: typeof o.enabled === 'boolean' ? o.enabled : fallbackEnabled
+  }
+}
+
+function normalizeLoraTestPrompts(
+  raw: Record<string, unknown>,
+  fallback: LoraTestPromptEntry[]
+): LoraTestPromptEntry[] {
+  if (Array.isArray(raw.prompts)) {
+    const out = raw.prompts.map((item) => normalizeLoraTestPromptEntry(item, true))
+    return out.length > 0 ? out : fallback.map((p) => ({ ...p }))
+  }
+  // Migrate legacy single prompt string
+  if (typeof raw.prompt === 'string') {
+    return [{ text: raw.prompt, enabled: true }]
+  }
+  return fallback.map((p) => ({ ...p }))
 }
 
 function normalizeNumRepeats(value: unknown, fallback: number): number {
@@ -619,8 +665,15 @@ export function normalizeLoraTestDraft(
   const draftBat = asString(o.comfyUiBatPath, '')
   const migratedBat =
     draftBat || (legacyComfyUiBatPath || '').trim() || d.comfyUiBatPath
+  const ditPath = asString(o.ditPath, d.ditPath)
+  let checkpointFolder = asString(o.checkpointFolder, d.checkpointFolder)
+  // Migrate legacy single-file Checkpoint path → folder + selected file
+  if (!checkpointFolder.trim() && ditPath.trim().toLowerCase().endsWith('.safetensors')) {
+    const idx = Math.max(ditPath.lastIndexOf('/'), ditPath.lastIndexOf('\\'))
+    if (idx >= 0) checkpointFolder = ditPath.slice(0, idx)
+  }
   return {
-    prompt: asString(o.prompt, d.prompt),
+    prompts: normalizeLoraTestPrompts(o, d.prompts),
     negative: asString(o.negative, d.negative),
     steps: Math.max(1, Math.round(asNumber(o.steps, d.steps))),
     cfg: asNumber(o.cfg, d.cfg),
@@ -630,7 +683,8 @@ export function normalizeLoraTestDraft(
     sampler: asString(o.sampler, d.sampler) || d.sampler,
     scheduler: asString(o.scheduler, d.scheduler) || d.scheduler,
     comfyUiBatPath: migratedBat,
-    ditPath: asString(o.ditPath, d.ditPath),
+    checkpointFolder,
+    ditPath,
     vaePath: asString(o.vaePath, d.vaePath),
     clipLPath: asString(o.clipLPath, d.clipLPath),
     t5Path: asString(o.t5Path, d.t5Path),

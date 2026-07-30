@@ -3000,21 +3000,69 @@ button.danger.kbd-focus {
   font-weight: 600;
 }
 
+.lora-test-prompt-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lora-test-prompt-groups-header span {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.lora-test-prompt-row > .field {
+  margin: 0;
+}
+
+.lora-test-prompt-input-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.lora-test-prompt-toggle {
+  flex-shrink: 0;
+  gap: 0;
+}
+
+.lora-test-prompt-input-row > .lora-test-prompt-input {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.lora-test-prompt-remove,
+.lora-test-prompt-add button {
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  height: 2.1rem;
+  padding: 0 0.65rem;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.lora-test-prompt-add {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .lora-test-lora-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  max-height: 160px;
-  overflow: auto;
+  gap: 0.35rem;
 }
 
-.lora-test-lora-file {
-  color: var(--text-muted, #888);
-  font-size: 0.75rem;
-  margin-left: 0.25rem;
+.lora-test-lora-toggle {
+  gap: 0.5rem;
+}
+
+.lora-test-lora-toggle .lora-toggle-label {
+  font-size: 0.85rem;
 }
 
 .lora-test-error {

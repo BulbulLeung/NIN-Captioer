@@ -26,6 +26,7 @@ import {
   pythonInstallPathFromDownloadFolder,
   type ActiveView,
   type LoraTestDraft,
+  type LoraTestPromptEntry,
   type LoraTrainAppSettings,
   type LoraTrainJobConfig,
   type LoraTrainJobPreset
@@ -36,6 +37,7 @@ export type {
   CaptionFormatId,
   CaptionFormatOption,
   LoraTestDraft,
+  LoraTestPromptEntry,
   LoraTrainAppSettings,
   LoraTrainJobConfig,
   LoraTrainJobPreset,
@@ -434,6 +436,11 @@ declare global {
         error?: string
         images: { path: string; name: string; mtimeMs: number }[]
       }>
+      loraTestListDitCheckpoints: (folder: string) => Promise<{
+        ok: boolean
+        error?: string
+        files: { name: string; path: string }[]
+      }>
       startTrain: (opts: {
         pythonPath?: string
         configJson: string
@@ -493,6 +500,7 @@ declare global {
         downloadPath?: string
         token?: string
         repoId: string
+        fileName?: string
       }) => Promise<{ ok: boolean; error?: string; downloadPath?: string }>
       cancelModelDownload: () => Promise<{ ok: boolean }>
       onModelDownloadProgress: (
@@ -504,7 +512,7 @@ declare global {
         }) => void
       ) => () => void
       onModelDownloadDone: (
-        cb: (payload: { repoId: string; path: string; revision: string }) => void
+        cb: (payload: { repoId: string; path: string; revision: string; filePath?: string }) => void
       ) => () => void
       onModelDownloadError: (
         cb: (payload: { message: string; repoId: string }) => void

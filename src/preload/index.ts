@@ -199,6 +199,13 @@ const api = {
     error?: string
     images: { path: string; name: string; mtimeMs: number }[]
   }> => ipcRenderer.invoke('loraTest:listGallery', opts),
+  loraTestListDitCheckpoints: (
+    folder: string
+  ): Promise<{
+    ok: boolean
+    error?: string
+    files: { name: string; path: string }[]
+  }> => ipcRenderer.invoke('loraTest:listDitCheckpoints', folder),
   startTrain: (opts: {
     pythonPath?: string
     configJson: string
@@ -284,6 +291,7 @@ const api = {
     downloadPath?: string
     token?: string
     repoId: string
+    fileName?: string
   }): Promise<{ ok: boolean; error?: string; downloadPath?: string }> =>
     ipcRenderer.invoke('model:download', opts),
   cancelModelDownload: (): Promise<{ ok: boolean }> =>
@@ -302,11 +310,11 @@ const api = {
     return () => ipcRenderer.removeListener('model:downloadProgress', listener)
   },
   onModelDownloadDone: (
-    cb: (payload: { repoId: string; path: string; revision: string }) => void
+    cb: (payload: { repoId: string; path: string; revision: string; filePath?: string }) => void
   ) => {
     const listener = (
       _e: IpcRendererEvent,
-      payload: { repoId: string; path: string; revision: string }
+      payload: { repoId: string; path: string; revision: string; filePath?: string }
     ) => cb(payload)
     ipcRenderer.on('model:downloadDone', listener)
     return () => ipcRenderer.removeListener('model:downloadDone', listener)
