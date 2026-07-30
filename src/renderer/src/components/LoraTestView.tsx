@@ -325,6 +325,13 @@ export function LoraTestView({
     setLocal((prev) => normalizeLoraTestDraft({ ...prev, ...partial }))
   }, [])
 
+  const reportStatus = useCallback(
+    (message: string, isError?: boolean) => {
+      onStatus(message, isError, isError ? undefined : { sticky: true })
+    },
+    [onStatus]
+  )
+
   const toggleFilterValue = useCallback((category: FilterCategory, key: string) => {
     setFilterOn((prev) => ({
       ...prev,
@@ -611,7 +618,7 @@ export function LoraTestView({
       return false
     }
     setStartingComfy(true)
-    onStatus('Starting ComfyUI…')
+    reportStatus('Starting ComfyUI…')
     try {
       const modelsRoot = modelDownloadPathFromDownloadFolder(appSettings.downloadFolder)
       const loraFolder = joinPath(job.training_folder, job.name)
@@ -625,16 +632,16 @@ export function LoraTestView({
       })
       if (!result.ok) {
         setGenError(result.error || 'Failed to start ComfyUI')
-        onStatus(result.error || 'Failed to start ComfyUI', true)
+        reportStatus(result.error || 'Failed to start ComfyUI', true)
         return false
       }
       setComfyOnline(true)
-      onStatus(result.alreadyRunning ? 'ComfyUI ready' : 'ComfyUI ready')
+      reportStatus('ComfyUI ready')
       return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return false
     } finally {
       setStartingComfy(false)
@@ -652,7 +659,7 @@ export function LoraTestView({
     if (!ditPath || !vaePath || !t5Path) {
       const msg = 'Set DiT, VAE, and Text Encoder (Qwen) in LoraTest Settings'
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return
     }
     const conflict = checkBasenameConflicts(
@@ -664,19 +671,19 @@ export function LoraTestView({
     )
     if (conflict) {
       setGenError(conflict)
-      onStatus(conflict, true)
+      reportStatus(conflict, true)
       return
     }
     if (local.selectedLoraSteps.length < 1) {
       const msg = 'Select at least one trained LoRA checkpoint'
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return
     }
     if (checkpoints.length === 0) {
       const msg = 'No trained LoRA checkpoints for this job'
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return
     }
 
@@ -686,7 +693,7 @@ export function LoraTestView({
     if (selected.length < 1) {
       const msg = 'Selected LoRA checkpoints not found on disk'
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return
     }
 
@@ -700,7 +707,7 @@ export function LoraTestView({
     if (promptEntries.length < 1) {
       const msg = 'Enable at least one non-empty prompt'
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return
     }
 
@@ -709,7 +716,7 @@ export function LoraTestView({
     if (!trainingFolder || !jobName) {
       const msg = 'Set Job name and Output Folder in LoraTrain settings'
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       return
     }
 
@@ -740,7 +747,30 @@ export function LoraTestView({
     }
     const total = promptEntries.length * selected.length
 
+    const waitStage = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        if (ac.signal.aborted) {
+          reject(new Error('Cancelled'))
+          return
+        }
+        const timer = setTimeout(() => {
+          ac.signal.removeEventListener('abort', onAbort)
+          resolve()
+        }, ms)
+        const onAbort = () => {
+          clearTimeout(timer)
+          reject(new Error('Cancelled'))
+        }
+        ac.signal.addEventListener('abort', onAbort, { once: true })
+      })
+
     try {
+      for (const stage of ['Loading Checkpoint', 'Loading VAE', 'Loading Text Encoder'] as const) {
+        if (ac.signal.aborted) throw new Error('Cancelled')
+        reportStatus(stage)
+        await waitStage(400)
+      }
+
       let doneCount = 0
       for (const { text: promptText, index: promptIndex } of promptEntries) {
         for (let i = 0; i < selected.length; i++) {
@@ -750,7 +780,7 @@ export function LoraTestView({
           setGenProgress(
             `Generating ${n}/${total} (prompt ${promptIndex + 1}, step ${ckpt.step})…`
           )
-          onStatus(`Generating ${n}/${total}…`)
+          reportStatus(`Generating ${n}/${total}…`)
           const result = await generateWithComfy(
             {
               ...sharedBase,
@@ -781,11 +811,11 @@ export function LoraTestView({
         }
       }
       setGenProgress(null)
-      onStatus(`Generate done (${doneCount} image${doneCount === 1 ? '' : 's'})`)
+      reportStatus('Done')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setGenError(msg)
-      onStatus(msg, true)
+      reportStatus(msg, true)
       setGenProgress(null)
     } finally {
       setGenerating(false)
@@ -795,7 +825,7 @@ export function LoraTestView({
   const stopComfy = async () => {
     await window.api.stopComfyUi()
     setComfyOnline(false)
-    onStatus('ComfyUI stopped')
+    reportStatus('ComfyUI stopped')
   }
 
   const openPromptEditor = (index: number) => {
