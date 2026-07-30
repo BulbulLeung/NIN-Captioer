@@ -1071,10 +1071,18 @@ const LINUX_PROTECTED_PATH_PREFIXES = ["/usr/lib/systemd", "/sbin/", "/usr/sbin/
 function normalizeProcessName(name) {
   return name.trim().toLowerCase();
 }
+function normalizeExePath(exePath) {
+  return exePath.trim().toLowerCase().replace(/\//g, "\\");
+}
+function isOwnAppExePath(exePath) {
+  if (!exePath?.trim()) return false;
+  return normalizeExePath(exePath) === normalizeExePath(process.execPath);
+}
 function isProtectedGpuProcess(pid, name, exePath) {
   if (!Number.isInteger(pid) || pid <= 0) return true;
   if (pid === process.pid) return true;
   if (typeof process.ppid === "number" && pid === process.ppid) return true;
+  if (isOwnAppExePath(exePath)) return true;
   const normName = normalizeProcessName(name);
   const base = normalizeProcessName(path.basename((exePath || name).replace(/\\/g, "/")));
   if (PROTECTED_PROCESS_NAMES.has(normName) || PROTECTED_PROCESS_NAMES.has(base)) {
@@ -1095,12 +1103,16 @@ function isProtectedGpuProcess(pid, name, exePath) {
 }
 const GPU_VRAM_APPS_FETCH_LIMIT = 64;
 function finalizeGpuVramApps(apps) {
-  return apps.filter((a) => Number.isFinite(a.memUsedMiB) && a.memUsedMiB >= 1 && a.name).sort((a, b) => b.memUsedMiB - a.memUsedMiB).slice(0, GPU_VRAM_APPS_FETCH_LIMIT).map((a) => ({
-    pid: a.pid,
-    name: a.name,
-    memUsedMiB: Math.round(a.memUsedMiB * 10) / 10,
-    killable: !isProtectedGpuProcess(a.pid, a.name, a.path ?? null)
-  }));
+  return apps.filter((a) => Number.isFinite(a.memUsedMiB) && a.memUsedMiB >= 1 && a.name).sort((a, b) => b.memUsedMiB - a.memUsedMiB).slice(0, GPU_VRAM_APPS_FETCH_LIMIT).map((a) => {
+    const own = isOwnAppExePath(a.path);
+    const killable = !isProtectedGpuProcess(a.pid, a.name, a.path ?? null);
+    return {
+      pid: a.pid,
+      name: own ? "Captioer" : a.name,
+      memUsedMiB: Math.round(a.memUsedMiB * 10) / 10,
+      killable
+    };
+  });
 }
 async function resolveProcessIdentity(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return null;

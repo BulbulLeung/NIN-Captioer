@@ -2410,6 +2410,15 @@ button.danger.kbd-focus {
   white-space: nowrap;
 }
 
+.lora-monitor-app-name--self {
+  color: var(--accent, #3d8bfd);
+  font-weight: 600;
+}
+
+.lora-monitor-app-name--protected {
+  color: var(--muted, #8a8a8a);
+}
+
 .lora-monitor-app-mem {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;

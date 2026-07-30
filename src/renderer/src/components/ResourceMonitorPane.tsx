@@ -229,32 +229,42 @@ export function ResourceMonitorPane({ device }: Props) {
                 <p className="lora-monitor-unavailable">無佔用行程</p>
               ) : (
                 <ul className="lora-monitor-app-list" ref={appListRef}>
-                  {apps.map((app) => (
-                    <li
-                      key={app.pid}
-                      className="lora-monitor-app-row"
-                      title={`PID ${app.pid}`}
-                    >
-                      <span className="lora-monitor-app-name">{app.name}</span>
-                      <span className="lora-monitor-app-mem">
-                        {formatVramAppMem(app.memUsedMiB)}
-                      </span>
-                      <button
-                        type="button"
-                        className="lora-monitor-app-kill"
-                        disabled={!app.killable || killingPid === app.pid}
-                        title={
-                          app.killable ? `結束 ${app.name}` : '系統行程，無法結束'
-                        }
-                        aria-label={
-                          app.killable ? `結束 ${app.name}` : '系統行程，無法結束'
-                        }
-                        onClick={() => void onKill(app.pid)}
+                  {apps.map((app) => {
+                    const isSelf = app.name === 'Captioer' && !app.killable
+                    const isProtected = !app.killable && !isSelf
+                    const killHint = app.killable
+                      ? `結束 ${app.name}`
+                      : isSelf
+                        ? 'Captioer 本體，無法結束'
+                        : '系統行程，無法結束'
+                    const nameClass = isSelf
+                      ? 'lora-monitor-app-name lora-monitor-app-name--self'
+                      : isProtected
+                        ? 'lora-monitor-app-name lora-monitor-app-name--protected'
+                        : 'lora-monitor-app-name'
+                    return (
+                      <li
+                        key={app.pid}
+                        className="lora-monitor-app-row"
+                        title={`PID ${app.pid}`}
                       >
-                        ×
-                      </button>
-                    </li>
-                  ))}
+                        <span className={nameClass}>{app.name}</span>
+                        <span className="lora-monitor-app-mem">
+                          {formatVramAppMem(app.memUsedMiB)}
+                        </span>
+                        <button
+                          type="button"
+                          className="lora-monitor-app-kill"
+                          disabled={!app.killable || killingPid === app.pid}
+                          title={killHint}
+                          aria-label={killHint}
+                          onClick={() => void onKill(app.pid)}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>

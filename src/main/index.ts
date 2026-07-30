@@ -657,10 +657,21 @@ function normalizeProcessName(name: string): string {
   return name.trim().toLowerCase()
 }
 
+function normalizeExePath(exePath: string): string {
+  return exePath.trim().toLowerCase().replace(/\//g, '\\')
+}
+
+/** True when exePath is this app's binary (dev electron.exe or packaged Captioer.exe). */
+function isOwnAppExePath(exePath: string | null | undefined): boolean {
+  if (!exePath?.trim()) return false
+  return normalizeExePath(exePath) === normalizeExePath(process.execPath)
+}
+
 function isProtectedGpuProcess(pid: number, name: string, exePath: string | null): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return true
   if (pid === process.pid) return true
   if (typeof process.ppid === 'number' && pid === process.ppid) return true
+  if (isOwnAppExePath(exePath)) return true
 
   const normName = normalizeProcessName(name)
   const base = normalizeProcessName(basename((exePath || name).replace(/\\/g, '/')))
@@ -694,12 +705,16 @@ function finalizeGpuVramApps(
     .filter((a) => Number.isFinite(a.memUsedMiB) && a.memUsedMiB >= 1 && a.name)
     .sort((a, b) => b.memUsedMiB - a.memUsedMiB)
     .slice(0, GPU_VRAM_APPS_FETCH_LIMIT)
-    .map((a) => ({
-      pid: a.pid,
-      name: a.name,
-      memUsedMiB: Math.round(a.memUsedMiB * 10) / 10,
-      killable: !isProtectedGpuProcess(a.pid, a.name, a.path ?? null)
-    }))
+    .map((a) => {
+      const own = isOwnAppExePath(a.path)
+      const killable = !isProtectedGpuProcess(a.pid, a.name, a.path ?? null)
+      return {
+        pid: a.pid,
+        name: own ? 'Captioer' : a.name,
+        memUsedMiB: Math.round(a.memUsedMiB * 10) / 10,
+        killable
+      }
+    })
 }
 
 async function resolveProcessIdentity(
