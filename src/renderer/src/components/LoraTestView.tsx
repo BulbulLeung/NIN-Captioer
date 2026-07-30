@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LoraTestDraft, LoraTrainAppSettings, LoraTrainJobConfig } from '../types'
 import { modelDownloadPathFromDownloadFolder, normalizeLoraTestDraft } from '../types'
 import {
@@ -159,6 +159,102 @@ function formatMetaValue(v: number | null, digits?: number): string {
   return String(v)
 }
 
+const FILTER_NONE = '__none__'
+
+type FilterCategory = 'checkpoint' | 'prompt' | 'step' | 'weight'
+
+type FilterMaps = Record<FilterCategory, Record<string, boolean>>
+
+type FilterOption = { key: string; label: string }
+
+const EMPTY_FILTER_MAPS: FilterMaps = {
+  checkpoint: {},
+  prompt: {},
+  step: {},
+  weight: {}
+}
+
+function checkpointFilterKey(item: HistoryItem): string {
+  const name = (item.checkpointName || '').trim()
+  return name || FILTER_NONE
+}
+
+function promptFilterKey(item: HistoryItem): string {
+  return item.promptIndex != null && Number.isFinite(item.promptIndex)
+    ? String(item.promptIndex)
+    : FILTER_NONE
+}
+
+function stepFilterKey(item: HistoryItem): string {
+  return item.loraStep != null && Number.isFinite(item.loraStep)
+    ? String(item.loraStep)
+    : FILTER_NONE
+}
+
+function weightFilterKey(item: HistoryItem): string {
+  return item.loraStrength != null && Number.isFinite(item.loraStrength)
+    ? item.loraStrength.toFixed(2)
+    : FILTER_NONE
+}
+
+function filterKeyLabel(category: FilterCategory, key: string): string {
+  if (key === FILTER_NONE) return '—'
+  if (category === 'prompt') return `Prompt ${key}`
+  return key
+}
+
+function compareFilterKeys(category: FilterCategory, a: string, b: string): number {
+  if (a === FILTER_NONE) return 1
+  if (b === FILTER_NONE) return -1
+  if (category === 'checkpoint') return a.localeCompare(b, undefined, { sensitivity: 'base' })
+  const na = Number(a)
+  const nb = Number(b)
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb
+  return a.localeCompare(b, undefined, { numeric: true })
+}
+
+function collectFilterOptions(items: HistoryItem[]): Record<FilterCategory, FilterOption[]> {
+  const buckets: Record<FilterCategory, Set<string>> = {
+    checkpoint: new Set(),
+    prompt: new Set(),
+    step: new Set(),
+    weight: new Set()
+  }
+  for (const item of items) {
+    buckets.checkpoint.add(checkpointFilterKey(item))
+    buckets.prompt.add(promptFilterKey(item))
+    buckets.step.add(stepFilterKey(item))
+    buckets.weight.add(weightFilterKey(item))
+  }
+  const toOptions = (category: FilterCategory): FilterOption[] =>
+    [...buckets[category]]
+      .sort((a, b) => compareFilterKeys(category, a, b))
+      .map((key) => ({ key, label: filterKeyLabel(category, key) }))
+  return {
+    checkpoint: toOptions('checkpoint'),
+    prompt: toOptions('prompt'),
+    step: toOptions('step'),
+    weight: toOptions('weight')
+  }
+}
+
+function syncFilterMap(prev: Record<string, boolean>, keys: string[]): Record<string, boolean> {
+  const next: Record<string, boolean> = {}
+  for (const key of keys) {
+    next[key] = key in prev ? Boolean(prev[key]) : true
+  }
+  return next
+}
+
+function itemMatchesFilter(item: HistoryItem, filterOn: FilterMaps): boolean {
+  return (
+    filterOn.checkpoint[checkpointFilterKey(item)] === true &&
+    filterOn.prompt[promptFilterKey(item)] === true &&
+    filterOn.step[stepFilterKey(item)] === true &&
+    filterOn.weight[weightFilterKey(item)] === true
+  )
+}
+
 export function LoraTestView({
   job,
   jobId,
@@ -176,6 +272,8 @@ export function LoraTestView({
   const [genError, setGenError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filterOn, setFilterOn] = useState<FilterMaps>(EMPTY_FILTER_MAPS)
   const [startingComfy, setStartingComfy] = useState(false)
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null)
   const [editingPromptDraft, setEditingPromptDraft] = useState('')
@@ -183,9 +281,58 @@ export function LoraTestView({
   const skipPersist = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
   const seededJobRef = useRef<string | null>(null)
+  const activePathRef = useRef<string | null>(null)
+
+  const filterOptions = useMemo(() => collectFilterOptions(history), [history])
+
+  const filteredHistory = useMemo(
+    () => history.filter((item) => itemMatchesFilter(item, filterOn)),
+    [history, filterOn]
+  )
+
+  useEffect(() => {
+    setFilterOn((prev) => ({
+      checkpoint: syncFilterMap(
+        prev.checkpoint,
+        filterOptions.checkpoint.map((o) => o.key)
+      ),
+      prompt: syncFilterMap(
+        prev.prompt,
+        filterOptions.prompt.map((o) => o.key)
+      ),
+      step: syncFilterMap(
+        prev.step,
+        filterOptions.step.map((o) => o.key)
+      ),
+      weight: syncFilterMap(
+        prev.weight,
+        filterOptions.weight.map((o) => o.key)
+      )
+    }))
+  }, [filterOptions])
+
+  useEffect(() => {
+    const path = activePathRef.current
+    if (filteredHistory.length === 0) {
+      setActiveIndex(0)
+      return
+    }
+    const idx = path ? filteredHistory.findIndex((item) => item.filePath === path) : -1
+    setActiveIndex(idx >= 0 ? idx : 0)
+  }, [filteredHistory])
 
   const patch = useCallback((partial: Partial<LoraTestDraft>) => {
     setLocal((prev) => normalizeLoraTestDraft({ ...prev, ...partial }))
+  }, [])
+
+  const toggleFilterValue = useCallback((category: FilterCategory, key: string) => {
+    setFilterOn((prev) => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [key]: !prev[category][key]
+      }
+    }))
   }, [])
 
   useEffect(() => {
@@ -269,23 +416,27 @@ export function LoraTestView({
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
         if (el.isContentEditable) return
       }
-      if (history.length < 2) return
-      const cur = Math.min(Math.max(0, activeIndex), history.length - 1)
+      if (filteredHistory.length < 2) return
+      const cur = Math.min(Math.max(0, activeIndex), filteredHistory.length - 1)
       // History is newest-first (left → right); arrows follow the strip.
       const next =
         e.key === 'ArrowLeft'
           ? Math.max(0, cur - 1)
-          : Math.min(history.length - 1, cur + 1)
+          : Math.min(filteredHistory.length - 1, cur + 1)
       if (next === cur) return
       e.preventDefault()
       setActiveIndex(next)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [history, activeIndex])
+  }, [filteredHistory, activeIndex])
 
-  const activeItem = history[activeIndex] ?? null
+  const activeItem = filteredHistory[activeIndex] ?? null
   const imageUrl = activeItem?.url ?? null
+
+  useEffect(() => {
+    activePathRef.current = activeItem?.filePath ?? null
+  }, [activeItem])
 
   const refreshGallery = useCallback(async () => {
     const folder = (job.training_folder || '').trim()
@@ -404,6 +555,10 @@ export function LoraTestView({
   useEffect(() => {
     void refreshGallery()
   }, [refreshGallery, jobId])
+
+  useEffect(() => {
+    setFilterOpen(false)
+  }, [jobId])
 
   const refreshComfyStatus = useCallback(async () => {
     try {
@@ -995,29 +1150,48 @@ export function LoraTestView({
         </aside>
 
         <section className="lora-test-viewer">
-          {activeItem && (
-            <div className="lora-test-viewer-meta">
-              {activeItem.promptIndex != null && (
-                <span>Prompt {activeItem.promptIndex}</span>
+          <div className="lora-test-viewer-meta">
+            <div className="lora-test-viewer-meta-left">
+              {activeItem && (
+                <>
+                  {activeItem.promptIndex != null && (
+                    <span>Prompt {activeItem.promptIndex}</span>
+                  )}
+                  <span title={activeItem.checkpointName || undefined}>
+                    {activeItem.checkpointName || '—'}
+                  </span>
+                  <span>LoRA step {formatMetaValue(activeItem.loraStep)}</span>
+                  <span>Weight {formatMetaValue(activeItem.loraStrength, 2)}</span>
+                  <span>Seed {formatMetaValue(activeItem.seed)}</span>
+                </>
               )}
-              <span title={activeItem.checkpointName || undefined}>
-                {activeItem.checkpointName || '—'}
-              </span>
-              <span>LoRA step {formatMetaValue(activeItem.loraStep)}</span>
-              <span>Weight {formatMetaValue(activeItem.loraStrength, 2)}</span>
-              <span>Seed {formatMetaValue(activeItem.seed)}</span>
             </div>
-          )}
+            <button
+              type="button"
+              className="lora-test-filter-btn"
+              title="Filter"
+              aria-label="Filter"
+              aria-haspopup="dialog"
+              aria-expanded={filterOpen}
+              onClick={() => setFilterOpen(true)}
+            >
+              Filter
+            </button>
+          </div>
           <div className="lora-test-viewer-main">
             {imageUrl ? (
               <img src={imageUrl} alt="Generated" className="lora-test-viewer-img" />
             ) : (
-              <p className="lora-test-viewer-empty">Generated images appear here</p>
+              <p className="lora-test-viewer-empty">
+                {history.length > 0
+                  ? 'No images match the current filter'
+                  : 'Generated images appear here'}
+              </p>
             )}
           </div>
-          {history.length > 1 && (
+          {filteredHistory.length > 1 && (
             <div className="lora-test-history">
-              {history.map((item, idx) => (
+              {filteredHistory.map((item, idx) => (
                 <button
                   key={item.url}
                   type="button"
@@ -1067,7 +1241,73 @@ export function LoraTestView({
         </div>
       </div>
     )}
-    </>
+    {filterOpen && (
+      <div
+        className="modal-backdrop"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setFilterOpen(false)
+        }}
+      >
+        <div
+          className="modal lora-test-filter-modal"
+          role="dialog"
+          aria-labelledby="lora-test-filter-title"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <h2 id="lora-test-filter-title">Filter</h2>
+          <div className="lora-test-filter-body">
+            {(
+              [
+                { id: 'checkpoint', title: 'Checkpoint' },
+                { id: 'prompt', title: 'Prompt' },
+                { id: 'step', title: 'Step' },
+                { id: 'weight', title: 'Weight' }
+              ] as const
+            ).map((section) => (
+              <div key={section.id} className="lora-test-filter-section">
+                <h3>{section.title}</h3>
+                {filterOptions[section.id].length === 0 ? (
+                  <p className="lora-test-filter-empty">No values in loratest folder</p>
+                ) : (
+                  <ul className="lora-test-filter-list">
+                    {filterOptions[section.id].map((opt) => {
+                      const on = filterOn[section.id][opt.key] === true
+                      return (
+                        <li key={opt.key}>
+                          <div className={`lora-toggle${on ? ' is-on' : ''}`}>
+                            <button
+                              type="button"
+                              role="switch"
+                              className="lora-switch"
+                              aria-checked={on}
+                              aria-label={`Filter ${section.title} ${opt.label}`}
+                              title={opt.label}
+                              onClick={() => toggleFilterValue(section.id, opt.key)}
+                            >
+                              <span className="lora-switch-knob" aria-hidden="true" />
+                            </button>
+                            <span className="lora-toggle-label" title={opt.label}>
+                              {opt.label}
+                            </span>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="modal-actions">
+            <div className="spacer" />
+            <button type="button" className="primary" onClick={() => setFilterOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
 

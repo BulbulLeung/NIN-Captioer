@@ -624,6 +624,24 @@ export default function App() {
     }
   }
 
+  const openLoraTestOutputFolder = async () => {
+    const folder = (activeLoraJob?.job.training_folder || '').trim()
+    const jobName = (activeLoraJob?.job.name || '').trim()
+    if (!folder) {
+      onLoraStatus('Set an Output folder in Basics first', true)
+      return
+    }
+    if (!jobName) {
+      onLoraStatus('Set a Job name in Basics first', true)
+      return
+    }
+    const loratestOut = folder.replace(/[/\\]+$/, '') + '/' + jobName + '/loratest'
+    const result = await window.api.openPathInExplorer(loratestOut)
+    if (!result.ok) {
+      onLoraStatus(result.error || 'Could not open loratest folder', true)
+    }
+  }
+
   const runCaptionForPath = async (imagePath: string): Promise<void> => {
     captionAbortRef.current?.abort()
     const ac = new AbortController()
@@ -1072,18 +1090,28 @@ export default function App() {
               </label>
               <button
                 type="button"
-                disabled={!settingsReady}
-                onClick={() => setSettingsOpen(true)}
-              >
-                Settings
-              </button>
-              <button
-                type="button"
-                className={analysisAnalyzing ? 'analyze-btn is-analyzing' : 'analyze-btn'}
+                className={`toolbar-icon-btn analyze-btn${analysisAnalyzing ? ' is-analyzing' : ''}`}
                 disabled={!folder || images.length === 0}
+                title="Analyze"
+                aria-label="Analyze"
                 onClick={() => setAnalysisOpen(true)}
               >
-                <span className="analyze-btn-label">Analyze</span>
+                <svg
+                  className="analyze-btn-label"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <path
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M1.5 11.5V2.5M1.5 11.5h11M3 9.2l2.2-3.1 2.1 1.7 3.2-4.3"
+                  />
+                </svg>
               </button>
             </>
           ) : (
@@ -1130,6 +1158,26 @@ export default function App() {
                   </ul>
                 )}
               </div>
+              {isLoraTest && (
+                <button
+                  type="button"
+                  className="toolbar-icon-btn"
+                  title="Open loratest folder"
+                  aria-label="Open loratest folder"
+                  disabled={
+                    !(activeLoraJob?.job.training_folder || '').trim() ||
+                    !(activeLoraJob?.job.name || '').trim()
+                  }
+                  onClick={() => void openLoraTestOutputFolder()}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                    />
+                  </svg>
+                </button>
+              )}
               {!isLoraTest && (
                 <button
                   type="button"
@@ -1164,13 +1212,6 @@ export default function App() {
                   </svg>
                 </button>
               )}
-              <button
-                type="button"
-                disabled={!settingsReady}
-                onClick={() => setSettingsOpen(true)}
-              >
-                Settings
-              </button>
               {!isLoraTest && (
                 <button
                   type="button"
@@ -1195,6 +1236,21 @@ export default function App() {
           )}
         </div>
         <div className="toolbar-right">
+          <button
+            type="button"
+            className="toolbar-icon-btn"
+            disabled={!settingsReady}
+            title="Settings"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M5.72.75h2.56l.22 1.48c.38.12.73.3 1.05.53l1.4-.55 1.28 2.22-1.18.95c.06.25.1.51.1.78s-.04.53-.1.78l1.18.95-1.28 2.22-1.4-.55a4.1 4.1 0 0 1-1.05.53l-.22 1.48H5.72l-.22-1.48a4.1 4.1 0 0 1-1.05-.53l-1.4.55L1.77 9.37l1.18-.95a3.5 3.5 0 0 1-.1-.78c0-.27.04-.53.1-.78l-1.18-.95 1.28-2.22 1.4.55c.32-.23.67-.41 1.05-.53L5.72.75zM7 4.6A2.4 2.4 0 1 0 7 9.4 2.4 2.4 0 0 0 7 4.6z"
+              />
+            </svg>
+          </button>
           <div
             className="view-switch"
             role="tablist"
