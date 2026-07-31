@@ -138,6 +138,7 @@ button.danger.kbd-focus {
 .toolbar-right {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   flex-shrink: 0;
 }
 
@@ -3000,21 +3001,69 @@ button.danger.kbd-focus {
   font-weight: 600;
 }
 
+.lora-test-prompt-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lora-test-prompt-groups-header span {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.lora-test-prompt-row > .field {
+  margin: 0;
+}
+
+.lora-test-prompt-input-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.lora-test-prompt-toggle {
+  flex-shrink: 0;
+  gap: 0;
+}
+
+.lora-test-prompt-input-row > .lora-test-prompt-input {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.lora-test-prompt-remove,
+.lora-test-prompt-add button {
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  height: 2.1rem;
+  padding: 0 0.65rem;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.lora-test-prompt-add {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .lora-test-lora-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  max-height: 160px;
-  overflow: auto;
+  gap: 0.35rem;
 }
 
-.lora-test-lora-file {
-  color: var(--text-muted, #888);
-  font-size: 0.75rem;
-  margin-left: 0.25rem;
+.lora-test-lora-toggle {
+  gap: 0.5rem;
+}
+
+.lora-test-lora-toggle .lora-toggle-label {
+  font-size: 0.85rem;
 }
 
 .lora-test-error {
@@ -3033,16 +3082,110 @@ button.danger.kbd-focus {
 
 .lora-test-viewer-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.55rem 0.85rem;
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
   color: var(--text-muted, #888);
+  flex-shrink: 0;
+  min-height: 2.4rem;
+}
+
+.lora-test-viewer-meta-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  min-width: 0;
 }
 
 .lora-test-viewer-meta span {
   white-space: nowrap;
+}
+
+.lora-test-filter-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.lora-test-filter-modal {
+  width: min(52rem, 96vw);
+  max-height: min(36rem, 90vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.lora-test-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.lora-test-filter-header h2 {
+  margin: 0;
+}
+
+.lora-test-filter-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.lora-test-filter-body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 1rem;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 0.15rem;
+}
+
+.lora-test-filter-section {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lora-test-filter-section + .lora-test-filter-section {
+  border-left: 1px solid var(--border);
+  padding-left: 1rem;
+}
+
+.lora-test-filter-section h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.lora-test-filter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow: auto;
+  min-height: 0;
+  max-height: 22rem;
+}
+
+.lora-test-filter-list .lora-toggle-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lora-test-filter-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #888);
 }
 
 .lora-test-viewer-main {

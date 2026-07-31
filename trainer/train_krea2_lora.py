@@ -29,7 +29,7 @@ from pathlib import Path
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
-# High-loss spike: current loss >= 1.0, OR >= 5× previous step loss.
+# High-loss spike: current loss >= 1.0, OR >= 5× cumulative avg loss (excl. current).
 LOSS_SPIKE_MULT = 5.0
 LOSS_SPIKE_FLOOR = 1.0
 
@@ -2724,7 +2724,8 @@ def main() -> int:
     global_step = int(resume_step or 0)
     optimizer.zero_grad(set_to_none=True)
     running_loss = 0.0
-    prev_loss_v: float | None = None
+    loss_sum = 0.0
+    loss_count = 0
     import time as _time
 
     if global_step > 0:
@@ -2901,19 +2902,18 @@ def main() -> int:
             is_spike = False
             if loss_v >= LOSS_SPIKE_FLOOR:
                 is_spike = True
-            elif (
-                prev_loss_v is not None
-                and prev_loss_v > 0
-                and loss_v >= prev_loss_v * LOSS_SPIKE_MULT
-            ):
-                is_spike = True
+            elif loss_count > 0:
+                avg_loss = loss_sum / loss_count
+                if avg_loss > 0 and loss_v >= avg_loss * LOSS_SPIKE_MULT:
+                    is_spike = True
 
             if is_spike and batch_paths:
                 worst_i = int(per_sample_cpu.argmax().item())
                 worst_i = max(0, min(worst_i, len(batch_paths) - 1))
                 loss_spike(global_step, loss_v, batch_paths[worst_i])
 
-            prev_loss_v = loss_v
+            loss_sum += loss_v
+            loss_count += 1
 
             if global_step == 1 or global_step % 10 == 0:
                 dt = _time.perf_counter() - step_t0

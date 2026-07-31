@@ -12993,7 +12993,12 @@ const DEFAULT_LORA_TRAIN_APP = {
   huggingfaceToken: ""
 };
 const DEFAULT_LORA_TEST_DRAFT = {
-  prompt: `A striking, high-contrast waist-up front-facing portrait of an otherworldly, ethereal girl with glowing white starlight hair, looking directly at the viewer with eyes like pools of liquid silver. She is set against a deep, pitch-black cosmic abyss. Dominating the background are the large, massive letters 'LORA TEST', rendered entirely with a stunning, intricate crystalline effect, composed of thousands of faceted crystal structures and shards. These colossal crystal letters glow with intense internal light, creating dazzling prismatic flares of electric blue, magenta, white, and a wider range of cool tones. The individual crystal facets capture and refract light brilliantly, integrated into the celestial landscape like monumental frozen cosmic structures. Her pose, with fingers hovering near five diagonal parallel lines of pure white light slashing across the scene, remains unchanged. Her gown of woven starlight and transparent diamond-veil fabric continues to reflect intricate, glittering patterns. The thousands of sharp, highly-reflective crystal particles and shattered gemstone shards hovering frozen in space in the deep, pitch-black cosmic abyss are still present, scattering their brilliant, multi-colored flares. Her starlight hair floats over and is framed by these massive crystal letters. The overall atmosphere remains ethereal and dramatic, with the enhanced sense of crystal dominance. The depth of field ensures the girl is in sharp focus, while the textured crystal text recedes into the background but remains clear.`,
+  prompts: [
+    {
+      enabled: true,
+      text: `A striking, high-contrast waist-up front-facing portrait of an otherworldly, ethereal girl with glowing white starlight hair, looking directly at the viewer with eyes like pools of liquid silver. She is set against a deep, pitch-black cosmic abyss. Dominating the background are the large, massive letters 'LORA TEST', rendered entirely with a stunning, intricate crystalline effect, composed of thousands of faceted crystal structures and shards. These colossal crystal letters glow with intense internal light, creating dazzling prismatic flares of electric blue, magenta, white, and a wider range of cool tones. The individual crystal facets capture and refract light brilliantly, integrated into the celestial landscape like monumental frozen cosmic structures. Her pose, with fingers hovering near five diagonal parallel lines of pure white light slashing across the scene, remains unchanged. Her gown of woven starlight and transparent diamond-veil fabric continues to reflect intricate, glittering patterns. The thousands of sharp, highly-reflective crystal particles and shattered gemstone shards hovering frozen in space in the deep, pitch-black cosmic abyss are still present, scattering their brilliant, multi-colored flares. Her starlight hair floats over and is framed by these massive crystal letters. The overall atmosphere remains ethereal and dramatic, with the enhanced sense of crystal dominance. The depth of field ensures the girl is in sharp focus, while the textured crystal text recedes into the background but remains clear.`
+    }
+  ],
   negative: "",
   steps: 8,
   cfg: 1,
@@ -13003,6 +13008,7 @@ const DEFAULT_LORA_TEST_DRAFT = {
   sampler: "euler",
   scheduler: "simple",
   comfyUiBatPath: "",
+  checkpointFolder: "",
   ditPath: "",
   vaePath: "",
   clipLPath: "",
@@ -13033,6 +13039,27 @@ function asNumberArray(value, fallback) {
   if (!Array.isArray(value)) return [...fallback];
   const nums = value.filter((v) => typeof v === "number" && Number.isFinite(v));
   return nums.length > 0 ? nums : [...fallback];
+}
+function normalizeLoraTestPromptEntry(raw, fallbackEnabled = true) {
+  if (typeof raw === "string") {
+    return { text: raw, enabled: fallbackEnabled };
+  }
+  const o = asRecord(raw);
+  if (!o) return { text: "", enabled: fallbackEnabled };
+  return {
+    text: asString(o.text ?? o.prompt, ""),
+    enabled: typeof o.enabled === "boolean" ? o.enabled : fallbackEnabled
+  };
+}
+function normalizeLoraTestPrompts(raw, fallback) {
+  if (Array.isArray(raw.prompts)) {
+    const out = raw.prompts.map((item) => normalizeLoraTestPromptEntry(item, true));
+    return out.length > 0 ? out : fallback.map((p) => ({ ...p }));
+  }
+  if (typeof raw.prompt === "string") {
+    return [{ text: raw.prompt, enabled: true }];
+  }
+  return fallback.map((p) => ({ ...p }));
 }
 function normalizeNumRepeats(value, fallback) {
   const n = Math.round(asNumber(value, fallback));
@@ -13289,8 +13316,14 @@ function normalizeLoraTestDraft(raw, legacyComfyUiBatPath) {
   }
   const draftBat = asString(o.comfyUiBatPath, "");
   const migratedBat = draftBat || (legacyComfyUiBatPath || "").trim() || d.comfyUiBatPath;
+  const ditPath = asString(o.ditPath, d.ditPath);
+  let checkpointFolder = asString(o.checkpointFolder, d.checkpointFolder);
+  if (!checkpointFolder.trim() && ditPath.trim().toLowerCase().endsWith(".safetensors")) {
+    const idx = Math.max(ditPath.lastIndexOf("/"), ditPath.lastIndexOf("\\"));
+    if (idx >= 0) checkpointFolder = ditPath.slice(0, idx);
+  }
   return {
-    prompt: asString(o.prompt, d.prompt),
+    prompts: normalizeLoraTestPrompts(o, d.prompts),
     negative: asString(o.negative, d.negative),
     steps: Math.max(1, Math.round(asNumber(o.steps, d.steps))),
     cfg: asNumber(o.cfg, d.cfg),
@@ -13300,7 +13333,8 @@ function normalizeLoraTestDraft(raw, legacyComfyUiBatPath) {
     sampler: asString(o.sampler, d.sampler) || d.sampler,
     scheduler: asString(o.scheduler, d.scheduler) || d.scheduler,
     comfyUiBatPath: migratedBat,
-    ditPath: asString(o.ditPath, d.ditPath),
+    checkpointFolder,
+    ditPath,
     vaePath: asString(o.vaePath, d.vaePath),
     clipLPath: asString(o.clipLPath, d.clipLPath),
     t5Path: asString(o.t5Path, d.t5Path),
@@ -17805,10 +17839,10 @@ function ResourceMonitorPane({ device }) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-monitor-apps", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(MonitorHeader, { label: "VRAM apps" }),
-          appsAll.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無佔用行程" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-monitor-app-list", ref: appListRef, children: apps.map((app) => {
+          appsAll.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "No processes using VRAM" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-monitor-app-list", ref: appListRef, children: apps.map((app) => {
             const isSelf = app.name === "Captioer" && !app.killable;
             const isProtected = !app.killable && !isSelf;
-            const killHint = app.killable ? `結束 ${app.name}` : isSelf ? "Captioer 本體，無法結束" : "系統行程，無法結束";
+            const killHint = app.killable ? `End ${app.name}` : isSelf ? "Captioer itself — cannot end" : "System process — cannot end";
             const nameClass = isSelf ? "lora-monitor-app-name lora-monitor-app-name--self" : isProtected ? "lora-monitor-app-name lora-monitor-app-name--protected" : "lora-monitor-app-name";
             return /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "li",
@@ -17836,7 +17870,7 @@ function ResourceMonitorPane({ device }) {
             );
           }) })
         ] })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "無法讀取 GPU 狀態" })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-monitor-unavailable", children: "Unable to read GPU status" })
     ] })
   ] });
 }
@@ -20607,11 +20641,36 @@ function formatComfyExecutionError(entry) {
   }
   return "ComfyUI execution error";
 }
+function sleep(ms, signal) {
+  if (signal?.aborted) return Promise.reject(new Error("Cancelled"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error("Cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+async function interruptComfyGeneration(baseUrl = COMFY_BASE_URL) {
+  await Promise.allSettled([
+    comfyHttp(`${baseUrl}/interrupt`, { method: "POST", timeoutMs: 5e3 }),
+    comfyHttp(`${baseUrl}/queue`, {
+      method: "POST",
+      body: JSON.stringify({ clear: true }),
+      timeoutMs: 5e3
+    })
+  ]);
+}
 async function waitForPromptDone(promptId, baseUrl, signal) {
   const started = Date.now();
   while (Date.now() - started < 6e5) {
     if (signal?.aborted) throw new Error("Cancelled");
     const entry = await historyEntry(promptId, baseUrl);
+    if (signal?.aborted) throw new Error("Cancelled");
     if (entry) {
       const statusStr = entry.status?.status_str || "";
       if (statusStr === "error") {
@@ -20624,7 +20683,7 @@ async function waitForPromptDone(promptId, baseUrl, signal) {
         return;
       }
     }
-    await new Promise((r) => setTimeout(r, 750));
+    await sleep(750, signal);
   }
   throw new Error("Timed out waiting for ComfyUI generation");
 }
@@ -20705,6 +20764,9 @@ const SCHEDULERS = [
 function basename(fullPath) {
   return loraNameFromPath(fullPath);
 }
+function pathKey(p) {
+  return p.replace(/\\/g, "/").toLowerCase();
+}
 function checkBasenameConflicts(paths) {
   const map = /* @__PURE__ */ new Map();
   for (const { label, path } of paths) {
@@ -20720,28 +20782,130 @@ function checkBasenameConflicts(paths) {
 }
 function parseLoratestMeta(fileName) {
   const stem = fileName.replace(/\.[^.]+$/, "");
+  const withPrompt = /^p(\d+)_step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_ckpt_(.+?))?(?:_\d{10,})?$/i.exec(
+    stem
+  );
+  if (withPrompt) {
+    const rawCkpt = (withPrompt[5] || "").trim();
+    return {
+      promptIndex: Number(withPrompt[1]),
+      loraStep: Number(withPrompt[2]),
+      loraStrength: Number(withPrompt[3]),
+      seed: Number(withPrompt[4]),
+      checkpointName: rawCkpt || null
+    };
+  }
+  const withCkpt = /^step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_ckpt_(.+?))?(?:_\d{10,})?$/i.exec(stem);
+  if (withCkpt) {
+    const rawCkpt = (withCkpt[4] || "").trim();
+    return {
+      promptIndex: null,
+      loraStep: Number(withCkpt[1]),
+      loraStrength: Number(withCkpt[2]),
+      seed: Number(withCkpt[3]),
+      checkpointName: rawCkpt || null
+    };
+  }
   const withWeight = /^step(\d+)_w([0-9]+(?:\.[0-9]+)?)_seed(\d+)(?:_\d+)?$/i.exec(stem);
   if (withWeight) {
     return {
+      promptIndex: null,
       loraStep: Number(withWeight[1]),
       loraStrength: Number(withWeight[2]),
-      seed: Number(withWeight[3])
+      seed: Number(withWeight[3]),
+      checkpointName: null
     };
   }
   const legacy = /^step(\d+)_seed(\d+)(?:_\d+)?$/i.exec(stem);
   if (legacy) {
     return {
+      promptIndex: null,
       loraStep: Number(legacy[1]),
       loraStrength: null,
-      seed: Number(legacy[2])
+      seed: Number(legacy[2]),
+      checkpointName: null
     };
   }
-  return { loraStep: null, loraStrength: null, seed: null };
+  return {
+    promptIndex: null,
+    checkpointName: null,
+    loraStep: null,
+    loraStrength: null,
+    seed: null
+  };
+}
+function sanitizeCheckpointTag(name) {
+  return name.replace(/\.safetensors$/i, "").replace(/[<>:"/\\|?*\x00-\x1f]+/g, "_").replace(/\s+/g, "_").trim();
 }
 function formatMetaValue(v, digits) {
   if (v == null || !Number.isFinite(v)) return "—";
   if (digits != null) return v.toFixed(digits);
   return String(v);
+}
+const FILTER_NONE = "__none__";
+const EMPTY_FILTER_MAPS = {
+  checkpoint: {},
+  prompt: {},
+  step: {},
+  weight: {}
+};
+function checkpointFilterKey(item) {
+  const name = (item.checkpointName || "").trim();
+  return name || FILTER_NONE;
+}
+function promptFilterKey(item) {
+  return item.promptIndex != null && Number.isFinite(item.promptIndex) ? String(item.promptIndex) : FILTER_NONE;
+}
+function stepFilterKey(item) {
+  return item.loraStep != null && Number.isFinite(item.loraStep) ? String(item.loraStep) : FILTER_NONE;
+}
+function weightFilterKey(item) {
+  return item.loraStrength != null && Number.isFinite(item.loraStrength) ? item.loraStrength.toFixed(2) : FILTER_NONE;
+}
+function filterKeyLabel(category, key) {
+  if (key === FILTER_NONE) return "—";
+  if (category === "prompt") return `Prompt ${key}`;
+  return key;
+}
+function compareFilterKeys(category, a, b) {
+  if (a === FILTER_NONE) return 1;
+  if (b === FILTER_NONE) return -1;
+  if (category === "checkpoint") return a.localeCompare(b, void 0, { sensitivity: "base" });
+  const na = Number(a);
+  const nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+  return a.localeCompare(b, void 0, { numeric: true });
+}
+function collectFilterOptions(items) {
+  const buckets = {
+    checkpoint: /* @__PURE__ */ new Set(),
+    prompt: /* @__PURE__ */ new Set(),
+    step: /* @__PURE__ */ new Set(),
+    weight: /* @__PURE__ */ new Set()
+  };
+  for (const item of items) {
+    buckets.checkpoint.add(checkpointFilterKey(item));
+    buckets.prompt.add(promptFilterKey(item));
+    buckets.step.add(stepFilterKey(item));
+    buckets.weight.add(weightFilterKey(item));
+  }
+  const toOptions = (category) => [...buckets[category]].sort((a, b) => compareFilterKeys(category, a, b)).map((key) => ({ key, label: filterKeyLabel(category, key) }));
+  return {
+    checkpoint: toOptions("checkpoint"),
+    prompt: toOptions("prompt"),
+    step: toOptions("step"),
+    weight: toOptions("weight")
+  };
+}
+function syncFilterMap(prev, keys) {
+  const next = {};
+  for (const key of keys) {
+    next[key] = key in prev ? Boolean(prev[key]) : true;
+  }
+  return next;
+}
+function itemMatchesFilter(item, filterOn) {
+  return filterOn.checkpoint[checkpointFilterKey(item)] === true && filterOn.prompt[promptFilterKey(item)] === true && filterOn.step[stepFilterKey(item)] === true && filterOn.weight[weightFilterKey(item)] === true;
 }
 function LoraTestView({
   job,
@@ -20753,20 +20917,96 @@ function LoraTestView({
 }) {
   const [local, setLocal] = reactExports.useState(() => normalizeLoraTestDraft(draft));
   const [checkpoints, setCheckpoints] = reactExports.useState([]);
+  const [ditFiles, setDitFiles] = reactExports.useState([]);
   const [comfyOnline, setComfyOnline] = reactExports.useState(false);
   const [generating, setGenerating] = reactExports.useState(false);
   const [genProgress, setGenProgress] = reactExports.useState(null);
   const [genError, setGenError] = reactExports.useState(null);
   const [history, setHistory] = reactExports.useState([]);
   const [activeIndex, setActiveIndex] = reactExports.useState(0);
+  const [filterOpen, setFilterOpen] = reactExports.useState(false);
+  const [filterOn, setFilterOn] = reactExports.useState(EMPTY_FILTER_MAPS);
   const [startingComfy, setStartingComfy] = reactExports.useState(false);
+  const [editingPromptIndex, setEditingPromptIndex] = reactExports.useState(null);
+  const [editingPromptDraft, setEditingPromptDraft] = reactExports.useState("");
   const persistTimer = reactExports.useRef(null);
   const skipPersist = reactExports.useRef(true);
   const abortRef = reactExports.useRef(null);
   const seededJobRef = reactExports.useRef(null);
+  const activePathRef = reactExports.useRef(null);
+  const historyStripRef = reactExports.useRef(null);
+  const filterOptions = reactExports.useMemo(() => collectFilterOptions(history), [history]);
+  const filteredHistory = reactExports.useMemo(
+    () => history.filter((item) => itemMatchesFilter(item, filterOn)),
+    [history, filterOn]
+  );
+  reactExports.useEffect(() => {
+    setFilterOn((prev) => ({
+      checkpoint: syncFilterMap(
+        prev.checkpoint,
+        filterOptions.checkpoint.map((o) => o.key)
+      ),
+      prompt: syncFilterMap(
+        prev.prompt,
+        filterOptions.prompt.map((o) => o.key)
+      ),
+      step: syncFilterMap(
+        prev.step,
+        filterOptions.step.map((o) => o.key)
+      ),
+      weight: syncFilterMap(
+        prev.weight,
+        filterOptions.weight.map((o) => o.key)
+      )
+    }));
+  }, [filterOptions]);
+  reactExports.useEffect(() => {
+    const path = activePathRef.current;
+    if (filteredHistory.length === 0) {
+      setActiveIndex(0);
+      return;
+    }
+    const idx = path ? filteredHistory.findIndex((item) => item.filePath === path) : -1;
+    setActiveIndex(idx >= 0 ? idx : 0);
+  }, [filteredHistory]);
   const patch = reactExports.useCallback((partial) => {
     setLocal((prev) => normalizeLoraTestDraft({ ...prev, ...partial }));
   }, []);
+  const reportStatus = reactExports.useCallback(
+    (message, isError) => {
+      onStatus(message, isError, isError ? void 0 : { sticky: true });
+    },
+    [onStatus]
+  );
+  const toggleFilterValue = reactExports.useCallback((category, key) => {
+    setFilterOn((prev) => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [key]: !prev[category][key]
+      }
+    }));
+  }, []);
+  const setAllFilters = reactExports.useCallback(
+    (on2) => {
+      setFilterOn({
+        checkpoint: Object.fromEntries(filterOptions.checkpoint.map((o) => [o.key, on2])),
+        prompt: Object.fromEntries(filterOptions.prompt.map((o) => [o.key, on2])),
+        step: Object.fromEntries(filterOptions.step.map((o) => [o.key, on2])),
+        weight: Object.fromEntries(filterOptions.weight.map((o) => [o.key, on2]))
+      });
+    },
+    [filterOptions]
+  );
+  reactExports.useEffect(() => {
+    if (!generating) return;
+    const off = window.api.onComfyLog(({ line }) => {
+      const text = (line || "").trim();
+      if (!text) return;
+      reportStatus(text.length > 240 ? `${text.slice(0, 237)}…` : text);
+    });
+    return off;
+  }, [generating, reportStatus]);
   reactExports.useEffect(() => {
     skipPersist.current = true;
     setLocal(normalizeLoraTestDraft(draft));
@@ -20793,9 +21033,16 @@ function LoraTestView({
     setLocal((prev) => {
       const next = { ...prev };
       let changed = false;
-      if (!prev.prompt.trim()) {
-        const base = first?.prompt || "";
-        next.prompt = trigger ? `${trigger}, ${base}` : base;
+      if (prev.prompts.every((p) => !p.text.trim())) {
+        const seeded = sample.prompts.map((sp) => {
+          const base = (sp.prompt || "").trim();
+          if (!base) return null;
+          return {
+            text: trigger ? `${trigger}, ${base}` : base,
+            enabled: true
+          };
+        }).filter((p) => p != null);
+        next.prompts = seeded.length > 0 ? seeded : [{ text: "", enabled: true }];
         changed = true;
       }
       if (!prev.negative.trim() && sample.neg) {
@@ -20836,18 +21083,27 @@ function LoraTestView({
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
         if (el.isContentEditable) return;
       }
-      if (history.length < 2) return;
-      const cur = Math.min(Math.max(0, activeIndex), history.length - 1);
-      const next = e.key === "ArrowLeft" ? Math.max(0, cur - 1) : Math.min(history.length - 1, cur + 1);
+      if (filteredHistory.length < 2) return;
+      const cur = Math.min(Math.max(0, activeIndex), filteredHistory.length - 1);
+      const next = e.key === "ArrowLeft" ? Math.max(0, cur - 1) : Math.min(filteredHistory.length - 1, cur + 1);
       if (next === cur) return;
       e.preventDefault();
       setActiveIndex(next);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [history, activeIndex]);
-  const activeItem = history[activeIndex] ?? null;
+  }, [filteredHistory, activeIndex]);
+  const activeItem = filteredHistory[activeIndex] ?? null;
   const imageUrl = activeItem?.url ?? null;
+  reactExports.useEffect(() => {
+    activePathRef.current = activeItem?.filePath ?? null;
+  }, [activeItem]);
+  reactExports.useEffect(() => {
+    const strip = historyStripRef.current;
+    if (!strip || activeIndex < 0) return;
+    const thumb = strip.children[activeIndex];
+    thumb?.scrollIntoView({ behavior: "auto", inline: "nearest", block: "nearest" });
+  }, [activeIndex]);
   const refreshGallery = reactExports.useCallback(async () => {
     const folder = (job.training_folder || "").trim();
     const name = (job.name || "").trim();
@@ -20871,6 +21127,8 @@ function LoraTestView({
         return {
           url: window.api.toLocalUrl(img.path),
           filePath: img.path,
+          promptIndex: meta.promptIndex,
+          checkpointName: meta.checkpointName,
           loraStep: meta.loraStep,
           loraStrength: meta.loraStrength,
           seed: meta.seed
@@ -20915,12 +21173,47 @@ function LoraTestView({
       setCheckpoints([]);
     }
   }, [job.training_folder, job.name]);
+  const refreshDitCheckpoints = reactExports.useCallback(async () => {
+    const folder = local.checkpointFolder.trim();
+    if (!folder) {
+      setDitFiles([]);
+      setLocal((prev) => prev.ditPath ? normalizeLoraTestDraft({ ...prev, ditPath: "" }) : prev);
+      return;
+    }
+    try {
+      const result = await window.api.loraTestListDitCheckpoints(folder);
+      if (!result.ok) {
+        setDitFiles([]);
+        return;
+      }
+      const files = result.files;
+      setDitFiles(files);
+      setLocal((prev) => {
+        if (files.length === 0) {
+          return prev.ditPath ? normalizeLoraTestDraft({ ...prev, ditPath: "" }) : prev;
+        }
+        const match = files.find((f) => pathKey(f.path) === pathKey(prev.ditPath));
+        if (match) {
+          return match.path === prev.ditPath ? prev : normalizeLoraTestDraft({ ...prev, ditPath: match.path });
+        }
+        return normalizeLoraTestDraft({ ...prev, ditPath: files[0].path });
+      });
+    } catch {
+      setDitFiles([]);
+    }
+  }, [local.checkpointFolder]);
+  reactExports.useEffect(() => {
+    void refreshDitCheckpoints();
+  }, [refreshDitCheckpoints]);
   reactExports.useEffect(() => {
     void refreshCheckpoints();
   }, [refreshCheckpoints, jobId]);
   reactExports.useEffect(() => {
     void refreshGallery();
   }, [refreshGallery, jobId]);
+  reactExports.useEffect(() => {
+    setFilterOpen(false);
+  }, [jobId]);
   const refreshComfyStatus = reactExports.useCallback(async () => {
     try {
       const st = await window.api.comfyStatus();
@@ -20939,8 +21232,12 @@ function LoraTestView({
   const toggleLoraStep = (step) => {
     setLocal((prev) => {
       const set = new Set(prev.selectedLoraSteps);
-      if (set.has(step)) set.delete(step);
-      else set.add(step);
+      if (set.has(step)) {
+        if (set.size <= 1) return prev;
+        set.delete(step);
+      } else {
+        set.add(step);
+      }
       return normalizeLoraTestDraft({
         ...prev,
         selectedLoraSteps: [...set].sort((a, b) => a - b)
@@ -20964,7 +21261,7 @@ function LoraTestView({
       return false;
     }
     setStartingComfy(true);
-    onStatus("Starting ComfyUI…");
+    reportStatus("Starting ComfyUI…");
     try {
       const modelsRoot = modelDownloadPathFromDownloadFolder(appSettings.downloadFolder);
       const loraFolder = joinPath(job.training_folder, job.name);
@@ -20978,20 +21275,26 @@ function LoraTestView({
       });
       if (!result.ok) {
         setGenError(result.error || "Failed to start ComfyUI");
-        onStatus(result.error || "Failed to start ComfyUI", true);
+        reportStatus(result.error || "Failed to start ComfyUI", true);
         return false;
       }
       setComfyOnline(true);
-      onStatus(result.alreadyRunning ? "ComfyUI ready" : "ComfyUI ready");
+      reportStatus("ComfyUI ready");
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setGenError(msg);
-      onStatus(msg, true);
+      reportStatus(msg, true);
       return false;
     } finally {
       setStartingComfy(false);
     }
+  };
+  const onCancelGenerate = () => {
+    abortRef.current?.abort();
+    void interruptComfyGeneration();
+    setGenProgress(null);
+    reportStatus("Cancelling…");
   };
   const onGenerate = async () => {
     if (generating) return;
@@ -21002,7 +21305,7 @@ function LoraTestView({
     if (!ditPath || !vaePath || !t5Path) {
       const msg = "Set DiT, VAE, and Text Encoder (Qwen) in LoraTest Settings";
       setGenError(msg);
-      onStatus(msg, true);
+      reportStatus(msg, true);
       return;
     }
     const conflict = checkBasenameConflicts(
@@ -21014,26 +21317,37 @@ function LoraTestView({
     );
     if (conflict) {
       setGenError(conflict);
-      onStatus(conflict, true);
+      reportStatus(conflict, true);
       return;
     }
     if (local.selectedLoraSteps.length < 1) {
       const msg = "Select at least one trained LoRA checkpoint";
       setGenError(msg);
-      onStatus(msg, true);
+      reportStatus(msg, true);
       return;
     }
     if (checkpoints.length === 0) {
       const msg = "No trained LoRA checkpoints for this job";
       setGenError(msg);
-      onStatus(msg, true);
+      reportStatus(msg, true);
       return;
     }
     const selected = local.selectedLoraSteps.map((step) => checkpoints.find((c) => c.step === step)).filter((c) => Boolean(c));
     if (selected.length < 1) {
       const msg = "Selected LoRA checkpoints not found on disk";
       setGenError(msg);
-      onStatus(msg, true);
+      reportStatus(msg, true);
+      return;
+    }
+    const promptEntries = local.prompts.map((entry, index2) => ({
+      text: entry.text.trim(),
+      enabled: entry.enabled !== false,
+      index: index2
+    })).filter((p) => p.enabled && p.text);
+    if (promptEntries.length < 1) {
+      const msg = "Enable at least one non-empty prompt";
+      setGenError(msg);
+      reportStatus(msg, true);
       return;
     }
     const trainingFolder = (job.training_folder || "").trim();
@@ -21041,7 +21355,7 @@ function LoraTestView({
     if (!trainingFolder || !jobName) {
       const msg = "Set Job name and Output Folder in LoraTrain settings";
       setGenError(msg);
-      onStatus(msg, true);
+      reportStatus(msg, true);
       return;
     }
     const ok = await ensureComfy();
@@ -21051,8 +21365,7 @@ function LoraTestView({
     const ac = new AbortController();
     abortRef.current = ac;
     const runSeed = local.seed === -1 ? Math.floor(Math.random() * 4294967295) : Math.max(0, Math.round(local.seed));
-    const shared = {
-      prompt: local.prompt,
+    const sharedBase = {
       negative: local.negative,
       steps: local.steps,
       cfg: local.cfg,
@@ -21066,272 +21379,545 @@ function LoraTestView({
       t5Name: basename(t5Path),
       loraStrength: local.loraStrength
     };
+    const total = promptEntries.length * selected.length;
     try {
       let doneCount = 0;
-      for (let i = 0; i < selected.length; i++) {
-        if (ac.signal.aborted) throw new Error("Cancelled");
-        const ckpt = selected[i];
-        setGenProgress(`Generating ${i + 1}/${selected.length} (step ${ckpt.step})…`);
-        onStatus(`Generating ${i + 1}/${selected.length}…`);
-        const result = await generateWithComfy(
-          {
-            ...shared,
-            loraName: loraNameFromPath(ckpt.path)
-          },
-          { signal: ac.signal }
-        );
-        if (!result.filePath) {
-          throw new Error("ComfyUI finished but local image path was not resolved");
+      for (const { text: promptText, index: promptIndex } of promptEntries) {
+        for (let i = 0; i < selected.length; i++) {
+          if (ac.signal.aborted) throw new Error("Cancelled");
+          const ckpt = selected[i];
+          const n = doneCount + 1;
+          setGenProgress(
+            `Generating ${n}/${total} (prompt ${promptIndex + 1}, step ${ckpt.step})…`
+          );
+          const result = await generateWithComfy(
+            {
+              ...sharedBase,
+              prompt: promptText,
+              loraName: loraNameFromPath(ckpt.path)
+            },
+            { signal: ac.signal }
+          );
+          if (!result.filePath) {
+            throw new Error("ComfyUI finished but local image path was not resolved");
+          }
+          const weightTag = Number(local.loraStrength).toFixed(2);
+          const ckptTag = sanitizeCheckpointTag(basename(ditPath));
+          const promptTag = `p${String(promptIndex + 1).padStart(2, "0")}`;
+          const saved = await window.api.loraTestSaveGeneratedImage({
+            sourcePath: result.filePath,
+            trainingFolder,
+            jobName,
+            fileName: `${promptTag}_step${String(ckpt.step).padStart(6, "0")}_w${weightTag}_seed${runSeed}${ckptTag ? `_ckpt_${ckptTag}` : ""}`
+          });
+          if (!saved.ok || !saved.path) {
+            throw new Error(saved.error || "Failed to save image into loratest folder");
+          }
+          doneCount += 1;
+          await refreshGallery();
         }
-        const weightTag = Number(local.loraStrength).toFixed(2);
-        const saved = await window.api.loraTestSaveGeneratedImage({
-          sourcePath: result.filePath,
-          trainingFolder,
-          jobName,
-          fileName: `step${String(ckpt.step).padStart(6, "0")}_w${weightTag}_seed${runSeed}`
-        });
-        if (!saved.ok || !saved.path) {
-          throw new Error(saved.error || "Failed to save image into loratest folder");
-        }
-        doneCount += 1;
-        await refreshGallery();
       }
       setGenProgress(null);
-      onStatus(`Generate done (${doneCount} image${doneCount === 1 ? "" : "s"})`);
+      reportStatus("Done");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setGenError(msg);
-      onStatus(msg, true);
+      if (ac.signal.aborted || msg === "Cancelled") {
+        setGenError(null);
+        reportStatus("Cancelled");
+      } else {
+        setGenError(msg);
+        reportStatus(msg, true);
+      }
       setGenProgress(null);
     } finally {
+      if (abortRef.current === ac) abortRef.current = null;
       setGenerating(false);
     }
   };
   const stopComfy = async () => {
     await window.api.stopComfyUi();
     setComfyOnline(false);
-    onStatus("ComfyUI stopped");
+    reportStatus("ComfyUI stopped");
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-body", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lora-test-settings", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-settings-scroll", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-comfy-row", children: [
+  const openPromptEditor = (index2) => {
+    setEditingPromptIndex(index2);
+    setEditingPromptDraft(local.prompts[index2]?.text ?? "");
+  };
+  const closePromptEditor = (save) => {
+    if (save && editingPromptIndex != null) {
+      const next = local.prompts.map(
+        (p, i) => i === editingPromptIndex ? { ...p, text: editingPromptDraft } : p
+      );
+      patch({ prompts: next });
+    }
+    setEditingPromptIndex(null);
+    setEditingPromptDraft("");
+  };
+  const addPrompt = () => {
+    patch({ prompts: [...local.prompts, { text: "", enabled: true }] });
+  };
+  const removePrompt = (index2) => {
+    if (local.prompts.length <= 1) {
+      patch({ prompts: [{ text: "", enabled: true }] });
+      return;
+    }
+    const next = local.prompts.filter((_, i) => i !== index2);
+    if (!next.some((p) => p.enabled)) {
+      next[0] = { ...next[0], enabled: true };
+    }
+    patch({ prompts: next });
+  };
+  const togglePromptEnabled = (index2) => {
+    const entry = local.prompts[index2];
+    if (!entry) return;
+    if (entry.enabled) {
+      const enabledCount = local.prompts.filter((p) => p.enabled).length;
+      if (enabledCount <= 1) return;
+    }
+    patch({
+      prompts: local.prompts.map(
+        (p, i) => i === index2 ? { ...p, enabled: !p.enabled } : p
+      )
+    });
+  };
+  reactExports.useEffect(() => {
+    if (editingPromptIndex == null) return;
+    const idx = editingPromptIndex;
+    const draftText = editingPromptDraft;
+    const onKeyDown = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setLocal((prev) => {
+        const next = prev.prompts.map(
+          (p, i) => i === idx ? { ...p, text: draftText } : p
+        );
+        return normalizeLoraTestDraft({ ...prev, prompts: next });
+      });
+      setEditingPromptIndex(null);
+      setEditingPromptDraft("");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editingPromptIndex, editingPromptDraft]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-body", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lora-test-settings", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-settings-scroll", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-comfy-row", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                className: `lora-test-comfy-dot${comfyOnline ? " online" : ""}`,
+                title: comfyOnline ? "ComfyUI online" : "ComfyUI offline"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-test-comfy-label", children: comfyOnline ? "ComfyUI online" : startingComfy ? "Starting…" : "ComfyUI offline" }),
+            comfyOnline ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "toolbar-icon-btn", onClick: () => void stopComfy(), children: "Stop" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-icon-btn",
+                disabled: startingComfy || !local.comfyUiBatPath.trim(),
+                onClick: () => void ensureComfy(),
+                children: "Start"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Checkpoint" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "select",
+              {
+                value: local.ditPath,
+                disabled: ditFiles.length === 0,
+                onChange: (e) => patch({ ditPath: e.target.value }),
+                children: ditFiles.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "No safetensors in folder" }) : ditFiles.map((f) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: f.path, children: f.name }, f.path))
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-prompt-groups", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-prompt-groups-header", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Prompts" }) }),
+            local.prompts.map((entry, index2) => {
+              const enabledCount = local.prompts.filter((p) => p.enabled).length;
+              const lockOn = entry.enabled && enabledCount <= 1;
+              return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-prompt-row", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                  "Prompt ",
+                  index2 + 1
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-prompt-input-row", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "div",
+                    {
+                      className: `lora-toggle lora-test-prompt-toggle${entry.enabled ? " is-on" : ""}${lockOn ? " is-disabled" : ""}`,
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          type: "button",
+                          role: "switch",
+                          className: "lora-switch",
+                          "aria-checked": entry.enabled,
+                          "aria-label": `Enable prompt ${index2 + 1}`,
+                          title: lockOn ? "At least one prompt must stay on" : entry.enabled ? "Enabled for generate" : "Skipped when generating",
+                          disabled: lockOn,
+                          onClick: () => togglePromptEnabled(index2),
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+                        }
+                      )
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "text",
+                      className: "lora-test-prompt-input",
+                      value: entry.text,
+                      readOnly: true,
+                      placeholder: "Click to edit…",
+                      title: entry.text || void 0,
+                      onClick: () => openPromptEditor(index2),
+                      onFocus: (e) => {
+                        e.target.blur();
+                        openPromptEditor(index2);
+                      }
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      className: "lora-test-prompt-remove",
+                      title: "Remove prompt",
+                      disabled: local.prompts.length <= 1,
+                      onClick: () => removePrompt(index2),
+                      children: "−"
+                    }
+                  )
+                ] })
+              ] }) }, index2);
+            }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-prompt-add", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: addPrompt, children: "+" }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Negative" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "textarea",
+              {
+                rows: 2,
+                value: local.negative,
+                onChange: (e) => patch({ negative: e.target.value })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Steps" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min: 1,
+                  max: 150,
+                  value: local.steps,
+                  onChange: (e) => patch({ steps: Number(e.target.value) })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "CFG / Guidance" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min: 0,
+                  max: 20,
+                  step: 0.1,
+                  value: local.cfg,
+                  onChange: (e) => patch({ cfg: Number(e.target.value) })
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Width" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min: 64,
+                  step: 64,
+                  value: local.width,
+                  onChange: (e) => patch({ width: Number(e.target.value) })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Height" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min: 64,
+                  step: 64,
+                  value: local.height,
+                  onChange: (e) => patch({ height: Number(e.target.value) })
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Seed" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min: -1,
+                  value: local.seed,
+                  onChange: (e) => patch({ seed: Number(e.target.value) })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => patch({ seed: -1 }), children: "Random" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Sampler" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "select",
+                {
+                  value: local.sampler,
+                  onChange: (e) => patch({ sampler: e.target.value }),
+                  children: SAMPLERS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: s, children: s }, s))
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Scheduler" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "select",
+                {
+                  value: local.scheduler,
+                  onChange: (e) => patch({ scheduler: e.target.value }),
+                  children: SCHEDULERS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: s, children: s }, s))
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-lora-block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-test-lora-heading", children: "Trained LoRAs" }),
+            checkpoints.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-test-lora-list", children: checkpoints.map((c) => {
+              const on2 = local.selectedLoraSteps.includes(c.step);
+              const lockOn = on2 && local.selectedLoraSteps.length <= 1;
+              return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "div",
+                {
+                  className: `lora-toggle lora-test-lora-toggle${on2 ? " is-on" : ""}${lockOn ? " is-disabled" : ""}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        role: "switch",
+                        className: "lora-switch",
+                        "aria-checked": on2,
+                        "aria-label": `Select LoRA step ${c.step}`,
+                        title: lockOn ? "At least one LoRA step must stay on" : c.path,
+                        disabled: lockOn,
+                        onClick: () => toggleLoraStep(c.step),
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-toggle-label", title: c.path, children: [
+                      "step ",
+                      c.step
+                    ] })
+                  ]
+                }
+              ) }, c.step);
+            }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LoRA strength" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min: 0,
+                  max: 2,
+                  step: 0.05,
+                  value: local.loraStrength,
+                  onChange: (e) => patch({ loraStrength: Number(e.target.value) })
+                }
+              )
+            ] })
+          ] }),
+          genProgress && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: genProgress }),
+          genError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-error", children: genError })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-generate-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: `${generating ? "danger" : "primary"} lora-test-generate-btn`,
+            disabled: startingComfy,
+            onClick: () => {
+              if (generating) onCancelGenerate();
+              else void onGenerate();
+            },
+            children: generating ? "Cancel" : "Generate"
+          }
+        ) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "lora-test-viewer", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-viewer-meta", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-viewer-meta-left", children: activeItem && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            activeItem.promptIndex != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              "Prompt ",
+              activeItem.promptIndex
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { title: activeItem.checkpointName || void 0, children: activeItem.checkpointName || "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              "LoRA step ",
+              formatMetaValue(activeItem.loraStep)
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              "Weight ",
+              formatMetaValue(activeItem.loraStrength, 2)
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              "Seed ",
+              formatMetaValue(activeItem.seed)
+            ] })
+          ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `lora-test-comfy-dot${comfyOnline ? " online" : ""}`,
-              title: comfyOnline ? "ComfyUI online" : "ComfyUI offline"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-test-comfy-label", children: comfyOnline ? "ComfyUI online" : startingComfy ? "Starting…" : "ComfyUI offline" }),
-          comfyOnline ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "toolbar-icon-btn", onClick: () => void stopComfy(), children: "Stop" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
-              className: "toolbar-icon-btn",
-              disabled: startingComfy || !local.comfyUiBatPath.trim(),
-              onClick: () => void ensureComfy(),
-              children: "Start"
+              className: "lora-test-filter-btn",
+              title: "Filter",
+              "aria-label": "Filter",
+              "aria-haspopup": "dialog",
+              "aria-expanded": filterOpen,
+              onClick: () => setFilterOpen(true),
+              children: "Filter"
             }
           )
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Prompt" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "textarea",
-            {
-              rows: 6,
-              value: local.prompt,
-              onChange: (e) => patch({ prompt: e.target.value })
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Negative" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "textarea",
-            {
-              rows: 2,
-              value: local.negative,
-              onChange: (e) => patch({ negative: e.target.value })
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Steps" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min: 1,
-                max: 150,
-                value: local.steps,
-                onChange: (e) => patch({ steps: Number(e.target.value) })
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "CFG / Guidance" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min: 0,
-                max: 20,
-                step: 0.1,
-                value: local.cfg,
-                onChange: (e) => patch({ cfg: Number(e.target.value) })
-              }
-            )
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Width" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min: 64,
-                step: 64,
-                value: local.width,
-                onChange: (e) => patch({ width: Number(e.target.value) })
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Height" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min: 64,
-                step: 64,
-                value: local.height,
-                onChange: (e) => patch({ height: Number(e.target.value) })
-              }
-            )
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Seed" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min: -1,
-                value: local.seed,
-                onChange: (e) => patch({ seed: Number(e.target.value) })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => patch({ seed: -1 }), children: "Random" })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "field-row-grid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Sampler" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "select",
-              {
-                value: local.sampler,
-                onChange: (e) => patch({ sampler: e.target.value }),
-                children: SAMPLERS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: s, children: s }, s))
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Scheduler" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "select",
-              {
-                value: local.scheduler,
-                onChange: (e) => patch({ scheduler: e.target.value }),
-                children: SCHEDULERS.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: s, children: s }, s))
-              }
-            )
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-lora-block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-test-lora-heading", children: "Trained LoRAs" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Select at least one. Each selected LoRA generates one image." }),
-          checkpoints.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "No checkpoints for this job yet." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-test-lora-list", children: checkpoints.map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "checkbox-field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: local.selectedLoraSteps.includes(c.step),
-                onChange: () => toggleLoraStep(c.step)
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { title: c.path, children: [
-              "step ",
-              c.step,
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "lora-test-lora-file", children: [
-                " ",
-                basename(c.path)
-              ] })
-            ] })
-          ] }) }, c.step)) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "field", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "LoRA strength (shared)" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min: 0,
-                max: 2,
-                step: 0.05,
-                value: local.loraStrength,
-                onChange: (e) => patch({ loraStrength: Number(e.target.value) })
-              }
-            )
-          ] })
-        ] }),
-        genProgress && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: genProgress }),
-        genError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-error", children: genError })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-viewer-main", children: imageUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageUrl, alt: "Generated", className: "lora-test-viewer-img" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-viewer-empty", children: history.length > 0 ? "No images match the current filter" : "Generated images appear here" }) }),
+        filteredHistory.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-history", ref: historyStripRef, children: filteredHistory.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: `lora-test-history-thumb${idx === activeIndex ? " active" : ""}`,
+            tabIndex: -1,
+            onMouseDown: (e) => e.preventDefault(),
+            onClick: () => setActiveIndex(idx),
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: item.url, alt: "" })
+          },
+          item.url
+        )) })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-generate-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: "primary lora-test-generate-btn",
-          disabled: generating || startingComfy,
-          onClick: () => void onGenerate(),
-          children: generating ? genProgress || "Generating…" : "Generate"
-        }
-      ) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "lora-test-viewer", children: [
-      activeItem && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-viewer-meta", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-          "LoRA step ",
-          formatMetaValue(activeItem.loraStep)
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-          "Weight ",
-          formatMetaValue(activeItem.loraStrength, 2)
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-          "Seed ",
-          formatMetaValue(activeItem.seed)
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-viewer-main", children: imageUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageUrl, alt: "Generated", className: "lora-test-viewer-img" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-viewer-empty", children: "Generated images appear here" }) }),
-      history.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-history", children: history.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: `lora-test-history-thumb${idx === activeIndex ? " active" : ""}`,
-          onClick: () => setActiveIndex(idx),
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: item.url, alt: "" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ResourceMonitorPane, { device: job.device })
+    ] }) }),
+    editingPromptIndex != null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modal-backdrop",
+        onMouseDown: (e) => {
+          if (e.target === e.currentTarget) closePromptEditor(true);
         },
-        item.url
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ResourceMonitorPane, { device: job.device })
-  ] }) });
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "modal modal-wide",
+            role: "dialog",
+            "aria-labelledby": "lora-test-prompt-edit-title",
+            onMouseDown: (e) => e.stopPropagation(),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "lora-test-prompt-edit-title", children: [
+                "Prompt ",
+                editingPromptIndex + 1
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "textarea",
+                {
+                  className: "prompt-textarea",
+                  value: editingPromptDraft,
+                  onChange: (e) => setEditingPromptDraft(e.target.value),
+                  autoFocus: true,
+                  spellCheck: false
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => closePromptEditor(false), children: "Cancel" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => closePromptEditor(true), children: "Done" })
+              ] })
+            ]
+          }
+        )
+      }
+    ),
+    filterOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modal-backdrop",
+        onMouseDown: (e) => {
+          if (e.target === e.currentTarget) setFilterOpen(false);
+        },
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "modal lora-test-filter-modal",
+            role: "dialog",
+            "aria-labelledby": "lora-test-filter-title",
+            onMouseDown: (e) => e.stopPropagation(),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-filter-header", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "lora-test-filter-title", children: "Filter" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-filter-header-actions", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setAllFilters(true), children: "All On" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setAllFilters(false), children: "All Off" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lora-test-filter-body", children: [
+                { id: "checkpoint", title: "Checkpoint" },
+                { id: "prompt", title: "Prompt" },
+                { id: "step", title: "Step" },
+                { id: "weight", title: "Weight" }
+              ].map((section) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lora-test-filter-section", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: section.title }),
+                filterOptions[section.id].length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "lora-test-filter-empty", children: "No values in loratest folder" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "lora-test-filter-list", children: filterOptions[section.id].map((opt) => {
+                  const on2 = filterOn[section.id][opt.key] === true;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `lora-toggle${on2 ? " is-on" : ""}`, children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        role: "switch",
+                        className: "lora-switch",
+                        "aria-checked": on2,
+                        "aria-label": `Filter ${section.title} ${opt.label}`,
+                        title: opt.label,
+                        onClick: () => toggleFilterValue(section.id, opt.key),
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-switch-knob", "aria-hidden": "true" })
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "lora-toggle-label", title: opt.label, children: opt.label })
+                  ] }) }, opt.key);
+                }) })
+              ] }, section.id)) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-actions", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primary", onClick: () => setFilterOpen(false), children: "Close" })
+              ] })
+            ]
+          }
+        )
+      }
+    )
+  ] });
 }
 function joinPath(a, b) {
   const left = (a || "").trim().replace(/[/\\]+$/, "");
@@ -22254,7 +22840,7 @@ const TABS = [
 const LORA_TEST_MODEL_REPO = "AlperKTS/Krea2_FP8";
 const LORA_TEST_MODEL_SPECS = {
   ditPath: {
-    label: "Checkpoint",
+    label: "Checkpoint Folder",
     filename: "krea2_turbo_fp8.safetensors"
   },
   vaePath: {
@@ -22407,10 +22993,13 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
       setLoraTestDownloadKey(null);
       setLoraTestDownloadPct(100);
       if (!activeKey || !payload.filePath) return;
-      setDraft((prev) => ({
-        ...prev,
-        loraTestDraft: { ...prev.loraTestDraft, [activeKey]: payload.filePath }
-      }));
+      setDraft((prev) => {
+        const nextDraft = { ...prev.loraTestDraft, [activeKey]: payload.filePath };
+        if (activeKey === "ditPath") {
+          nextDraft.checkpointFolder = parentDir(payload.filePath);
+        }
+        return { ...prev, loraTestDraft: nextDraft };
+      });
     });
     const offError = window.api.onModelDownloadError((payload) => {
       if (payload.repoId !== LORA_TEST_MODEL_REPO) return;
@@ -22479,6 +23068,14 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
     setDraft((prev) => ({
       ...prev,
       loraTestDraft: { ...prev.loraTestDraft, [key]: file }
+    }));
+  };
+  const browseCheckpointFolder = async () => {
+    const dir = await window.api.openFolder();
+    if (!dir) return;
+    setDraft((prev) => ({
+      ...prev,
+      loraTestDraft: { ...prev.loraTestDraft, checkpointFolder: dir }
     }));
   };
   const downloadLoraTestModel = async (key) => {
@@ -22997,18 +23594,20 @@ function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }) {
                   PathBrowseField,
                   {
                     label: LORA_TEST_MODEL_SPECS.ditPath.label,
-                    value: draft.loraTestDraft.ditPath,
-                    onChange: (ditPath) => setDraft((prev) => ({
+                    value: draft.loraTestDraft.checkpointFolder,
+                    onChange: (checkpointFolder) => setDraft((prev) => ({
                       ...prev,
-                      loraTestDraft: { ...prev.loraTestDraft, ditPath }
+                      loraTestDraft: { ...prev.loraTestDraft, checkpointFolder }
                     })),
-                    onBrowse: () => void browseSafetensors("ditPath", "Select DiT safetensors"),
-                    showDownload: !isSafetensorsPath(draft.loraTestDraft.ditPath),
+                    onBrowse: () => void browseCheckpointFolder(),
+                    placeholder: "Checkpoint folder path",
+                    showDownload: !draft.loraTestDraft.checkpointFolder.trim(),
                     downloading: loraTestDownloadKey === "ditPath",
                     downloadLabel: loraTestDownloadKey === "ditPath" ? `Downloading ${loraTestDownloadPct}%` : "Download",
                     onDownload: () => void downloadLoraTestModel("ditPath")
                   }
                 ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "field-hint", children: "Detects .safetensors files inside this folder for the Checkpoint dropdown." }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   PathBrowseField,
                   {
@@ -23074,6 +23673,7 @@ function PathBrowseField({
   value,
   onChange,
   onBrowse,
+  placeholder,
   showDownload = false,
   downloading = false,
   downloadLabel = "Download",
@@ -23088,7 +23688,7 @@ function PathBrowseField({
           type: "text",
           value,
           onChange: (e) => onChange(e.target.value),
-          placeholder: `${label} .safetensors path`,
+          placeholder: placeholder ?? `${label} .safetensors path`,
           spellCheck: false
         }
       ),
@@ -24888,6 +25488,23 @@ function App() {
       onLoraStatus(result.error || "Could not open output folder", true);
     }
   };
+  const openLoraTestOutputFolder = async () => {
+    const folder2 = (activeLoraJob?.job.training_folder || "").trim();
+    const jobName = (activeLoraJob?.job.name || "").trim();
+    if (!folder2) {
+      onLoraStatus("Set an Output folder in Basics first", true);
+      return;
+    }
+    if (!jobName) {
+      onLoraStatus("Set a Job name in Basics first", true);
+      return;
+    }
+    const loratestOut = folder2.replace(/[/\\]+$/, "") + "/" + jobName + "/loratest";
+    const result = await window.api.openPathInExplorer(loratestOut);
+    if (!result.ok) {
+      onLoraStatus(result.error || "Could not open loratest folder", true);
+    }
+  };
   const runCaptionForPath = async (imagePath) => {
     captionAbortRef.current?.abort();
     const ac = new AbortController();
@@ -25283,19 +25900,32 @@ function App() {
               "button",
               {
                 type: "button",
-                disabled: !settingsReady,
-                onClick: () => setSettingsOpen(true),
-                children: "Settings"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                className: analysisAnalyzing ? "analyze-btn is-analyzing" : "analyze-btn",
+                className: `toolbar-icon-btn analyze-btn${analysisAnalyzing ? " is-analyzing" : ""}`,
                 disabled: !folder || images.length === 0,
+                title: "Analyze",
+                "aria-label": "Analyze",
                 onClick: () => setAnalysisOpen(true),
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "analyze-btn-label", children: "Analyze" })
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "svg",
+                  {
+                    className: "analyze-btn-label",
+                    width: "14",
+                    height: "14",
+                    viewBox: "0 0 14 14",
+                    "aria-hidden": "true",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "path",
+                      {
+                        fill: "none",
+                        stroke: "currentColor",
+                        strokeWidth: "1.4",
+                        strokeLinecap: "round",
+                        strokeLinejoin: "round",
+                        d: "M1.5 11.5V2.5M1.5 11.5h11M3 9.2l2.2-3.1 2.1 1.7 3.2-4.3"
+                      }
+                    )
+                  }
+                )
               }
             )
           ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -25331,6 +25961,24 @@ function App() {
                 }
               ) }, preset.id)) })
             ] }),
+            isLoraTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-icon-btn",
+                title: "Open loratest folder",
+                "aria-label": "Open loratest folder",
+                disabled: !(activeLoraJob?.job.training_folder || "").trim() || !(activeLoraJob?.job.name || "").trim(),
+                onClick: () => void openLoraTestOutputFolder(),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    fill: "currentColor",
+                    d: "M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                  }
+                ) })
+              }
+            ),
             !isLoraTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
@@ -25367,15 +26015,6 @@ function App() {
                 ) })
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                disabled: !settingsReady,
-                onClick: () => setSettingsOpen(true),
-                children: "Settings"
-              }
-            ),
             !isLoraTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
@@ -25395,51 +26034,71 @@ function App() {
               }
             )
           ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "toolbar-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "div",
-            {
-              className: "view-switch",
-              role: "tablist",
-              "aria-label": "Main view",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toolbar-right", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "toolbar-icon-btn",
+                disabled: !settingsReady,
+                title: "Settings",
+                "aria-label": "Settings",
+                onClick: () => setSettingsOpen(true),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 14 14", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
                   {
-                    type: "button",
-                    role: "tab",
-                    className: `view-switch-seg${isDatasetEdit ? " active" : ""}`,
-                    "aria-selected": isDatasetEdit,
-                    disabled: loraTraining,
-                    title: loraTraining ? "Unavailable while training" : void 0,
-                    onClick: () => setActiveView("datasetEdit"),
-                    children: "DatasetEdit"
+                    fill: "currentColor",
+                    d: "M5.72.75h2.56l.22 1.48c.38.12.73.3 1.05.53l1.4-.55 1.28 2.22-1.18.95c.06.25.1.51.1.78s-.04.53-.1.78l1.18.95-1.28 2.22-1.4-.55a4.1 4.1 0 0 1-1.05.53l-.22 1.48H5.72l-.22-1.48a4.1 4.1 0 0 1-1.05-.53l-1.4.55L1.77 9.37l1.18-.95a3.5 3.5 0 0 1-.1-.78c0-.27.04-.53.1-.78l-1.18-.95 1.28-2.22 1.4.55c.32-.23.67-.41 1.05-.53L5.72.75zM7 4.6A2.4 2.4 0 1 0 7 9.4 2.4 2.4 0 0 0 7 4.6z"
                   }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "button",
-                    role: "tab",
-                    className: `view-switch-seg${isLoraTrain ? " active" : ""}`,
-                    "aria-selected": isLoraTrain,
-                    onClick: () => setActiveView("loraTrain"),
-                    children: "LoraTrain"
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "button",
-                    role: "tab",
-                    className: `view-switch-seg${isLoraTest ? " active" : ""}`,
-                    "aria-selected": isLoraTest,
-                    onClick: () => setActiveView("loraTest"),
-                    children: "LoraTest"
-                  }
-                )
-              ]
-            }
-          ) })
+                ) })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "div",
+              {
+                className: "view-switch",
+                role: "tablist",
+                "aria-label": "Main view",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      role: "tab",
+                      className: `view-switch-seg${isDatasetEdit ? " active" : ""}`,
+                      "aria-selected": isDatasetEdit,
+                      disabled: loraTraining,
+                      title: loraTraining ? "Unavailable while training" : void 0,
+                      onClick: () => setActiveView("datasetEdit"),
+                      children: "Dataset Edit"
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      role: "tab",
+                      className: `view-switch-seg${isLoraTrain ? " active" : ""}`,
+                      "aria-selected": isLoraTrain,
+                      onClick: () => setActiveView("loraTrain"),
+                      children: "LoRA Trainer"
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      type: "button",
+                      role: "tab",
+                      className: `view-switch-seg${isLoraTest ? " active" : ""}`,
+                      "aria-selected": isLoraTest,
+                      onClick: () => setActiveView("loraTest"),
+                      children: "LoRA Tester"
+                    }
+                  )
+                ]
+              }
+            )
+          ] })
         ]
       }
     ),
