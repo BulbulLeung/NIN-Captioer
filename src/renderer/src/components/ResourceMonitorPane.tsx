@@ -226,17 +226,17 @@ export function ResourceMonitorPane({ device }: Props) {
             <div className="lora-monitor-apps">
               <MonitorHeader label="VRAM apps" />
               {appsAll.length === 0 ? (
-                <p className="lora-monitor-unavailable">無佔用行程</p>
+                <p className="lora-monitor-unavailable">No processes using VRAM</p>
               ) : (
                 <ul className="lora-monitor-app-list" ref={appListRef}>
                   {apps.map((app) => {
                     const isSelf = app.name === 'Captioer' && !app.killable
                     const isProtected = !app.killable && !isSelf
                     const killHint = app.killable
-                      ? `結束 ${app.name}`
+                      ? `End ${app.name}`
                       : isSelf
-                        ? 'Captioer 本體，無法結束'
-                        : '系統行程，無法結束'
+                        ? 'Captioer itself — cannot end'
+                        : 'System process — cannot end'
                     const nameClass = isSelf
                       ? 'lora-monitor-app-name lora-monitor-app-name--self'
                       : isProtected
@@ -270,7 +270,7 @@ export function ResourceMonitorPane({ device }: Props) {
             </div>
           </>
         ) : (
-          <p className="lora-monitor-unavailable">無法讀取 GPU 狀態</p>
+          <p className="lora-monitor-unavailable">Unable to read GPU status</p>
         )}
       </section>
     </aside>
