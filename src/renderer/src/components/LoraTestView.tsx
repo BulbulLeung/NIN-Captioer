@@ -283,6 +283,7 @@ export function LoraTestView({
   const abortRef = useRef<AbortController | null>(null)
   const seededJobRef = useRef<string | null>(null)
   const activePathRef = useRef<string | null>(null)
+  const historyStripRef = useRef<HTMLDivElement | null>(null)
 
   const filterOptions = useMemo(() => collectFilterOptions(history), [history])
 
@@ -467,6 +468,13 @@ export function LoraTestView({
   useEffect(() => {
     activePathRef.current = activeItem?.filePath ?? null
   }, [activeItem])
+
+  useEffect(() => {
+    const strip = historyStripRef.current
+    if (!strip || activeIndex < 0) return
+    const thumb = strip.children[activeIndex] as HTMLElement | undefined
+    thumb?.scrollIntoView({ behavior: 'auto', inline: 'nearest', block: 'nearest' })
+  }, [activeIndex])
 
   const refreshGallery = useCallback(async () => {
     const folder = (job.training_folder || '').trim()
@@ -1235,12 +1243,14 @@ export function LoraTestView({
             )}
           </div>
           {filteredHistory.length > 1 && (
-            <div className="lora-test-history">
+            <div className="lora-test-history" ref={historyStripRef}>
               {filteredHistory.map((item, idx) => (
                 <button
                   key={item.url}
                   type="button"
                   className={`lora-test-history-thumb${idx === activeIndex ? ' active' : ''}`}
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setActiveIndex(idx)}
                 >
                   <img src={item.url} alt="" />

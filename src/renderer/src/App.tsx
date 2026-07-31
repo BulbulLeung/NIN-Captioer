@@ -1265,7 +1265,7 @@ export default function App() {
               title={loraTraining ? 'Unavailable while training' : undefined}
               onClick={() => setActiveView('datasetEdit')}
             >
-              DatasetEdit
+              Dataset Edit
             </button>
             <button
               type="button"
@@ -1274,7 +1274,7 @@ export default function App() {
               aria-selected={isLoraTrain}
               onClick={() => setActiveView('loraTrain')}
             >
-              LoraTrain
+              LoRA Trainer
             </button>
             <button
               type="button"
@@ -1283,7 +1283,7 @@ export default function App() {
               aria-selected={isLoraTest}
               onClick={() => setActiveView('loraTest')}
             >
-              LoraTest
+              LoRA Tester
             </button>
           </div>
         </div>
