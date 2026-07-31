@@ -78,6 +78,11 @@ const api = {
     electron.ipcRenderer.on("train:error", listener);
     return () => electron.ipcRenderer.removeListener("train:error", listener);
   },
+  onTrainWarn: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("train:warn", listener);
+    return () => electron.ipcRenderer.removeListener("train:warn", listener);
+  },
   checkModelStatus: (opts) => electron.ipcRenderer.invoke("model:checkStatus", opts),
   downloadModel: (opts) => electron.ipcRenderer.invoke("model:download", opts),
   cancelModelDownload: () => electron.ipcRenderer.invoke("model:cancelDownload"),

@@ -985,6 +985,10 @@ export function LoraTrainView({
       queueRefreshTrainSamples(0)
       void refreshResumeTarget()
     })
+    const offWarn = window.api.onTrainWarn(({ message }) => {
+      if (!message?.trim()) return
+      onStatus(`Warning: ${message}`, false, { sticky: true })
+    })
     const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
       setDlCurrent(repoId)
       setDlPct(pct)
@@ -1028,6 +1032,7 @@ export function LoraTrainView({
       offLog()
       offDone()
       offErr()
+      offWarn()
       offDlProg()
       offDlDone()
       offDlErr()
@@ -1788,7 +1793,23 @@ export function LoraTrainView({
             <div className="lora-train-log-panel">
               <h3 className="lora-panel-title">Log</h3>
               <pre className="lora-train-log">
-                {trainLogs.length > 0 ? trainLogs.join('\n') : 'Waiting for trainer output…'}
+                {trainLogs.length > 0 ? (
+                  trainLogs.map((line, i) => (
+                    <span
+                      key={`${i}:${line.slice(0, 48)}`}
+                      className={
+                        /^WARNING:/i.test(line) || /^Warning:/i.test(line)
+                          ? 'lora-train-log-line is-warn'
+                          : 'lora-train-log-line'
+                      }
+                    >
+                      {line}
+                      {'\n'}
+                    </span>
+                  ))
+                ) : (
+                  'Waiting for trainer output…'
+                )}
                 <span ref={logEndRef} />
               </pre>
             </div>

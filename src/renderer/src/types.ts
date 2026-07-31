@@ -478,6 +478,7 @@ declare global {
       ) => () => void
       onTrainDone: (cb: (payload: { path: string }) => void) => () => void
       onTrainError: (cb: (payload: { message: string }) => void) => () => void
+      onTrainWarn: (cb: (payload: { message: string }) => void) => () => void
       checkModelStatus: (opts: {
         pythonPath?: string
         downloadPath?: string

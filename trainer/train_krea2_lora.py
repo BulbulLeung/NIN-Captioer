@@ -12,6 +12,8 @@ Progress protocol (stdout):
   CAPTIOER_PROGRESS step=N total=T loss=X.XXXX
   CAPTIOER_LOSS_SPIKE step=N loss=X.XXXXXX path=...
   CAPTIOER_DONE path=...
+  CAPTIOER_TRAIN_ERROR message=OOM: ...  (exit 7 on memory pressure / CUDA OOM)
+  CAPTIOER_WARN message=...  (step slower than 15s; continues training)
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import os
 import random
 import re
 import sys
+import threading
 from pathlib import Path
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -516,6 +519,19 @@ def flush() -> None:
 # Safety margin for batch activations when deciding if VAE/TE can share VRAM with DiT.
 VRAM_SAFETY_MARGIN_BYTES = 2 * 1024**3
 
+# Abort before OS freeze / CUDA thrash when free memory drops below these floors.
+# Note: after CPU quantize, avail RAM often dips while weights still sit in host RAM;
+# that is expected until DiT moves to GPU — do not treat that transient as fatal.
+RAM_MIN_AVAILABLE_BYTES = int(1.5 * 1024**3)
+PAGEFILE_MIN_AVAILABLE_BYTES = 2 * 1024**3
+VRAM_MIN_FREE_BYTES = 384 * 1024**2
+# Soft warn (does not abort) when a single train step exceeds this wall time.
+STEP_SLOW_WARN_SEC = 15.0
+
+
+class MemoryPressureError(RuntimeError):
+    """Raised when RAM/VRAM is critically low; training should abort with OOM."""
+
 
 def vram_free_bytes() -> int | None:
     """Return free VRAM bytes, or None if CUDA unavailable."""
@@ -528,6 +544,80 @@ def vram_free_bytes() -> int | None:
         return int(free)
     except Exception:
         return None
+
+
+def ram_status() -> dict[str, int | None]:
+    """System RAM / commit snapshot. Values are bytes; missing keys are None."""
+    out: dict[str, int | None] = {
+        "avail_phys": None,
+        "total_phys": None,
+        "avail_pagefile": None,
+    }
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                out["avail_phys"] = int(stat.ullAvailPhys)
+                out["total_phys"] = int(stat.ullTotalPhys)
+                out["avail_pagefile"] = int(stat.ullAvailPageFile)
+        else:
+            meminfo: dict[str, int] = {}
+            with open("/proc/meminfo", "r", encoding="utf-8") as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[0].endswith(":"):
+                        key = parts[0][:-1]
+                        try:
+                            meminfo[key] = int(parts[1]) * 1024  # kB -> bytes
+                        except ValueError:
+                            pass
+            avail = meminfo.get("MemAvailable")
+            total = meminfo.get("MemTotal")
+            if avail is not None:
+                out["avail_phys"] = avail
+            if total is not None:
+                out["total_phys"] = total
+    except Exception:
+        pass
+    return out
+
+
+def ram_available_bytes() -> int | None:
+    """Return available physical RAM bytes, or None if unknown."""
+    return ram_status().get("avail_phys")
+
+
+def ram_log(tag: str) -> str:
+    """Human-readable RAM / commit snapshot for logs."""
+    s = ram_status()
+    parts = [tag + ":"]
+    if s["avail_phys"] is not None and s["total_phys"] is not None:
+        parts.append(
+            f"ram_free={s['avail_phys'] / 1e9:.2f}GB/{s['total_phys'] / 1e9:.2f}GB"
+        )
+    elif s["avail_phys"] is not None:
+        parts.append(f"ram_free={s['avail_phys'] / 1e9:.2f}GB")
+    else:
+        parts.append("ram=unknown")
+    if s["avail_pagefile"] is not None:
+        parts.append(f"pagefile_free={s['avail_pagefile'] / 1e9:.2f}GB")
+    return " ".join(parts)
 
 
 def vram_log(tag: str) -> str:
@@ -546,6 +636,124 @@ def vram_log(tag: str) -> str:
         )
     except Exception as e:
         return f"{tag}: vram_log_failed ({e})"
+
+
+def check_memory_pressure(phase: str, *, check_ram: bool = True) -> None:
+    """Raise MemoryPressureError if RAM/VRAM is critically low.
+
+    Set check_ram=False for pre-GPU-upload phases where host RAM is expected to
+    spike (quantize / PEFT) and will reclaim after ``.to(cuda)``.
+    """
+    reasons: list[str] = []
+    s = ram_status()
+    avail = s.get("avail_phys")
+    if check_ram and avail is not None and avail < RAM_MIN_AVAILABLE_BYTES:
+        reasons.append(
+            f"RAM available {avail / 1e9:.2f}GB < {RAM_MIN_AVAILABLE_BYTES / 1e9:.1f}GB"
+        )
+    page = s.get("avail_pagefile")
+    if page is not None and page < PAGEFILE_MIN_AVAILABLE_BYTES:
+        reasons.append(
+            f"pagefile available {page / 1e9:.2f}GB < "
+            f"{PAGEFILE_MIN_AVAILABLE_BYTES / 1e9:.1f}GB"
+        )
+    vfree = vram_free_bytes()
+    if vfree is not None and vfree < VRAM_MIN_FREE_BYTES:
+        reasons.append(
+            f"VRAM free {vfree / 1e6:.0f}MB < {VRAM_MIN_FREE_BYTES / 1e6:.0f}MB"
+        )
+    if reasons:
+        detail = "; ".join(reasons)
+        raise MemoryPressureError(
+            f"OOM: memory pressure at {phase} ({detail})"
+        )
+
+
+def abort_oom(message: str, *, tag: str = "oom") -> int:
+    """Log structured OOM, flush caches, return exit code 7."""
+    msg = str(message)
+    if not msg.startswith("OOM:"):
+        msg = f"OOM: {msg}"
+    log(f"ERROR: {msg}")
+    log(ram_log(tag))
+    log(vram_log(tag))
+    print(f"CAPTIOER_TRAIN_ERROR message={msg}", flush=True)
+    flush()
+    return 7
+
+
+def build_step_slow_reasons(
+    *,
+    step: int,
+    grad_ckpt: bool,
+    seq_len: int,
+    grid_h: int,
+    grid_w: int,
+    dit_stream_offload: bool,
+) -> str:
+    """Compact why the current step is likely slow (for CAPTIOER_WARN)."""
+    parts: list[str] = []
+    if not grad_ckpt:
+        parts.append("grad-ckpt OFF")
+    if int(seq_len) >= 2048:
+        parts.append(f"seq={int(seq_len)} ({int(grid_h)}x{int(grid_w)})")
+    if dit_stream_offload:
+        parts.append("layer-offload")
+    vfree = vram_free_bytes()
+    if vfree is not None and vfree < 2 * 1024**3:
+        parts.append(f"VRAM free {vfree / 1e9:.1f}GB")
+    if int(step) == 1:
+        parts.append("1st-step warmup")
+    if not parts:
+        parts.append("check res/ckpt/VRAM")
+    return ", ".join(parts)
+
+
+class StepSlowWatchdog:
+    """Fire one CAPTIOER_WARN if a step is still running after STEP_SLOW_WARN_SEC."""
+
+    def __init__(self) -> None:
+        self._timer: threading.Timer | None = None
+        self._lock = threading.Lock()
+        self._ctx: dict = {}
+
+    def begin(self, step: int, **ctx) -> None:
+        self.cancel()
+        with self._lock:
+            self._ctx = {"step": int(step), **ctx}
+
+        def _fire() -> None:
+            with self._lock:
+                c = dict(self._ctx)
+            reason = build_step_slow_reasons(
+                step=int(c.get("step") or step),
+                grad_ckpt=bool(c.get("grad_ckpt", True)),
+                seq_len=int(c.get("seq_len") or 0),
+                grid_h=int(c.get("grid_h") or 0),
+                grid_w=int(c.get("grid_w") or 0),
+                dit_stream_offload=bool(c.get("dit_stream_offload", False)),
+            )
+            msg = f"step {c.get('step', step)} >{STEP_SLOW_WARN_SEC:.0f}s: {reason}"
+            log(f"WARNING: {msg}")
+            print(f"CAPTIOER_WARN message={msg}", flush=True)
+
+        t = threading.Timer(STEP_SLOW_WARN_SEC, _fire)
+        t.daemon = True
+        self._timer = t
+        t.start()
+
+    def update(self, **ctx) -> None:
+        with self._lock:
+            self._ctx.update(ctx)
+
+    def cancel(self) -> None:
+        t = self._timer
+        self._timer = None
+        if t is not None:
+            try:
+                t.cancel()
+            except Exception:
+                pass
 
 
 def estimate_module_bytes(mod) -> int:
@@ -1398,6 +1606,8 @@ def run_midtrain_samples(
         log("sample: no prompts configured; skipping")
         return []
 
+    check_memory_pressure("sample_enter")
+
     sample_dir = out_dir / "samples"
     sample_dir.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
@@ -1467,6 +1677,7 @@ def run_midtrain_samples(
         flush()
 
         for i, item in enumerate(prompts):
+            check_memory_pressure(f"sample_{i + 1}_before_encode")
             prompt = item["prompt"]
             if trigger and trigger not in prompt:
                 prompt = f"{trigger}, {prompt}".strip(", ").strip()
@@ -1508,6 +1719,7 @@ def run_midtrain_samples(
             log(f"  encode done ({_time.perf_counter() - step_t0:.1f}s) {vram_log('after_encode')}")
 
             # ---- Stage B: denoise ----
+            check_memory_pressure(f"sample_{i + 1}_before_denoise")
             log("  stage denoise: DiT...")
             if not stream_offload:
                 train_transformer.to(device)
@@ -2075,6 +2287,8 @@ def main() -> int:
                 vae.enable_tiling()
             with torch.no_grad():
                 for i, (path, _cap) in enumerate(samples):
+                    if i % 10 == 0:
+                        check_memory_pressure(f"latent_cache_{i + 1}")
                     tw, th = ar_assign[i]
                     try:
                         mtime = path.stat().st_mtime_ns
@@ -2130,6 +2344,8 @@ def main() -> int:
             unique_caps = sorted({cap for _p, cap in samples} | {""})
             with torch.no_grad():
                 for i, cap in enumerate(unique_caps):
+                    if i % 10 == 0:
+                        check_memory_pressure(f"text_cache_{i + 1}")
                     # Disk hit path inside ensure_text_cached; miss encodes with TE already on GPU
                     # via nested run_with - avoid double-move by encoding inline here.
                     key = cache_key(cap, "txt_v1")
@@ -2175,6 +2391,7 @@ def main() -> int:
     # Phase C: PEFT adapter + optional WOQ
     # ------------------------------------------------------------------
     log(f"Preparing transformer + {network_type}...")
+    check_memory_pressure("pre_prepare_transformer", check_ram=False)
 
     target_modules = [
         "to_q",
@@ -2222,6 +2439,7 @@ def main() -> int:
     dit_est_before_quant = estimate_module_bytes(transformer)
     n_q = 0
     if use_quant and device.type == "cuda":
+        check_memory_pressure("pre_quantize_te", check_ram=False)
         te_before, te_after, te_n_q, te_changed = apply_weight_only_quantization(
             text_encoder,
             device=device,
@@ -2229,6 +2447,7 @@ def main() -> int:
             label="text_encoder",
             skip_adapter_names=True,
         )
+        check_memory_pressure("pre_quantize_dit", check_ram=False)
         dit_est_before_quant, dit_est_after, n_q, dit_changed = apply_weight_only_quantization(
             transformer,
             device=device,
@@ -2294,10 +2513,12 @@ def main() -> int:
         dit_est = dit_est_adj
 
     log(vram_log("pre_dit_to_gpu"))
+    log(ram_log("pre_dit_to_gpu"))
     log(
         f"VRAM budget: DiT estimate={dit_est / 1e9:.2f}GB "
         f"(quantize={active_quant_mode} layers={n_q}; TE layers={te_n_q})"
     )
+    check_memory_pressure("pre_dit_to_gpu", check_ram=False)
     if device.type == "cuda":
         free_pre = vram_free_bytes() or 0
         if free_pre < dit_est:
@@ -2390,11 +2611,10 @@ def main() -> int:
             try:
                 transformer.to(device)
             except torch.cuda.OutOfMemoryError as e2:
-                log(
-                    f"ERROR: CUDA OOM moving DiT to GPU ({e2}). "
-                    f"{vram_log('oom')}"
+                return abort_oom(
+                    f"CUDA OOM moving DiT to GPU ({e2})",
+                    tag="oom",
                 )
-                return 6
             dit_stream_offload = False
             offload_info = {
                 "mode": "resident_fallback",
@@ -2405,12 +2625,12 @@ def main() -> int:
         try:
             transformer.to(device)
         except torch.cuda.OutOfMemoryError as e:
-            log(
-                f"ERROR: CUDA OOM moving DiT to GPU ({e}). "
-                f"Enable Quantize and/or Layer offload; estimate was {dit_est / 1e9:.2f}GB, "
-                f"{vram_log('oom')}"
+            return abort_oom(
+                f"CUDA OOM moving DiT to GPU ({e}). "
+                f"Enable Quantize and/or Layer offload; "
+                f"estimate was {dit_est / 1e9:.2f}GB",
+                tag="oom",
             )
-            return 6
 
     transformer.train()
     flush()
@@ -2479,6 +2699,10 @@ def main() -> int:
             f"({n_train} trainable params; stream_offload={dit_stream_offload})"
         )
         log(vram_log("post_dit_place"))
+        log(ram_log("post_dit_place"))
+        # Host RAM should reclaim after DiT residency; abort only if still critical.
+        flush()
+        check_memory_pressure("post_dit_place")
         log(
             f"VRAM budget: VAE~={vae_est / 1e9:.2f}GB TE~={te_est / 1e9:.2f}GB "
             f"margin={VRAM_SAFETY_MARGIN_BYTES / 1e9:.1f}GB"
@@ -2756,6 +2980,8 @@ def main() -> int:
                 stream_offload=dit_stream_offload,
             )
             log(f"sample complete at step {at_step}: {len(saved)} image(s)")
+        except MemoryPressureError:
+            raise
         except Exception as e:
             log(f"WARNING: sampling failed at step {at_step}: {e}")
             import traceback
@@ -2787,6 +3013,7 @@ def main() -> int:
 
     log("Training loop...")
     step_t0 = _time.perf_counter()
+    slow_watch = StepSlowWatchdog()
     if dit_stream_offload:
         log(
             f"Note: layer offload active (block_swap percent={offload_info.get('percent')}); "
@@ -2798,6 +3025,15 @@ def main() -> int:
             flush()
 
         try:
+            slow_watch.begin(
+                global_step + 1,
+                grad_ckpt=bool(grad_ckpt),
+                seq_len=0,
+                grid_h=0,
+                grid_w=0,
+                dit_stream_offload=bool(dit_stream_offload),
+            )
+            check_memory_pressure(f"train_step_{global_step + 1}")
             (
                 latents,
                 prompt_embeds,
@@ -2848,6 +3084,12 @@ def main() -> int:
 
             if device.type == "cuda" and global_step == 0:
                 torch.cuda.reset_peak_memory_stats()
+
+            slow_watch.update(
+                seq_len=int(noisy.shape[1]),
+                grid_h=int(grid_h),
+                grid_w=int(grid_w),
+            )
 
             pred = transformer(
                 hidden_states=noisy,
@@ -2934,6 +3176,9 @@ def main() -> int:
             if save_every > 0 and global_step % save_every == 0:
                 save_adapter(global_step)
 
+            # Stop step timer before mid-train sampling (sampling has its own duration).
+            slow_watch.cancel()
+
             should_sample = (
                 not disable_sampling
                 and sample_every > 0
@@ -2943,15 +3188,24 @@ def main() -> int:
             if should_sample:
                 do_sample(global_step)
 
+        except MemoryPressureError as e:
+            return abort_oom(str(e), tag="oom_pressure")
+        except MemoryError as e:
+            return abort_oom(
+                f"system MemoryError during training step {global_step + 1}: {e}",
+                tag="oom_ram",
+            )
         except torch.cuda.OutOfMemoryError as e:
-            log(f"ERROR: CUDA OOM during training step {global_step + 1}: {e}")
-            log(vram_log("oom_step"))
             log(
                 "Hints: ensure Gradient checkpointing is ON (activation memory, not "
                 "Quantize/offload). Try batch_size=1, disable mid-train sampling."
             )
-            flush()
-            return 7
+            return abort_oom(
+                f"CUDA OOM during training step {global_step + 1}: {e}",
+                tag="oom_step",
+            )
+        finally:
+            slow_watch.cancel()
 
     final_path = save_adapter(None)
     done(str(final_path))
@@ -2965,6 +3219,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log("ERROR: interrupted")
         raise SystemExit(130)
+    except MemoryPressureError as e:
+        raise SystemExit(abort_oom(str(e), tag="oom_pressure"))
+    except MemoryError as e:
+        raise SystemExit(abort_oom(f"system MemoryError: {e}", tag="oom_ram"))
     except Exception as e:
         import traceback
 

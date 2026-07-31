@@ -483,8 +483,12 @@ export default function App() {
 
   const setActiveView = (view: ActiveView) => {
     if (settingsRef.current.activeView === view) return
-    if (view === 'datasetEdit' && loraTraining) {
-      setStatus('Cannot switch to DatasetEdit while training')
+    if ((view === 'datasetEdit' || view === 'loraTest') && loraTraining) {
+      setStatus(
+        view === 'loraTest'
+          ? 'Cannot switch to LoRA Tester while training'
+          : 'Cannot switch to DatasetEdit while training'
+      )
       setError(null)
       if (statusClearTimerRef.current) {
         clearTimeout(statusClearTimerRef.current)
@@ -900,6 +904,8 @@ export default function App() {
           : 'Analyzing…'
         : '')
   const toolbarStatusIsError = Boolean(error && !status)
+  const toolbarStatusIsWarn =
+    !toolbarStatusIsError && /^Warning:/i.test((status || error || '').trim())
 
   const persistPaneWidths = useCallback((next: AppSettings) => {
     if (!settingsReadyRef.current) return
@@ -1281,6 +1287,8 @@ export default function App() {
               role="tab"
               className={`view-switch-seg${isLoraTest ? ' active' : ''}`}
               aria-selected={isLoraTest}
+              disabled={loraTraining}
+              title={loraTraining ? 'Unavailable while training' : undefined}
               onClick={() => setActiveView('loraTest')}
             >
               LoRA Tester
@@ -1388,7 +1396,11 @@ export default function App() {
         </div>
         <div className="system-bar-right">
           {toolbarStatus && (
-            <span className={`status-msg${toolbarStatusIsError ? ' is-error' : ''}`}>
+            <span
+              className={`status-msg${
+                toolbarStatusIsError ? ' is-error' : toolbarStatusIsWarn ? ' is-warn' : ''
+              }`}
+            >
               {toolbarStatus}
             </span>
           )}

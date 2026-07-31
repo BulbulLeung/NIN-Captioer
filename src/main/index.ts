@@ -1674,6 +1674,12 @@ app.whenReady().then(async () => {
             if (recentLines.length > 40) recentLines.shift()
             const trainErr = line.match(/^CAPTIOER_TRAIN_ERROR\s+message=(.+)$/)
             if (trainErr) structuredError = trainErr[1].trim()
+            const trainWarn = line.match(/^CAPTIOER_WARN\s+message=(.+)$/)
+            if (trainWarn) {
+              emitTrain('train:warn', { message: trainWarn[1].trim() })
+              // Protocol line is for IPC only; WARNING: log line is enough for the panel.
+              continue
+            }
             emitTrain('train:log', { line, stream })
             const m = line.match(
               /^CAPTIOER_PROGRESS\s+step=(\d+)\s+total=(\d+)\s+loss=([0-9.eE+-]+)/

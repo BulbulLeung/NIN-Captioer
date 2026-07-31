@@ -272,6 +272,11 @@ const api = {
     ipcRenderer.on('train:error', listener)
     return () => ipcRenderer.removeListener('train:error', listener)
   },
+  onTrainWarn: (cb: (payload: { message: string }) => void) => {
+    const listener = (_e: IpcRendererEvent, payload: { message: string }) => cb(payload)
+    ipcRenderer.on('train:warn', listener)
+    return () => ipcRenderer.removeListener('train:warn', listener)
+  },
   checkModelStatus: (opts: {
     pythonPath?: string
     downloadPath?: string
