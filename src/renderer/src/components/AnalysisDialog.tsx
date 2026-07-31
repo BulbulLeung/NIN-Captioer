@@ -157,12 +157,17 @@ export function AnalysisDialog({
   if (!open) return null
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div
         className="modal modal-wide modal-analysis"
         role="dialog"
         aria-labelledby="analysis-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="analysis-header">
           <h2 id="analysis-title">Caption Analysis</h2>

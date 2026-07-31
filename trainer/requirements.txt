@@ -1,0 +1,31 @@
+# Captioer Krea 2 LoRA trainer
+# Install CUDA torch first from https://pytorch.org, then:
+#   pip install -r requirements.txt
+#
+# Captioer Settings → Download installs:
+#   torch==2.9.1 + torchvision==0.24.1 from cu128 index
+#   torchao matched to torch (0.15.0 for 2.9.1)
+#   Windows: triton-windows + flash-attn 2.8.3 (PozzettiAndrea wheel)
+#
+# Krea2Pipeline needs a recent diffusers (install from git if hub package is too old):
+#   pip install "git+https://github.com/huggingface/diffusers.git"
+
+torch>=2.9.0
+diffusers>=0.35.0
+transformers>=4.46.0
+accelerate>=0.33.0
+peft>=0.13.0
+safetensors>=0.4.0
+huggingface_hub>=0.25.0
+Pillow>=10.0.0
+sentencepiece>=0.2.0
+protobuf>=4.0.0
+bitsandbytes>=0.43.0; platform_system=="Linux" or platform_system=="Windows"
+# Matched to torch 2.9.1 cpp ops. Captioer installer re-pins via torchaoSpecForTorch().
+torchao==0.15.0
+prodigyopt>=1.0
+setuptools>=69.0.0
+# Windows: Captioer Settings → Download also installs:
+#   triton-windows (for torchao)
+#   flash-attn 2.8.3 Windows wheel (PozzettiAndrea/cuda-wheels)
+#   pip install "triton-windows>=3.5,<3.6"  # for torch 2.9

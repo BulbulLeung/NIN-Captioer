@@ -2,14 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 
 interface Props {
   open: boolean
-  folderName: string
+  jobName: string
+  checkpointStep: number | null
   onConfirm: () => void
   onCancel: () => void
 }
 
-type FocusBtn = 'cancel' | 'delete'
+type FocusBtn = 'cancel' | 'restart'
 
-export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCancel }: Props) {
+export function RestartTrainWarningDialog({
+  open,
+  jobName,
+  checkpointStep,
+  onConfirm,
+  onCancel
+}: Props) {
   const [focusBtn, setFocusBtn] = useState<FocusBtn>('cancel')
   const focusRef = useRef<FocusBtn>('cancel')
   focusRef.current = focusBtn
@@ -37,14 +44,14 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
         e.stopPropagation()
-        setFocusBtn((prev) => (prev === 'cancel' ? 'delete' : 'cancel'))
+        setFocusBtn((prev) => (prev === 'cancel' ? 'restart' : 'cancel'))
         return
       }
 
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
         e.stopPropagation()
-        if (focusRef.current === 'delete') onConfirmRef.current()
+        if (focusRef.current === 'restart') onConfirmRef.current()
         else onCancelRef.current()
       }
     }
@@ -65,13 +72,17 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
       <div
         className="modal"
         role="dialog"
-        aria-labelledby="missing-dataset-title"
+        aria-labelledby="restart-train-warning-title"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h2 id="missing-dataset-title">Dataset folder not found</h2>
+        <h2 id="restart-train-warning-title">Overwrite existing checkpoints?</h2>
         <p className="modal-text">
-          The dataset folder &quot;{folderName}&quot; does not exist. Delete this preset from the list?
+          Restarting &quot;{jobName}&quot; will start training again from step 0 and may overwrite
+          checkpoints that already exist in the output folder.
         </p>
+        {checkpointStep !== null ? (
+          <p className="modal-text">Latest detected checkpoint: step {checkpointStep}.</p>
+        ) : null}
         <div className="modal-actions">
           <button
             type="button"
@@ -84,11 +95,11 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
           <div className="spacer" />
           <button
             type="button"
-            className={`danger${focusBtn === 'delete' ? ' kbd-focus' : ''}`}
+            className={`danger${focusBtn === 'restart' ? ' kbd-focus' : ''}`}
             onClick={onConfirm}
-            onMouseEnter={() => setFocusBtn('delete')}
+            onMouseEnter={() => setFocusBtn('restart')}
           >
-            Delete
+            Restart
           </button>
         </div>
       </div>

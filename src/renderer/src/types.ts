@@ -1,6 +1,110 @@
 import { createDefaultCaptionPreset, DEFAULT_CAPTION_PRESET_ID } from './defaults/captionPresets'
+import {
+  CAPTION_FORMAT_OPTIONS,
+  DEFAULT_CAPTION_FORMAT,
+  DEFAULT_WD14_SETTINGS,
+  normalizeCaptionFormat,
+  normalizeWd14Settings,
+  type CaptionFormatId,
+  type CaptionFormatOption,
+  type Wd14Settings
+} from './defaults/captionFormats'
+import {
+  createDefaultLoraTrainJobPreset,
+  createLoraTrainJobId,
+  DEFAULT_LORA_TEST_DRAFT,
+  DEFAULT_LORA_TRAIN_APP,
+  DEFAULT_LORA_TRAIN_JOB,
+  DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
+  KREA2_RAW,
+  normalizeActiveView,
+  normalizeLoraTestDraft,
+  normalizeLoraTrainApp,
+  normalizeLoraTrainJob,
+  normalizeLoraTrainJobPresets,
+  modelDownloadPathFromDownloadFolder,
+  pythonInstallPathFromDownloadFolder,
+  type ActiveView,
+  type LoraTestDraft,
+  type LoraTestPromptEntry,
+  type LoraTrainAppSettings,
+  type LoraTrainJobConfig,
+  type LoraTrainJobPreset
+} from './defaults/loraTrain'
+
+export type {
+  ActiveView,
+  CaptionFormatId,
+  CaptionFormatOption,
+  LoraTestDraft,
+  LoraTestPromptEntry,
+  LoraTrainAppSettings,
+  LoraTrainJobConfig,
+  LoraTrainJobPreset,
+  Wd14Settings
+}
+export {
+  CAPTION_FORMAT_OPTIONS,
+  DEFAULT_CAPTION_FORMAT,
+  DEFAULT_LORA_TEST_DRAFT,
+  DEFAULT_LORA_TRAIN_APP,
+  DEFAULT_LORA_TRAIN_JOB,
+  DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
+  DEFAULT_WD14_SETTINGS,
+  KREA2_RAW,
+  createDefaultLoraTrainJobPreset,
+  createLoraTrainJobId,
+  modelDownloadPathFromDownloadFolder,
+  normalizeActiveView,
+  normalizeCaptionFormat,
+  normalizeLoraTestDraft,
+  normalizeLoraTrainApp,
+  normalizeLoraTrainJob,
+  normalizeLoraTrainJobPresets,
+  normalizeWd14Settings,
+  pythonInstallPathFromDownloadFolder
+}
 
 export type TranslationProvider = 'lmstudio' | 'ollama'
+
+/** Electron UI GPU preference. Requires restart to apply. */
+export type UiGpuMode = 'auto' | 'onboard' | 'software'
+
+export interface ResourceGpuVramApp {
+  pid: number
+  name: string
+  memUsedMiB: number
+  killable: boolean
+}
+
+export interface ResourceGpuStats {
+  id: string
+  name: string
+  utilPercent: number
+  memUsedMiB: number
+  memTotalMiB: number
+  tempC: number | null
+  powerDrawW: number | null
+  powerLimitW: number | null
+  apps: ResourceGpuVramApp[]
+}
+
+export interface ResourceStats {
+  cpuName: string
+  cpuPercent: number
+  ramUsedBytes: number
+  ramTotalBytes: number
+  gpu: ResourceGpuStats | null
+}
+
+export interface TrainSampleItem {
+  path: string
+  name: string
+  mtimeMs: number
+  step?: number
+  /** 1-based prompt group from filename (`_N` suffix; missing → 1). */
+  promptIndex: number
+}
 
 export interface CaptionPreset {
   id: string
@@ -20,12 +124,29 @@ export interface AppSettings {
   datasetFolders: string[]
   captionPresets: CaptionPreset[]
   activeCaptionPresetId: string
+  /** When true, append PNG Info positive prompt to the Natural Auto Caption prompt at runtime. */
+  appendPositivePrompt: boolean
+  /** Auto Caption / reCaption output format (Natural VLM vs WD14 ONNX tags). */
+  captionFormat: CaptionFormatId
+  wd14: Wd14Settings
   sidebarWidth: number
   rightPaneWidth: number
   /** When true, analyze captions in the background; when false, only while Analyze dialog is open. */
   autoAnalysis: boolean
   listViewMode: ListViewMode
   thumbnailWidth: number
+  /** DatasetEdit: show AR bucket crop overlay on image preview. */
+  bucketPreview: boolean
+  activeView: ActiveView
+  loraTrainJobs: LoraTrainJobPreset[]
+  activeLoraTrainJobId: string
+  loraTrainApp: LoraTrainAppSettings
+  loraTestDraft: LoraTestDraft
+  /**
+   * Electron UI GPU preference. Requires restart.
+   * auto = OS/driver; onboard = integrated GPU; software = CPU/RAM (no VRAM).
+   */
+  uiGpuMode: UiGpuMode
 }
 
 export interface ImageItem {
@@ -64,11 +185,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
   datasetFolders: [],
   captionPresets: [defaultPreset],
   activeCaptionPresetId: DEFAULT_CAPTION_PRESET_ID,
+  appendPositivePrompt: true,
+  captionFormat: DEFAULT_CAPTION_FORMAT,
+  wd14: { ...DEFAULT_WD14_SETTINGS },
   sidebarWidth: 260,
   rightPaneWidth: 380,
   autoAnalysis: true,
   listViewMode: 'list',
-  thumbnailWidth: 96
+  thumbnailWidth: 96,
+  bucketPreview: true,
+  activeView: 'datasetEdit',
+  loraTrainJobs: [createDefaultLoraTrainJobPreset()],
+  activeLoraTrainJobId: DEFAULT_LORA_TRAIN_JOB_PRESET_ID,
+  loraTrainApp: { ...DEFAULT_LORA_TRAIN_APP },
+  loraTestDraft: { ...DEFAULT_LORA_TEST_DRAFT },
+  uiGpuMode: 'auto'
 }
 
 const SIDEBAR_MIN = 160
@@ -99,6 +230,14 @@ export function normalizeListViewMode(value: unknown): ListViewMode {
   return value === 'thumbnails' ? 'thumbnails' : 'list'
 }
 
+export function normalizeUiGpuMode(raw: Record<string, unknown> | null | undefined): UiGpuMode {
+  const mode = raw?.uiGpuMode
+  if (mode === 'auto' || mode === 'onboard' || mode === 'software') return mode
+  // Legacy boolean from earlier builds
+  if (raw?.disableUiGpu === true) return 'software'
+  return 'auto'
+}
+
 function normalizeDatasetFolders(raw: unknown, lastFolder: string | null): string[] {
   const seen = new Set<string>()
   const folders: string[] = []
@@ -118,6 +257,7 @@ function normalizeDatasetFolders(raw: unknown, lastFolder: string | null): strin
 
 export function normalizeSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
   const merged = { ...DEFAULT_SETTINGS, ...raw }
+  const rawRecord = (raw ?? {}) as Record<string, unknown>
   let presets = Array.isArray(merged.captionPresets) ? merged.captionPresets.filter(Boolean) : []
   if (presets.length === 0) {
     presets = [createDefaultCaptionPreset()]
@@ -134,10 +274,41 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
   if (lastFolder && !datasetFolders.includes(lastFolder) && datasetFolders.length > 0) {
     lastFolder = datasetFolders[0]
   }
+  const { jobs: loraTrainJobs, activeId: activeLoraTrainJobId } = normalizeLoraTrainJobPresets(
+    rawRecord.loraTrainJobs ?? merged.loraTrainJobs,
+    rawRecord.loraTrainJob,
+    rawRecord.activeLoraTrainJobId ?? merged.activeLoraTrainJobId
+  )
+  const activeJobIndex = Math.max(
+    0,
+    loraTrainJobs.findIndex((j) => j.id === activeLoraTrainJobId)
+  )
+  const activePreset = loraTrainJobs[activeJobIndex]
+  // Seed dataset folder from DatasetEdit lastFolder when empty
+  if (!activePreset.job.datasets[0]?.folder_path && lastFolder) {
+    loraTrainJobs[activeJobIndex] = {
+      ...activePreset,
+      job: {
+        ...activePreset.job,
+        datasets: activePreset.job.datasets.map((ds, i) =>
+          i === 0 ? { ...ds, folder_path: lastFolder } : ds
+        )
+      }
+    }
+  }
+  const loraTrainAppRaw =
+    merged.loraTrainApp && typeof merged.loraTrainApp === 'object'
+      ? (merged.loraTrainApp as unknown as Record<string, unknown>)
+      : {}
+  const legacyComfyUiBatPath =
+    typeof loraTrainAppRaw.comfyUiBatPath === 'string' ? loraTrainAppRaw.comfyUiBatPath : ''
   return {
     ...merged,
     captionPresets: presets,
     activeCaptionPresetId: activeId,
+    appendPositivePrompt: merged.appendPositivePrompt !== false,
+    captionFormat: normalizeCaptionFormat(merged.captionFormat),
+    wd14: normalizeWd14Settings(merged.wd14),
     model: merged.model ?? '',
     lastFolder,
     datasetFolders,
@@ -145,7 +316,17 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
     rightPaneWidth: clampRightPaneWidth(merged.rightPaneWidth ?? DEFAULT_SETTINGS.rightPaneWidth),
     autoAnalysis: merged.autoAnalysis !== false,
     listViewMode: normalizeListViewMode(merged.listViewMode),
-    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth)
+    thumbnailWidth: clampThumbnailWidth(merged.thumbnailWidth ?? DEFAULT_SETTINGS.thumbnailWidth),
+    bucketPreview: merged.bucketPreview !== false,
+    activeView: normalizeActiveView(merged.activeView),
+    loraTrainJobs,
+    activeLoraTrainJobId,
+    loraTrainApp: normalizeLoraTrainApp(merged.loraTrainApp),
+    loraTestDraft: normalizeLoraTestDraft(
+      (rawRecord.loraTestDraft as Partial<LoraTestDraft> | undefined) ?? merged.loraTestDraft,
+      legacyComfyUiBatPath
+    ),
+    uiGpuMode: normalizeUiGpuMode(rawRecord)
   }
 }
 
@@ -153,7 +334,25 @@ declare global {
   interface Window {
     api: {
       openFolder: () => Promise<string | null>
+      openFile: (opts?: {
+        title?: string
+        filters?: { name: string; extensions: string[] }[]
+      }) => Promise<string | null>
+      openPathInExplorer: (
+        targetPath: string
+      ) => Promise<{ ok: boolean; error?: string; path?: string }>
       listImages: (dir: string) => Promise<ImageItem[]>
+      scanArBuckets: (opts: {
+        folder: string
+        resolutions: number[]
+        pythonPath?: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        imageCount?: number
+        forcedUpscale?: number
+        countsOrdered?: { bucket: string; count: number }[]
+      }>
       readCaption: (imagePath: string) => Promise<string>
       writeCaption: (imagePath: string, text: string) => Promise<boolean>
       deleteImage: (imagePath: string) => Promise<{ ok: boolean }>
@@ -161,6 +360,189 @@ declare global {
       readImageBase64: (imagePath: string) => Promise<{ mimeType: string; base64: string }>
       getSettings: () => Promise<AppSettings>
       setSettings: (settings: AppSettings) => Promise<boolean>
+      relaunchApp: () => Promise<boolean>
+      listGpuDevices: () => Promise<{ id: string; label: string }[]>
+      getResourceStats: (deviceId?: string) => Promise<ResourceStats>
+      killProcess: (pid: number) => Promise<{ ok: boolean; error?: string }>
+      defaultDownloadFolder: () => Promise<string>
+      probePython: (pythonPath?: string) => Promise<{
+        status: 'ready' | 'missingPython' | 'missingPackages' | 'error'
+        message: string
+        pythonPath?: string
+        version?: string
+        cuda?: boolean
+        krea?: boolean
+        missing?: string[]
+      }>
+      installPython: (opts?: {
+        installPath?: string
+      }) => Promise<{ ok: boolean; pythonPath?: string; message: string }>
+      cancelPythonInstall: () => Promise<{ ok: boolean }>
+      onPythonInstallProgress: (
+        cb: (payload: { stage: string; message: string; pct: number }) => void
+      ) => () => void
+      probeComfyBat: (
+        batPath?: string
+      ) => Promise<{ ok: boolean; message: string; installRoot?: string }>
+      installComfyUi: (opts?: {
+        downloadFolder?: string
+        pythonPath?: string
+      }) => Promise<{ ok: boolean; batPath?: string; message: string; installRoot?: string }>
+      cancelComfyInstall: () => Promise<{ ok: boolean }>
+      onComfyInstallProgress: (
+        cb: (payload: { stage: string; message: string; pct: number }) => void
+      ) => () => void
+      startComfyUi: (opts: {
+        batPath: string
+        pythonPath?: string
+        modelsRoot?: string
+        loraFolders?: string[]
+        ditFolders?: string[]
+        vaeFolders?: string[]
+        clipFolders?: string[]
+      }) => Promise<{ ok: boolean; error?: string; alreadyRunning?: boolean }>
+      stopComfyUi: () => Promise<{ ok: boolean }>
+      comfyStatus: () => Promise<{
+        running: boolean
+        pid?: number
+        online: boolean
+        installRoot?: string
+        outputDir?: string
+      }>
+      comfyHttpRequest: (opts: {
+        url: string
+        method?: string
+        headers?: Record<string, string>
+        body?: string
+        timeoutMs?: number
+      }) => Promise<{ ok: boolean; status: number; text: string; error?: string }>
+      comfyResolveImagePath: (img: {
+        filename: string
+        subfolder?: string
+        type?: string
+      }) => Promise<{ ok: boolean; path?: string; error?: string }>
+      comfyGetOutputDir: () => Promise<{ ok: boolean; path: string }>
+      onComfyLog: (
+        cb: (payload: { line: string; stream: string }) => void
+      ) => () => void
+      loraTestSaveGeneratedImage: (opts: {
+        sourcePath: string
+        trainingFolder: string
+        jobName: string
+        fileName?: string
+      }) => Promise<{ ok: boolean; path?: string; dir?: string; error?: string }>
+      loraTestListGallery: (opts: {
+        trainingFolder: string
+        jobName: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        images: { path: string; name: string; mtimeMs: number }[]
+      }>
+      loraTestListDitCheckpoints: (folder: string) => Promise<{
+        ok: boolean
+        error?: string
+        files: { name: string; path: string }[]
+      }>
+      startTrain: (opts: {
+        pythonPath?: string
+        configJson: string
+        device?: string
+      }) => Promise<{ ok: boolean; error?: string; configPath?: string }>
+      stopTrain: () => Promise<{ ok: boolean }>
+      trainStatus: () => Promise<{ running: boolean }>
+      listTrainCheckpoints: (opts: {
+        trainingFolder: string
+        jobName: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        checkpoints: { step: number; path: string }[]
+      }>
+      listTrainSamples: (opts: {
+        trainingFolder: string
+        jobName: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        samples: TrainSampleItem[]
+      }>
+      onTrainLog: (
+        cb: (payload: { line: string; stream: string }) => void
+      ) => () => void
+      onTrainProgress: (
+        cb: (payload: { step: number; total: number; loss: number }) => void
+      ) => () => void
+      onTrainLossSpike: (
+        cb: (payload: { step: number; loss: number; path: string }) => void
+      ) => () => void
+      onTrainDone: (cb: (payload: { path: string }) => void) => () => void
+      onTrainError: (cb: (payload: { message: string }) => void) => () => void
+      onTrainWarn: (cb: (payload: { message: string }) => void) => () => void
+      checkModelStatus: (opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        targets: { role: string; path: string }[]
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        results: {
+          role: string
+          path: string
+          repoId: string | null
+          status: 'missing' | 'ready' | 'updateAvailable' | 'local' | 'error'
+          localPath?: string | null
+          localRevision?: string | null
+          remoteRevision?: string | null
+          message?: string | null
+        }[]
+        downloadPath?: string
+      }>
+      downloadModel: (opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        repoId: string
+        fileName?: string
+      }) => Promise<{ ok: boolean; error?: string; downloadPath?: string }>
+      cancelModelDownload: () => Promise<{ ok: boolean }>
+      onModelDownloadProgress: (
+        cb: (payload: {
+          repoId: string
+          pct: number
+          done?: number
+          total?: number
+        }) => void
+      ) => () => void
+      onModelDownloadDone: (
+        cb: (payload: { repoId: string; path: string; revision: string; filePath?: string }) => void
+      ) => () => void
+      onModelDownloadError: (
+        cb: (payload: { message: string; repoId: string }) => void
+      ) => () => void
+      ensureWd14Model: (opts: {
+        pythonPath?: string
+        downloadPath?: string
+        token?: string
+        repoId: string
+      }) => Promise<{ ok: boolean; error?: string; modelDir?: string }>
+      tagWd14: (opts: {
+        pythonPath?: string
+        modelDir: string
+        threshold: number
+        characterThreshold: number
+        imagePaths: string[]
+        ensure?: boolean
+        downloadPath?: string
+        token?: string
+        repoId?: string
+      }) => Promise<{
+        ok: boolean
+        error?: string
+        results: { path: string; tags?: string; error?: string }[]
+      }>
+      cancelWd14: () => Promise<{ ok: boolean }>
       toLocalUrl: (filePath: string) => string
     }
   }

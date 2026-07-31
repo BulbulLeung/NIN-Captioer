@@ -56,12 +56,17 @@ export function RemoveDatasetFolderDialog({ open, folderName, onConfirm, onCance
   if (!open) return null
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
       <div
         className="modal"
         role="dialog"
         aria-labelledby="remove-dataset-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="remove-dataset-title">Remove dataset folder</h2>
         <p className="modal-text">

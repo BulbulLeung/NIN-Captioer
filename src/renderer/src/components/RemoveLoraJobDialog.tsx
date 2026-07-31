@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 
 interface Props {
   open: boolean
-  folderName: string
+  jobName: string
   onConfirm: () => void
   onCancel: () => void
 }
 
-type FocusBtn = 'cancel' | 'delete'
+type FocusBtn = 'cancel' | 'remove'
 
-export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCancel }: Props) {
+export function RemoveLoraJobDialog({ open, jobName, onConfirm, onCancel }: Props) {
   const [focusBtn, setFocusBtn] = useState<FocusBtn>('cancel')
   const focusRef = useRef<FocusBtn>('cancel')
   focusRef.current = focusBtn
@@ -37,14 +37,14 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
         e.stopPropagation()
-        setFocusBtn((prev) => (prev === 'cancel' ? 'delete' : 'cancel'))
+        setFocusBtn((prev) => (prev === 'cancel' ? 'remove' : 'cancel'))
         return
       }
 
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
         e.stopPropagation()
-        if (focusRef.current === 'delete') onConfirmRef.current()
+        if (focusRef.current === 'remove') onConfirmRef.current()
         else onCancelRef.current()
       }
     }
@@ -65,12 +65,12 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
       <div
         className="modal"
         role="dialog"
-        aria-labelledby="missing-dataset-title"
+        aria-labelledby="remove-lora-job-title"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h2 id="missing-dataset-title">Dataset folder not found</h2>
+        <h2 id="remove-lora-job-title">Remove job preset</h2>
         <p className="modal-text">
-          The dataset folder &quot;{folderName}&quot; does not exist. Delete this preset from the list?
+          Remove &quot;{jobName}&quot; from the job list? Training files on disk will not be deleted.
         </p>
         <div className="modal-actions">
           <button
@@ -84,11 +84,11 @@ export function MissingDatasetFolderDialog({ open, folderName, onConfirm, onCanc
           <div className="spacer" />
           <button
             type="button"
-            className={`danger${focusBtn === 'delete' ? ' kbd-focus' : ''}`}
+            className={`danger${focusBtn === 'remove' ? ' kbd-focus' : ''}`}
             onClick={onConfirm}
-            onMouseEnter={() => setFocusBtn('delete')}
+            onMouseEnter={() => setFocusBtn('remove')}
           >
-            Delete
+            Remove
           </button>
         </div>
       </div>

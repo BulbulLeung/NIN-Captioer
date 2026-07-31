@@ -1,21 +1,33 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnalysisDialog } from './components/AnalysisDialog'
-import { CaptionEditor } from './components/CaptionEditor'
+import { DatasetEditView } from './components/DatasetEditView'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
-import { ImageList } from './components/ImageList'
-import { ImagePreview } from './components/ImagePreview'
+import { LoraTrainView } from './components/LoraTrainView'
+import { LoraTestView } from './components/LoraTestView'
 import { MissingDatasetFolderDialog } from './components/MissingDatasetFolderDialog'
 import { RemoveDatasetFolderDialog } from './components/RemoveDatasetFolderDialog'
+import { RemoveLoraJobDialog } from './components/RemoveLoraJobDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { UnsavedDialog } from './components/UnsavedDialog'
 import { useBidirectionalTranslate } from './hooks/useBidirectionalTranslate'
 import { useCaptionAnalysis } from './hooks/useCaptionAnalysis'
-import { generateCaptionForImage } from './services/captioning'
-import type { AppSettings, ImageItem, ListViewMode } from './types'
+import { generateCaptionByFormat, generateWd14TagsForImages } from './services/captioning'
+import type {
+  ActiveView,
+  AppSettings,
+  CaptionFormatId,
+  ImageItem,
+  ListViewMode,
+  LoraTestDraft,
+  LoraTrainJobConfig
+} from './types'
 import {
+  CAPTION_FORMAT_OPTIONS,
   clampRightPaneWidth,
   clampSidebarWidth,
   clampThumbnailWidth,
+  createDefaultLoraTrainJobPreset,
+  createLoraTrainJobId,
   normalizeSettings
 } from './types'
 
@@ -26,15 +38,17 @@ function folderLabel(dir: string): string {
 }
 
 function getThumbnailColumns(): number {
-  const items = document.querySelectorAll('.image-list.thumbnails > li')
-  if (items.length === 0) return 1
-  const firstTop = (items[0] as HTMLElement).offsetTop
-  let cols = 0
-  for (const el of items) {
-    if ((el as HTMLElement).offsetTop !== firstTop) break
-    cols++
-  }
-  return Math.max(1, cols)
+  const list = document.querySelector('.sidebar-list .image-list.thumbnails') as HTMLElement | null
+  if (!list) return 1
+  const cs = getComputedStyle(list)
+  const thumbW = parseFloat(cs.getPropertyValue('--thumb-w')) || 96
+  const gap = parseFloat(cs.columnGap || cs.gap) || 0
+  const padL = parseFloat(cs.paddingLeft) || 0
+  const padR = parseFloat(cs.paddingRight) || 0
+  const inner = list.clientWidth - padL - padR
+  if (inner <= 0 || thumbW <= 0) return 1
+  // Matches CSS: repeat(auto-fill, minmax(var(--thumb-w), 1fr))
+  return Math.max(1, Math.floor((inner + gap) / (thumbW + gap)))
 }
 
 export default function App() {
@@ -45,14 +59,18 @@ export default function App() {
   const [savedEnglish, setSavedEnglish] = useState('')
   const [translated, setTranslated] = useState('')
   const [settings, setSettings] = useState<AppSettings>(() => normalizeSettings(null))
+  const [settingsReady, setSettingsReady] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [unsavedOpen, setUnsavedOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [removeDatasetOpen, setRemoveDatasetOpen] = useState(false)
+  const [removeLoraJobOpen, setRemoveLoraJobOpen] = useState(false)
   const [missingDatasetOpen, setMissingDatasetOpen] = useState(false)
   const [missingDatasetPath, setMissingDatasetPath] = useState<string | null>(null)
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false)
+  const [jobMenuOpen, setJobMenuOpen] = useState(false)
+  const [loraTraining, setLoraTraining] = useState(false)
   const [status, setStatus] = useState('')
   const [batchCaptioning, setBatchCaptioning] = useState(false)
   const [singleCaptioning, setSingleCaptioning] = useState(false)
@@ -61,9 +79,13 @@ export default function App() {
   const unsavedResolver = useRef<((action: ConfirmAction) => void) | null>(null)
   const captionAbortRef = useRef<AbortController | null>(null)
   const batchCancelRef = useRef(false)
+  const statusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const datasetMenuRef = useRef<HTMLDivElement | null>(null)
+  const jobMenuRef = useRef<HTMLDivElement | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  const settingsReadyRef = useRef(settingsReady)
+  settingsReadyRef.current = settingsReady
   const selectedPathRef = useRef(selectedPath)
   selectedPathRef.current = selectedPath
 
@@ -103,7 +125,7 @@ export default function App() {
       setEnglishSnapshot(value)
     },
     setTranslated,
-    enabled: Boolean(selectedPath)
+    enabled: settings.activeView === 'datasetEdit' && Boolean(selectedPath)
   })
 
   const busyPaths = useMemo(() => {
@@ -114,7 +136,8 @@ export default function App() {
   }, [captioningPath, translating, translatingPath])
 
   const aiBusy = captionBusy || translating
-  const analysisEnabled = settings.autoAnalysis || analysisOpen
+  const analysisEnabled =
+    (settings.autoAnalysis || analysisOpen) && settings.activeView === 'datasetEdit'
   const {
     result: analysisResult,
     analyzing: analysisAnalyzing,
@@ -135,7 +158,9 @@ export default function App() {
         setSavedEnglish(caption)
         setEnglishSnapshot(caption)
         setTranslated('')
-        if (caption.trim()) translateEnglishToTargetNow(caption, imagePath)
+        if (caption.trim() && settingsRef.current.activeView === 'datasetEdit') {
+          translateEnglishToTargetNow(caption, imagePath)
+        }
       }
     },
     [invalidateAnalysis, setEnglishSnapshot, translateEnglishToTargetNow]
@@ -152,7 +177,7 @@ export default function App() {
       setTranslated('')
       setEnglishSnapshot(caption)
       setError(null)
-      if (caption.trim()) {
+      if (caption.trim() && settingsRef.current.activeView === 'datasetEdit') {
         translateEnglishToTargetNow(caption, imagePath)
       }
     },
@@ -175,6 +200,7 @@ export default function App() {
         }
         setStatus('')
         if (persist) {
+          if (!settingsReadyRef.current) return true
           setSettings((prev) => {
             const folders = prev.datasetFolders.includes(dir)
               ? prev.datasetFolders
@@ -184,6 +210,7 @@ export default function App() {
               lastFolder: dir,
               datasetFolders: folders
             })
+            settingsRef.current = next
             void window.api.setSettings(next)
             return next
           })
@@ -200,13 +227,29 @@ export default function App() {
   useEffect(() => {
     void window.api.getSettings().then(async (s) => {
       const next = normalizeSettings(s)
+      settingsRef.current = next
       setSettings(next)
+      setSettingsReady(true)
+      // LoraTrain / LoraTest startup: skip folder load / Local AI (translation, analysis).
+      if (next.activeView === 'loraTrain' || next.activeView === 'loraTest') return
       if (next.lastFolder) {
         await loadFolder(next.lastFolder, false)
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, [])
+
+  const prevActiveViewRef = useRef(settings.activeView)
+  useEffect(() => {
+    const prev = prevActiveViewRef.current
+    prevActiveViewRef.current = settings.activeView
+    if (prev === settings.activeView) return
+    if (settings.activeView !== 'datasetEdit') return
+    // Resume translation after leaving LoraTrain (folder already loaded).
+    if (folder && selectedPath && english.trim()) {
+      translateEnglishToTargetNow(english, selectedPath)
+    }
+  }, [settings.activeView, folder, selectedPath, english, translateEnglishToTargetNow])
 
   useEffect(() => {
     setEnglishSnapshot(english)
@@ -230,6 +273,25 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [datasetMenuOpen])
+
+  useEffect(() => {
+    if (!jobMenuOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      const root = jobMenuRef.current
+      if (!root) return
+      if (e.target instanceof Node && root.contains(e.target)) return
+      setJobMenuOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setJobMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [jobMenuOpen])
 
   const askUnsaved = useCallback((): Promise<ConfirmAction> => {
     return new Promise((resolve) => {
@@ -310,6 +372,7 @@ export default function App() {
         datasetFolders: remaining,
         lastFolder: prev.lastFolder === removing ? (remaining[0] ?? null) : prev.lastFolder
       })
+      settingsRef.current = next
       void window.api.setSettings(next)
       return next
     })
@@ -340,6 +403,7 @@ export default function App() {
         datasetFolders: remaining,
         lastFolder: nextFolder
       })
+      settingsRef.current = next
       void window.api.setSettings(next)
       return next
     })
@@ -370,27 +434,216 @@ export default function App() {
   }
 
   const onLanguageChange = async (code: string) => {
-    const next = normalizeSettings({ ...settings, targetLanguage: code })
+    if (!settingsReadyRef.current) return
+    const next = normalizeSettings({ ...settingsRef.current, targetLanguage: code })
+    settingsRef.current = next
     setSettings(next)
     await window.api.setSettings(next)
   }
 
   const onSaveSettings = async (next: AppSettings) => {
+    if (!settingsReadyRef.current) return
     const normalized = normalizeSettings(next)
+    settingsRef.current = normalized
     await window.api.setSettings(normalized)
     setSettings(normalized)
   }
 
   const onAutoSaveSettings = useCallback(async (next: AppSettings) => {
+    if (!settingsReadyRef.current) return
     const normalized = normalizeSettings(next)
+    settingsRef.current = normalized
     setSettings(normalized)
     await window.api.setSettings(normalized)
+  }, [])
+
+  const persistSettingsPatch = useCallback((patch: Partial<AppSettings>) => {
+    // Never write defaults before disk settings have been loaded (wipes user config).
+    if (!settingsReadyRef.current) return
+    const next = normalizeSettings({ ...settingsRef.current, ...patch })
+    settingsRef.current = next
+    setSettings(next)
+    void window.api.setSettings(next)
   }, [])
 
   const stopBatchCaption = () => {
     batchCancelRef.current = true
     captionAbortRef.current?.abort()
     captionAbortRef.current = null
+    void window.api.cancelWd14()
+  }
+
+  const stopAllLocalAi = useCallback(() => {
+    stopBatchCaption()
+    cancelInFlight()
+    setBatchCaptioning(false)
+    setSingleCaptioning(false)
+    setCaptioningPath(null)
+  }, [cancelInFlight])
+
+  const setActiveView = (view: ActiveView) => {
+    if (settingsRef.current.activeView === view) return
+    if ((view === 'datasetEdit' || view === 'loraTest') && loraTraining) {
+      setStatus(
+        view === 'loraTest'
+          ? 'Cannot switch to LoRA Tester while training'
+          : 'Cannot switch to DatasetEdit while training'
+      )
+      setError(null)
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current)
+        statusClearTimerRef.current = null
+      }
+      statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
+      return
+    }
+    if (view === 'loraTrain' || view === 'loraTest') {
+      stopAllLocalAi()
+      setStatus('Local AI stopped')
+      setError(null)
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current)
+        statusClearTimerRef.current = null
+      }
+      statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
+    }
+    persistSettingsPatch({ activeView: view })
+    if (view === 'datasetEdit') {
+      const last = settingsRef.current.lastFolder
+      if (last && !folder) {
+        void loadFolder(last, false)
+      }
+    }
+  }
+
+  const onLoraJobChange = useCallback(
+    (job: LoraTrainJobConfig) => {
+      const id = settingsRef.current.activeLoraTrainJobId
+      const jobs = settingsRef.current.loraTrainJobs.map((p) =>
+        p.id === id ? { ...p, job } : p
+      )
+      persistSettingsPatch({ loraTrainJobs: jobs })
+    },
+    [persistSettingsPatch]
+  )
+
+  const activeLoraJob =
+    settings.loraTrainJobs.find((p) => p.id === settings.activeLoraTrainJobId) ??
+    settings.loraTrainJobs[0] ??
+    createDefaultLoraTrainJobPreset()
+
+  const switchLoraJob = (id: string) => {
+    setJobMenuOpen(false)
+    if (!id || id === settingsRef.current.activeLoraTrainJobId || loraTraining) return
+    persistSettingsPatch({ activeLoraTrainJobId: id })
+  }
+
+  const addLoraJob = () => {
+    if (loraTraining) return
+    const current =
+      settingsRef.current.loraTrainJobs.find(
+        (p) => p.id === settingsRef.current.activeLoraTrainJobId
+      ) ?? settingsRef.current.loraTrainJobs[0]
+    if (!current) return
+    const n = settingsRef.current.loraTrainJobs.length + 1
+    const preset = {
+      id: createLoraTrainJobId(),
+      job: {
+        ...structuredClone(current.job),
+        name: `Job ${n}`
+      }
+    }
+    persistSettingsPatch({
+      loraTrainJobs: [...settingsRef.current.loraTrainJobs, preset],
+      activeLoraTrainJobId: preset.id
+    })
+  }
+
+  const requestRemoveLoraJob = () => {
+    if (loraTraining || !activeLoraJob) return
+    setRemoveLoraJobOpen(true)
+  }
+
+  const confirmRemoveLoraJob = () => {
+    setRemoveLoraJobOpen(false)
+    if (loraTraining) return
+    const removing = settingsRef.current.activeLoraTrainJobId
+    const remaining = settingsRef.current.loraTrainJobs.filter((p) => p.id !== removing)
+    if (remaining.length === 0) {
+      const fallback = createDefaultLoraTrainJobPreset()
+      persistSettingsPatch({
+        loraTrainJobs: [fallback],
+        activeLoraTrainJobId: fallback.id
+      })
+      return
+    }
+    persistSettingsPatch({
+      loraTrainJobs: remaining,
+      activeLoraTrainJobId: remaining[0].id
+    })
+  }
+
+  const onLoraTestDraftChange = useCallback(
+    (loraTestDraft: LoraTestDraft) => {
+      persistSettingsPatch({ loraTestDraft })
+    },
+    [persistSettingsPatch]
+  )
+
+  const onLoraStatus = useCallback(
+    (message: string, isError?: boolean, options?: { sticky?: boolean }) => {
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current)
+        statusClearTimerRef.current = null
+      }
+      if (isError) {
+        setError(message)
+        setStatus('')
+        return
+      }
+      setStatus(message)
+      setError(null)
+      if (!options?.sticky) {
+        statusClearTimerRef.current = setTimeout(() => setStatus(''), 4000)
+      }
+    },
+    [setError]
+  )
+
+  const openLoraOutputFolder = async () => {
+    const folder = (activeLoraJob?.job.training_folder || '').trim()
+    const jobName = (activeLoraJob?.job.name || '').trim()
+    if (!folder) {
+      onLoraStatus('Set an Output folder in Basics first', true)
+      return
+    }
+    if (!jobName) {
+      onLoraStatus('Set a Job name in Basics first', true)
+      return
+    }
+    const jobOut = folder.replace(/[/\\]+$/, '') + '/' + jobName
+    const result = await window.api.openPathInExplorer(jobOut)
+    if (!result.ok) {
+      onLoraStatus(result.error || 'Could not open output folder', true)
+    }
+  }
+
+  const openLoraTestOutputFolder = async () => {
+    const folder = (activeLoraJob?.job.training_folder || '').trim()
+    const jobName = (activeLoraJob?.job.name || '').trim()
+    if (!folder) {
+      onLoraStatus('Set an Output folder in Basics first', true)
+      return
+    }
+    if (!jobName) {
+      onLoraStatus('Set a Job name in Basics first', true)
+      return
+    }
+    const loratestOut = folder.replace(/[/\\]+$/, '') + '/' + jobName + '/loratest'
+    const result = await window.api.openPathInExplorer(loratestOut)
+    if (!result.ok) {
+      onLoraStatus(result.error || 'Could not open loratest folder', true)
+    }
   }
 
   const runCaptionForPath = async (imagePath: string): Promise<void> => {
@@ -399,7 +652,7 @@ export default function App() {
     captionAbortRef.current = ac
     setCaptioningPath(imagePath)
     try {
-      const caption = await generateCaptionForImage(settingsRef.current, imagePath, ac.signal)
+      const caption = await generateCaptionByFormat(settingsRef.current, imagePath, ac.signal)
       await applyCaptionToUi(imagePath, caption)
     } finally {
       setCaptioningPath(null)
@@ -421,17 +674,57 @@ export default function App() {
     let failed = 0
 
     try {
-      for (const img of targets) {
-        if (batchCancelRef.current) break
-        setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`)
+      const format = settingsRef.current.captionFormat
+      if (format === 'wd14') {
+        captionAbortRef.current?.abort()
+        const ac = new AbortController()
+        captionAbortRef.current = ac
+        setStatus(`WD14 tagging 0/${targets.length}…`)
         try {
-          await runCaptionForPath(img.path)
-          done += 1
+          const tagMap = await generateWd14TagsForImages(
+            settingsRef.current,
+            targets.map((t) => t.path),
+            ac.signal
+          )
+          for (const img of targets) {
+            if (batchCancelRef.current) break
+            const tags = tagMap.get(img.path)
+            if (!tags) {
+              failed += 1
+              setError(`${img.name}: WD14 returned no tags`)
+              continue
+            }
+            setCaptioningPath(img.path)
+            setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`)
+            try {
+              await applyCaptionToUi(img.path, tags)
+              done += 1
+            } catch (err) {
+              failed += 1
+              setError(`${img.name}: ${err instanceof Error ? err.message : String(err)}`)
+            }
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          if (msg === 'Caption cancelled') break
-          failed += 1
-          setError(`${img.name}: ${msg}`)
+          if (msg !== 'Caption cancelled') {
+            setError(msg)
+          }
+        } finally {
+          setCaptioningPath(null)
+        }
+      } else {
+        for (const img of targets) {
+          if (batchCancelRef.current) break
+          setStatus(`Captioning ${done + 1}/${targets.length}: ${img.name}`)
+          try {
+            await runCaptionForPath(img.path)
+            done += 1
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            if (msg === 'Caption cancelled') break
+            failed += 1
+            setError(`${img.name}: ${msg}`)
+          }
         }
       }
       if (batchCancelRef.current) {
@@ -531,7 +824,8 @@ export default function App() {
 
       if (isCaptionFocused()) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen || missingDatasetOpen) return
+      if (deleteOpen || unsavedOpen || settingsOpen || removeDatasetOpen || removeLoraJobOpen || missingDatasetOpen) return
+      if (settingsRef.current.activeView !== 'datasetEdit') return
 
       // Space/Enter would activate a previously focused control (e.g. list button).
       if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
@@ -594,6 +888,7 @@ export default function App() {
     unsavedOpen,
     settingsOpen,
     removeDatasetOpen,
+    removeLoraJobOpen,
     missingDatasetOpen
   ])
 
@@ -609,16 +904,22 @@ export default function App() {
           : 'Analyzing…'
         : '')
   const toolbarStatusIsError = Boolean(error && !status)
+  const toolbarStatusIsWarn =
+    !toolbarStatusIsError && /^Warning:/i.test((status || error || '').trim())
 
   const persistPaneWidths = useCallback((next: AppSettings) => {
+    if (!settingsReadyRef.current) return
     const normalized = normalizeSettings(next)
+    settingsRef.current = normalized
     setSettings(normalized)
     void window.api.setSettings(normalized)
   }, [])
 
   const persistListView = useCallback(
-    (patch: Partial<Pick<AppSettings, 'listViewMode' | 'thumbnailWidth'>>) => {
+    (patch: Partial<Pick<AppSettings, 'listViewMode' | 'thumbnailWidth' | 'bucketPreview'>>) => {
+      if (!settingsReadyRef.current) return
       const next = normalizeSettings({ ...settingsRef.current, ...patch })
+      settingsRef.current = next
       setSettings(next)
       void window.api.setSettings(next)
     },
@@ -628,6 +929,11 @@ export default function App() {
   const setListViewMode = (mode: ListViewMode) => {
     if (settings.listViewMode === mode) return
     persistListView({ listViewMode: mode })
+  }
+
+  const setBucketPreview = (value: boolean) => {
+    if (settings.bucketPreview === value) return
+    persistListView({ bucketPreview: value })
   }
 
   const onThumbnailWidthChange = (value: number) => {
@@ -683,6 +989,10 @@ export default function App() {
     target.addEventListener('pointercancel', onUp)
   }
 
+  const isDatasetEdit = settings.activeView === 'datasetEdit'
+  const isLoraTrain = settings.activeView === 'loraTrain'
+  const isLoraTest = settings.activeView === 'loraTest'
+
   return (
     <div className="app">
       <header
@@ -694,239 +1004,407 @@ export default function App() {
         }}
       >
         <div className="toolbar-left">
-          <div className="toolbar-dataset" ref={datasetMenuRef}>
+          {isDatasetEdit ? (
+            <>
+              <div className="toolbar-dataset" ref={datasetMenuRef}>
+                <button
+                  type="button"
+                  className="toolbar-dataset-trigger"
+                  disabled={settings.datasetFolders.length === 0}
+                  title={folder ?? 'No dataset folder'}
+                  aria-label="Dataset folder"
+                  aria-haspopup="listbox"
+                  aria-expanded={datasetMenuOpen}
+                  onClick={() => setDatasetMenuOpen((open) => !open)}
+                >
+                  <span className="toolbar-dataset-label">
+                    {folder ? folderLabel(folder) : 'No dataset folder'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <path fill="currentColor" d="M2 3.5h6L5 7.5 2 3.5z" />
+                  </svg>
+                </button>
+                {datasetMenuOpen && settings.datasetFolders.length > 0 && (
+                  <ul className="toolbar-dataset-menu" role="listbox" aria-label="Dataset folders">
+                    {settings.datasetFolders.map((dir) => (
+                      <li key={dir} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          className={
+                            dir === folder
+                              ? 'toolbar-dataset-option active'
+                              : 'toolbar-dataset-option'
+                          }
+                          aria-selected={dir === folder}
+                          title={dir}
+                          onClick={() => void switchDatasetFolder(dir)}
+                        >
+                          {folderLabel(dir)}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                className="primary toolbar-icon-btn"
+                title="Add Dataset Folder"
+                aria-label="Add Dataset Folder"
+                onClick={() => void addDatasetFolder()}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="toolbar-icon-btn danger"
+                disabled={!folder}
+                title="Remove dataset folder"
+                aria-label="Remove dataset folder"
+                onClick={requestRemoveDatasetFolder}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                  />
+                </svg>
+              </button>
+              <label className="toolbar-caption-format">
+                <span className="sr-only">Caption format</span>
+                <select
+                  value={settings.captionFormat}
+                  aria-label="Caption format"
+                  title="Caption format for Auto Caption / reCaption"
+                  onChange={(e) => {
+                    const captionFormat = e.target.value as CaptionFormatId
+                    persistSettingsPatch({ captionFormat })
+                  }}
+                >
+                  {CAPTION_FORMAT_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`toolbar-icon-btn analyze-btn${analysisAnalyzing ? ' is-analyzing' : ''}`}
+                disabled={!folder || images.length === 0}
+                title="Analyze"
+                aria-label="Analyze"
+                onClick={() => setAnalysisOpen(true)}
+              >
+                <svg
+                  className="analyze-btn-label"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <path
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M1.5 11.5V2.5M1.5 11.5h11M3 9.2l2.2-3.1 2.1 1.7 3.2-4.3"
+                  />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="toolbar-dataset" ref={jobMenuRef}>
+                <button
+                  type="button"
+                  className="toolbar-dataset-trigger"
+                  disabled={settings.loraTrainJobs.length === 0 || loraTraining}
+                  title={activeLoraJob?.job.name || 'No job preset'}
+                  aria-label="Job preset"
+                  aria-haspopup="listbox"
+                  aria-expanded={jobMenuOpen}
+                  onClick={() => setJobMenuOpen((open) => !open)}
+                >
+                  <span className="toolbar-dataset-label">
+                    {activeLoraJob?.job.name || 'No job preset'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <path fill="currentColor" d="M2 3.5h6L5 7.5 2 3.5z" />
+                  </svg>
+                </button>
+                {jobMenuOpen && settings.loraTrainJobs.length > 0 && (
+                  <ul className="toolbar-dataset-menu" role="listbox" aria-label="Job presets">
+                    {settings.loraTrainJobs.map((preset) => (
+                      <li key={preset.id} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          className={
+                            preset.id === settings.activeLoraTrainJobId
+                              ? 'toolbar-dataset-option active'
+                              : 'toolbar-dataset-option'
+                          }
+                          aria-selected={preset.id === settings.activeLoraTrainJobId}
+                          title={preset.job.name}
+                          disabled={loraTraining}
+                          onClick={() => switchLoraJob(preset.id)}
+                        >
+                          {preset.job.name || 'Untitled job'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {isLoraTest && (
+                <button
+                  type="button"
+                  className="toolbar-icon-btn"
+                  title="Open loratest folder"
+                  aria-label="Open loratest folder"
+                  disabled={
+                    !(activeLoraJob?.job.training_folder || '').trim() ||
+                    !(activeLoraJob?.job.name || '').trim()
+                  }
+                  onClick={() => void openLoraTestOutputFolder()}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                    />
+                  </svg>
+                </button>
+              )}
+              {!isLoraTest && (
+                <button
+                  type="button"
+                  className="primary toolbar-icon-btn"
+                  title="Add job preset"
+                  aria-label="Add job preset"
+                  disabled={loraTraining}
+                  onClick={addLoraJob}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
+                    />
+                  </svg>
+                </button>
+              )}
+              {!isLoraTest && (
+                <button
+                  type="button"
+                  className="toolbar-icon-btn danger"
+                  disabled={!activeLoraJob || loraTraining}
+                  title="Remove job preset"
+                  aria-label="Remove job preset"
+                  onClick={requestRemoveLoraJob}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
+                    />
+                  </svg>
+                </button>
+              )}
+              {!isLoraTest && (
+                <button
+                  type="button"
+                  className="toolbar-icon-btn"
+                  title="Open output folder"
+                  aria-label="Open output folder"
+                  disabled={
+                    !(activeLoraJob?.job.training_folder || '').trim() ||
+                    !(activeLoraJob?.job.name || '').trim()
+                  }
+                  onClick={() => void openLoraOutputFolder()}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M1.5 2.75h4.1l.9 1.1H12.5v7.4H1.5V2.75zm1.25 2.35v5.15h8.5V5.1H6.85l-.9-1.1H2.75v1.1z"
+                    />
+                  </svg>
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <div className="toolbar-right">
+          <button
+            type="button"
+            className="toolbar-icon-btn"
+            disabled={!settingsReady}
+            title="Settings"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M5.72.75h2.56l.22 1.48c.38.12.73.3 1.05.53l1.4-.55 1.28 2.22-1.18.95c.06.25.1.51.1.78s-.04.53-.1.78l1.18.95-1.28 2.22-1.4-.55a4.1 4.1 0 0 1-1.05.53l-.22 1.48H5.72l-.22-1.48a4.1 4.1 0 0 1-1.05-.53l-1.4.55L1.77 9.37l1.18-.95a3.5 3.5 0 0 1-.1-.78c0-.27.04-.53.1-.78l-1.18-.95 1.28-2.22 1.4.55c.32-.23.67-.41 1.05-.53L5.72.75zM7 4.6A2.4 2.4 0 1 0 7 9.4 2.4 2.4 0 0 0 7 4.6z"
+              />
+            </svg>
+          </button>
+          <div
+            className="view-switch"
+            role="tablist"
+            aria-label="Main view"
+          >
             <button
               type="button"
-              className="toolbar-dataset-trigger"
-              disabled={settings.datasetFolders.length === 0}
-              title={folder ?? 'No dataset folder'}
-              aria-label="Dataset folder"
-              aria-haspopup="listbox"
-              aria-expanded={datasetMenuOpen}
-              onClick={() => setDatasetMenuOpen((open) => !open)}
+              role="tab"
+              className={`view-switch-seg${isDatasetEdit ? ' active' : ''}`}
+              aria-selected={isDatasetEdit}
+              disabled={loraTraining}
+              title={loraTraining ? 'Unavailable while training' : undefined}
+              onClick={() => setActiveView('datasetEdit')}
             >
-              <span className="toolbar-dataset-label">
-                {folder ? folderLabel(folder) : 'No dataset folder'}
-              </span>
-              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-                <path fill="currentColor" d="M2 3.5h6L5 7.5 2 3.5z" />
-              </svg>
+              Dataset Edit
             </button>
-            {datasetMenuOpen && settings.datasetFolders.length > 0 && (
-              <ul className="toolbar-dataset-menu" role="listbox" aria-label="Dataset folders">
-                {settings.datasetFolders.map((dir) => (
-                  <li key={dir} role="presentation">
-                    <button
-                      type="button"
-                      role="option"
-                      className={
-                        dir === folder
-                          ? 'toolbar-dataset-option active'
-                          : 'toolbar-dataset-option'
-                      }
-                      aria-selected={dir === folder}
-                      title={dir}
-                      onClick={() => void switchDatasetFolder(dir)}
-                    >
-                      {folderLabel(dir)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <button
+              type="button"
+              role="tab"
+              className={`view-switch-seg${isLoraTrain ? ' active' : ''}`}
+              aria-selected={isLoraTrain}
+              onClick={() => setActiveView('loraTrain')}
+            >
+              LoRA Trainer
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`view-switch-seg${isLoraTest ? ' active' : ''}`}
+              aria-selected={isLoraTest}
+              disabled={loraTraining}
+              title={loraTraining ? 'Unavailable while training' : undefined}
+              onClick={() => setActiveView('loraTest')}
+            >
+              LoRA Tester
+            </button>
           </div>
-          <button
-            type="button"
-            className="primary toolbar-icon-btn"
-            title="Add Dataset Folder"
-            aria-label="Add Dataset Folder"
-            onClick={() => void addDatasetFolder()}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M6.25 1.5h1.5v4.75H12.5v1.5H7.75V12.5h-1.5V7.75H1.5v-1.5h4.75V1.5z"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="toolbar-icon-btn danger"
-            disabled={!folder}
-            title="Remove dataset folder"
-            aria-label="Remove dataset folder"
-            onClick={requestRemoveDatasetFolder}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M5 1.5h4l.5 1H12v1.5H2V2.5h2.5L5 1.5zM3.5 5h7l-.6 7.2A1 1 0 0 1 8.9 13H5.1a1 1 0 0 1-1-.8L3.5 5zm2 1.5v5h1.25v-5H5.5zm2.75 0v5H9.5v-5H8.25z"
-              />
-            </svg>
-          </button>
-          <button type="button" onClick={() => setSettingsOpen(true)}>
-            Settings
-          </button>
-          <button
-            type="button"
-            className={analysisAnalyzing ? 'analyze-btn is-analyzing' : 'analyze-btn'}
-            disabled={!folder || images.length === 0}
-            onClick={() => setAnalysisOpen(true)}
-          >
-            <span className="analyze-btn-label">Analyze</span>
-          </button>
         </div>
       </header>
 
-      <div
-        className="main"
-        style={
-          {
-            '--sidebar-width': `${settings.sidebarWidth}px`,
-            '--right-pane-width': `${settings.rightPaneWidth}px`
-          } as CSSProperties
-        }
-      >
-        <aside className="sidebar">
-          <div className="list-toolbar">
-            <div className="list-toolbar-left">
-              {batchCaptioning ? (
-                <button type="button" onClick={stopBatchCaption}>
-                  Cancel Auto Caption
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void startAutoCaption()}
-                  disabled={!folder || missingCount === 0 || captionBusy}
-                  title={
-                    missingCount === 0
-                      ? 'All images already have .txt captions'
-                      : `Caption ${missingCount} image(s) without .txt`
-                  }
-                >
-                  Auto Caption{missingCount > 0 ? ` (${missingCount})` : ''}
-                </button>
-              )}
-            </div>
-            <div className="list-toolbar-right">
-              <button
-                type="button"
-                className={`list-toolbar-btn${settings.listViewMode === 'list' ? ' active' : ''}`}
-                aria-pressed={settings.listViewMode === 'list'}
-                title="List view"
-                onClick={() => setListViewMode('list')}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M1 2.5h12v1.5H1V2.5zm0 4h12V8H1V6.5zm0 4h12V12H1v-1.5z"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className={`list-toolbar-btn${settings.listViewMode === 'thumbnails' ? ' active' : ''}`}
-                aria-pressed={settings.listViewMode === 'thumbnails'}
-                title="Thumbnail view"
-                onClick={() => setListViewMode('thumbnails')}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M1 1h5v5H1V1zm7 0h5v5H8V1zM1 8h5v5H1V8zm7 0h5v5H8V8z"
-                  />
-                </svg>
-              </button>
-              <input
-                type="range"
-                className="list-toolbar-slider"
-                min={48}
-                max={160}
-                step={4}
-                value={settings.thumbnailWidth}
-                disabled={settings.listViewMode !== 'thumbnails'}
-                title="Thumbnail width"
-                aria-label="Thumbnail width"
-                onChange={(e) => onThumbnailWidthChange(Number(e.target.value))}
-                onPointerUp={(e) => {
-                  onThumbnailWidthCommit(Number(e.currentTarget.value))
-                  e.currentTarget.blur()
-                }}
-                onKeyUp={(e) => {
-                  onThumbnailWidthCommit(Number(e.currentTarget.value))
-                  e.currentTarget.blur()
-                }}
-              />
-            </div>
-          </div>
-          <div className="sidebar-list">
-            <ImageList
-              images={images}
-              selectedPath={selectedPath}
-              dirtyPaths={dirtyPaths}
-              busyPaths={busyPaths}
-              viewMode={settings.listViewMode}
-              thumbnailWidth={settings.thumbnailWidth}
-              onSelect={(path) => void selectImage(path)}
-            />
-          </div>
-        </aside>
-
-        <button
-          type="button"
-          className={`pane-resizer${draggingPane === 'sidebar' ? ' dragging' : ''}`}
-          aria-label="Resize image list"
-          title="Drag to resize"
-          onPointerDown={startPaneResize('sidebar')}
+      {isDatasetEdit ? (
+        <DatasetEditView
+          settings={settings}
+          images={images}
+          selectedPath={selectedPath}
+          dirtyPaths={dirtyPaths}
+          busyPaths={busyPaths}
+          folder={folder}
+          missingCount={missingCount}
+          batchCaptioning={batchCaptioning}
+          captionBusy={captionBusy}
+          english={english}
+          translated={translated}
+          translating={translating}
+          translatingPath={translatingPath}
+          captioningPath={captioningPath}
+          dirty={dirty}
+          imageUrl={imageUrl}
+          trainResolutions={
+            activeLoraJob.job.datasets[0]?.resolution?.length
+              ? activeLoraJob.job.datasets[0].resolution
+              : [1024]
+          }
+          draggingPane={draggingPane}
+          onStopBatchCaption={stopBatchCaption}
+          onStartAutoCaption={() => void startAutoCaption()}
+          onSetListViewMode={setListViewMode}
+          onThumbnailWidthChange={onThumbnailWidthChange}
+          onThumbnailWidthCommit={onThumbnailWidthCommit}
+          onBucketPreviewChange={setBucketPreview}
+          onSelectImage={(path) => void selectImage(path)}
+          onStartPaneResize={startPaneResize}
+          onEnglishChange={onEnglishChange}
+          onTranslatedChange={onTranslatedChange}
+          onLanguageChange={(code) => void onLanguageChange(code)}
+          onSave={() => void saveCurrent()}
+          onRecaption={() => void reCaptionCurrent()}
         />
-
-        <section className="center-pane">
-          <ImagePreview imagePath={selectedPath} imageUrl={imageUrl} />
-        </section>
-
-        <button
-          type="button"
-          className={`pane-resizer${draggingPane === 'right' ? ' dragging' : ''}`}
-          aria-label="Resize caption pane"
-          title="Drag to resize"
-          onPointerDown={startPaneResize('right')}
+      ) : isLoraTest ? (
+        <LoraTestView
+          job={activeLoraJob.job}
+          jobId={activeLoraJob.id}
+          draft={settings.loraTestDraft}
+          appSettings={settings.loraTrainApp}
+          onDraftChange={onLoraTestDraftChange}
+          onStatus={onLoraStatus}
         />
-
-        <section className="right-pane">
-          <CaptionEditor
-            english={english}
-            translated={translated}
-            targetLanguage={settings.targetLanguage}
-            translating={Boolean(translating && translatingPath === selectedPath)}
-            captioning={captioningPath !== null && captioningPath === selectedPath}
-            canSave={Boolean(selectedPath) && dirty && !captionBusy}
-            canRecaption={Boolean(selectedPath) && !captionBusy}
-            onEnglishChange={onEnglishChange}
-            onTranslatedChange={onTranslatedChange}
-            onLanguageChange={(code) => void onLanguageChange(code)}
-            onSave={() => void saveCurrent()}
-            onRecaption={() => void reCaptionCurrent()}
-          />
-        </section>
-      </div>
+      ) : (
+        <LoraTrainView
+          job={activeLoraJob.job}
+          jobId={activeLoraJob.id}
+          appSettings={settings.loraTrainApp}
+          datasetFolders={settings.datasetFolders}
+          onChange={onLoraJobChange}
+          onStatus={onLoraStatus}
+          onTrainingChange={setLoraTraining}
+        />
+      )}
 
       <footer className="system-bar">
         <div className="system-bar-left">
-          {folder && (
-            <span className="folder-path" title={folder}>
-              {folder}
-            </span>
+          {isDatasetEdit ? (
+            <>
+              {folder && (
+                <span className="folder-path" title={folder}>
+                  {folder}
+                </span>
+              )}
+              {folder && <span className="image-count">{images.length} image(s)</span>}
+            </>
+          ) : (
+            <>
+              {(() => {
+                const folders = activeLoraJob.job.datasets
+                  .map((ds) => ds.folder_path?.trim() || '')
+                  .filter(Boolean)
+                const first = folders[0]
+                const extra = folders.length > 1 ? ` +${folders.length - 1}` : ''
+                const title = folders.join('\n') || undefined
+                return (
+                  <span className="folder-path" title={title}>
+                    {first
+                      ? `${first}${extra}`
+                      : folders.length === 0
+                        ? 'No train dataset'
+                        : `${folders.length} datasets`}
+                  </span>
+                )
+              })()}
+              <span className="image-count">
+                {isLoraTest
+                  ? `${activeLoraJob.job.name} · LoraTest`
+                  : `${activeLoraJob.job.datasets.filter((ds) => ds.folder_path?.trim()).length || 0} dataset(s) · ${activeLoraJob.job.train.steps} steps · lr ${activeLoraJob.job.train.lr}`}
+              </span>
+            </>
           )}
-          {folder && <span className="image-count">{images.length} image(s)</span>}
         </div>
         <div className="system-bar-right">
           {toolbarStatus && (
-            <span className={`status-msg${toolbarStatusIsError ? ' is-error' : ''}`}>
+            <span
+              className={`status-msg${
+                toolbarStatusIsError ? ' is-error' : toolbarStatusIsWarn ? ' is-warn' : ''
+              }`}
+            >
               {toolbarStatus}
             </span>
           )}
-          {dirty && <span className="dirty-flag">Unsaved</span>}
+          {isDatasetEdit && dirty && <span className="dirty-flag">Unsaved</span>}
         </div>
       </footer>
 
@@ -967,6 +1445,13 @@ export default function App() {
         folderName={folder ? folderLabel(folder) : ''}
         onConfirm={() => void confirmRemoveDatasetFolder()}
         onCancel={() => setRemoveDatasetOpen(false)}
+      />
+
+      <RemoveLoraJobDialog
+        open={removeLoraJobOpen}
+        jobName={activeLoraJob?.job.name || 'Untitled job'}
+        onConfirm={confirmRemoveLoraJob}
+        onCancel={() => setRemoveLoraJobOpen(false)}
       />
 
       <MissingDatasetFolderDialog

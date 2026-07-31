@@ -1,0 +1,2932 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { LoraTrainAppSettings, LoraTrainJobConfig, TrainSampleItem } from '../types'
+import { KREA2_RAW, modelDownloadPathFromDownloadFolder, normalizeLoraTrainJob } from '../types'
+import { serializeTrainConfig } from '../services/trainConfig'
+import { GpuDeviceSelect } from './GpuDeviceSelect'
+import { RestartTrainWarningDialog } from './RestartTrainWarningDialog'
+import { ResourceMonitorPane } from './ResourceMonitorPane'
+
+type SectionId = 'basics' | 'dataset' | 'train' | 'lora' | 'sample' | 'advanced'
+type ResultsTabId = 'loss' | 'sample'
+
+type ModelStatusKind = 'missing' | 'ready' | 'updateAvailable' | 'local' | 'error'
+
+interface ModelStatusItem {
+  role: string
+  path: string
+  repoId: string | null
+  status: ModelStatusKind
+  localPath?: string | null
+  localRevision?: string | null
+  remoteRevision?: string | null
+  message?: string | null
+}
+
+function looksLikeHfRepoId(value: string): boolean {
+  const s = value.trim()
+  if (!s || s.includes('\\') || s.startsWith('/') || s.startsWith('.')) return false
+  if (s.length >= 2 && s[1] === ':') return false
+  if (s.startsWith('~')) return false
+  const parts = s.split('/')
+  return parts.length === 2 && parts.every(Boolean) && !parts.some((p) => p.includes(' '))
+}
+
+function resolveDownloadRepoId(st?: ModelStatusItem | null): string | null {
+  if (!st) return null
+  if (st.repoId?.trim()) return st.repoId.trim()
+  if (looksLikeHfRepoId(st.path)) return st.path.trim()
+  return null
+}
+
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = n
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i += 1
+  }
+  const digits = i === 0 ? 0 : v >= 10 ? 1 : 2
+  return `${v.toFixed(digits)} ${units[i]}`
+}
+
+function downloadInputLabel(pct: number, done: number, total: number): string {
+  if (total > 0) {
+    return `Downloading … ${formatBytes(done)} / ${formatBytes(total)} ${pct}%`
+  }
+  return `Downloading … ${pct}%`
+}
+
+function folderLabel(dir: string): string {
+  return dir.split(/[/\\]/).pop() ?? dir
+}
+
+const TRAIN_LOG_MAX_LINES = 2000
+const LOSS_HISTORY_MAX_POINTS = 2000
+const LOSS_SPIKE_MAX = 200
+
+type LossSpikeMarker = { step: number; loss: number; path: string }
+
+/** Cumulative mean of loss values from step 0 through endIndex (inclusive). */
+function cumulativeAvgLoss(points: { loss: number }[], endIndex: number): number {
+  let sum = 0
+  for (let i = 0; i <= endIndex; i++) sum += points[i].loss
+  return sum / (endIndex + 1)
+}
+
+function formatHms(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function sampleStepLabel(item: TrainSampleItem): string {
+  return typeof item.step === 'number' && Number.isFinite(item.step) ? `Step ${item.step}` : 'Unknown step'
+}
+
+function samplePromptIndex(item: TrainSampleItem): number {
+  const n = item.promptIndex
+  return typeof n === 'number' && Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1
+}
+
+/** Fixed preview card width used to compute how many fit without horizontal scroll. */
+const SAMPLE_CARD_WIDTH_PX = 160
+const SAMPLE_CARD_GAP_PX = 10.4
+
+function SamplePromptStrip({
+  items,
+  onOpen
+}: {
+  items: TrainSampleItem[]
+  onOpen: (path: string) => void
+}) {
+  const stripRef = useRef<HTMLDivElement | null>(null)
+  const [visibleCount, setVisibleCount] = useState(items.length)
+
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    const update = () => {
+      const width = el.clientWidth
+      if (width <= 0) {
+        setVisibleCount(1)
+        return
+      }
+      const stride = SAMPLE_CARD_WIDTH_PX + SAMPLE_CARD_GAP_PX
+      const fit = Math.max(1, Math.floor((width + SAMPLE_CARD_GAP_PX) / stride))
+      setVisibleCount(Math.min(items.length, fit))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [items.length])
+
+  const visible = items.slice(0, visibleCount)
+
+  return (
+    <div className="lora-train-sample-strip" ref={stripRef}>
+      {visible.map((item) => (
+        <button
+          key={item.path}
+          type="button"
+          className="lora-train-sample-card"
+          onClick={() => onOpen(item.path)}
+          title={`Open ${item.name}`}
+        >
+          <img
+            src={window.api.toLocalUrl(item.path)}
+            alt={`${sampleStepLabel(item)} sample`}
+            className="lora-train-sample-thumb"
+            loading="lazy"
+          />
+          <span className="lora-train-sample-meta">
+            <span className="lora-train-sample-step">{sampleStepLabel(item)}</span>
+            <span className="lora-train-sample-name" title={item.name}>
+              {item.name}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const SECTIONS: { id: SectionId; label: string; hint: string }[] = [
+  { id: 'basics', label: 'Basics', hint: 'Name, output, models' },
+  { id: 'dataset', label: 'Dataset', hint: 'Images + captions' },
+  { id: 'train', label: 'Train', hint: 'Steps, LR, save, VRAM' },
+  { id: 'lora', label: 'LoRA', hint: 'Rank & alpha' },
+  { id: 'sample', label: 'Sample', hint: 'Preview during train' },
+  { id: 'advanced', label: 'Advanced', hint: 'EMA, layer offload' }
+]
+
+const RESOLUTION_OPTIONS = [256, 512, 768, 1024, 1280, 1328, 1536, 2048] as const
+/** Rolling window for sec/step avg (number of step intervals). */
+const SEC_PER_STEP_AVG_WINDOW = 10
+
+interface Props {
+  job: LoraTrainJobConfig
+  /** Preset id; when it changes, training results (loss/log) are cleared. */
+  jobId?: string
+  appSettings: LoraTrainAppSettings
+  datasetFolders: string[]
+  onChange: (job: LoraTrainJobConfig) => void
+  onStatus: (message: string, isError?: boolean, options?: { sticky?: boolean }) => void
+  onTrainingChange?: (training: boolean) => void
+}
+
+function Field({
+  label,
+  children,
+  hint
+}: {
+  label: string
+  children: ReactNode
+  hint?: string
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {children}
+      {hint ? <p className="field-hint">{hint}</p> : null}
+    </label>
+  )
+}
+
+function LossChart({
+  points,
+  spikes = [],
+  showLoss = true,
+  showAvgLoss = true,
+  onSpikeClick
+}: {
+  points: { step: number; loss: number }[]
+  spikes?: LossSpikeMarker[]
+  showLoss?: boolean
+  showAvgLoss?: boolean
+  onSpikeClick?: (spike: LossSpikeMarker) => void
+}) {
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const [size, setSize] = useState({ w: 640, h: 220 })
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      setSize({
+        w: Math.max(1, Math.floor(r.width)),
+        h: Math.max(1, Math.floor(r.height))
+      })
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const vbW = size.w
+  const vbH = size.h
+  const padL = 58
+  const padR = 16
+  const padT = 14
+  const padB = 28
+  const plotW = Math.max(1, vbW - padL - padR)
+  const plotH = Math.max(1, vbH - padT - padB)
+  const thumbSize = 32
+  const thumbGap = 6
+
+  if (points.length === 0) {
+    return (
+      <div className="lora-train-loss-chart-wrap" ref={wrapRef}>
+        <svg
+          className="lora-train-loss-chart"
+          viewBox={`0 0 ${vbW} ${vbH}`}
+          width={vbW}
+          height={vbH}
+          role="img"
+          aria-label="Loss chart"
+          preserveAspectRatio="none"
+        >
+          <rect
+            x={padL}
+            y={padT}
+            width={plotW}
+            height={plotH}
+            className="lora-train-loss-plot-bg"
+          />
+        </svg>
+        <div className="lora-train-loss-empty">Waiting for loss…</div>
+      </div>
+    )
+  }
+
+  const avgPoints: { step: number; loss: number }[] = []
+  for (let i = 0; i < points.length; i++) {
+    avgPoints.push({
+      step: points[i].step,
+      loss: cumulativeAvgLoss(points, i)
+    })
+  }
+
+  let minStep = points[0].step
+  let maxStep = points[0].step
+  let dataMaxLoss = 0
+  let hasVisible = false
+  for (const p of points) {
+    if (p.step < minStep) minStep = p.step
+    if (p.step > maxStep) maxStep = p.step
+    if (showLoss && p.loss > dataMaxLoss) {
+      dataMaxLoss = p.loss
+      hasVisible = true
+    }
+  }
+  if (showAvgLoss) {
+    for (const p of avgPoints) {
+      if (p.loss > dataMaxLoss) {
+        dataMaxLoss = p.loss
+        hasVisible = true
+      }
+    }
+  }
+  for (const s of spikes) {
+    if (!showLoss) break
+    if (s.step < minStep) minStep = s.step
+    if (s.step > maxStep) maxStep = s.step
+    if (s.loss > dataMaxLoss) {
+      dataMaxLoss = s.loss
+      hasVisible = true
+    }
+  }
+  if (!hasVisible) dataMaxLoss = 0.1
+
+  const stepSpan = Math.max(1, maxStep - minStep)
+  const lossMin = 0
+  // Ceil to next 0.x00 (one decimal), e.g. 0.776 → 0.800, 0.258 → 0.300
+  const lossMax = Math.max(0.1, Math.ceil(dataMaxLoss * 10 - 1e-12) / 10)
+  const lossSpan = Math.max(lossMax - lossMin, 1e-9)
+
+  const toX = (step: number) => padL + ((step - minStep) / stepSpan) * plotW
+  const toY = (loss: number) => padT + (1 - (loss - lossMin) / lossSpan) * plotH
+
+  const polyline = points.map((p) => `${toX(p.step).toFixed(2)},${toY(p.loss).toFixed(2)}`).join(' ')
+  const avgPolyline = avgPoints
+    .map((p) => `${toX(p.step).toFixed(2)},${toY(p.loss).toFixed(2)}`)
+    .join(' ')
+  const last = points[points.length - 1]
+  const lastAvg = avgPoints[avgPoints.length - 1]
+  const lastX = toX(last.step)
+  const lastY = toY(last.loss)
+  const lastAvgX = toX(lastAvg.step)
+  const lastAvgY = toY(lastAvg.loss)
+
+  const yTicks: number[] = []
+  for (let i = 0; i <= 10; i++) {
+    yTicks.push(lossMax - (i / 10) * (lossMax - lossMin))
+  }
+  const xTicks: number[] = []
+  for (let i = 0; i <= 10; i++) {
+    xTicks.push(Math.round(minStep + (i / 10) * (maxStep - minStep)))
+  }
+
+  const visibleSpikes = showLoss
+    ? spikes.filter((s) => s.step >= minStep && s.step <= maxStep && Number.isFinite(s.loss))
+    : []
+
+  return (
+    <div className="lora-train-loss-chart-wrap" ref={wrapRef}>
+      <svg
+        className="lora-train-loss-chart"
+        viewBox={`0 0 ${vbW} ${vbH}`}
+        width={vbW}
+        height={vbH}
+        role="img"
+        aria-label={`Loss chart, latest ${last.loss.toFixed(4)}, avg ${lastAvg.loss.toFixed(4)} at step ${last.step}`}
+        preserveAspectRatio="none"
+      >
+        <rect x={padL} y={padT} width={plotW} height={plotH} className="lora-train-loss-plot-bg" />
+        {yTicks.map((v, i) => {
+          const y = toY(v)
+          return (
+            <g key={`y-${i}`}>
+              <line
+                x1={padL}
+                y1={y}
+                x2={padL + plotW}
+                y2={y}
+                className="lora-train-loss-grid"
+              />
+              <text x={padL - 8} y={y + 3} textAnchor="end" className="lora-train-loss-axis">
+                {v.toFixed(3)}
+              </text>
+            </g>
+          )
+        })}
+        {xTicks.map((v, i) => (
+          <text
+            key={`x-${i}`}
+            x={toX(v)}
+            y={padT + plotH + 18}
+            textAnchor="middle"
+            className="lora-train-loss-axis"
+          >
+            {v}
+          </text>
+        ))}
+        {showLoss ? (
+          <>
+            <polyline points={polyline} fill="none" className="lora-train-loss-line" />
+            <circle cx={lastX} cy={lastY} r={3.5} className="lora-train-loss-dot" />
+          </>
+        ) : null}
+        {showAvgLoss ? (
+          <>
+            <polyline points={avgPolyline} fill="none" className="lora-train-loss-line-avg" />
+            <circle cx={lastAvgX} cy={lastAvgY} r={3} className="lora-train-loss-dot-avg" />
+          </>
+        ) : null}
+        {visibleSpikes.map((s) => {
+          const cx = toX(s.step)
+          const cy = toY(s.loss)
+          return (
+            <circle
+              key={`spike-dot-${s.step}-${s.path}`}
+              cx={cx}
+              cy={cy}
+              r={4.5}
+              className="lora-train-loss-spike-dot"
+            />
+          )
+        })}
+      </svg>
+      {visibleSpikes.map((s) => {
+        const cx = toX(s.step)
+        const cy = toY(s.loss)
+        const placeLeft = cx + thumbGap + thumbSize > vbW - 4
+        const left = placeLeft
+          ? Math.max(4, cx - thumbGap - thumbSize)
+          : Math.min(vbW - thumbSize - 4, cx + thumbGap)
+        const top = Math.max(4, Math.min(vbH - thumbSize - 4, cy - thumbSize / 2))
+        const name = s.path.split(/[/\\]/).pop() ?? s.path
+        return (
+          <button
+            key={`spike-thumb-${s.step}-${s.path}`}
+            type="button"
+            className="lora-train-loss-spike-thumb"
+            title={`Step ${s.step} · loss ${s.loss.toFixed(4)}\n${name}`}
+            style={{ left, top, width: thumbSize, height: thumbSize }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSpikeClick?.(s)
+            }}
+          >
+            <img src={window.api.toLocalUrl(s.path)} alt="" draggable={false} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ToggleField({
+  label,
+  checked,
+  onChange,
+  hint,
+  disabled
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  hint?: string
+  disabled?: boolean
+}) {
+  return (
+    <div className="field">
+      <div
+        className={`lora-toggle${checked ? ' is-on' : ''}${disabled ? ' is-disabled' : ''}`}
+      >
+        <button
+          type="button"
+          role="switch"
+          className="lora-switch"
+          aria-checked={checked}
+          aria-label={label}
+          disabled={disabled}
+          onClick={() => onChange(!checked)}
+        >
+          <span className="lora-switch-knob" aria-hidden="true" />
+        </button>
+        <span className="lora-toggle-label">{label}</span>
+      </div>
+      {hint ? <p className="field-hint">{hint}</p> : null}
+    </div>
+  )
+}
+
+/** Allows clearing the field while editing; applies emptyFallback only on blur. */
+function NumberField({
+  value,
+  emptyFallback,
+  onChange,
+  disabled,
+  min,
+  max,
+  step
+}: {
+  value: number
+  emptyFallback: number
+  onChange: (n: number) => void
+  disabled?: boolean
+  min?: number
+  max?: number
+  step?: number | 'any'
+}) {
+  const [text, setText] = useState(() => String(value))
+  const focusedRef = useRef(false)
+
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setText(String(value))
+    }
+  }, [value])
+
+  const commit = (raw: string) => {
+    const trimmed = raw.trim()
+    if (trimmed === '' || !Number.isFinite(Number(trimmed))) {
+      setText(String(emptyFallback))
+      onChange(emptyFallback)
+      return
+    }
+    const n = Number(trimmed)
+    setText(String(n))
+    onChange(n)
+  }
+
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
+      value={text}
+      onFocus={() => {
+        focusedRef.current = true
+      }}
+      onChange={(e) => {
+        const next = e.target.value
+        setText(next)
+        if (next.trim() === '') return
+        const n = Number(next)
+        if (Number.isFinite(n)) onChange(n)
+      }}
+      onBlur={() => {
+        focusedRef.current = false
+        commit(text)
+      }}
+    />
+  )
+}
+
+export function LoraTrainView({
+  job,
+  jobId,
+  appSettings,
+  datasetFolders,
+  onChange,
+  onStatus,
+  onTrainingChange
+}: Props) {
+  const [draft, setDraft] = useState(() => normalizeLoraTrainJob(job))
+  const [activeSection, setActiveSection] = useState<SectionId>('basics')
+  const [training, setTraining] = useState(false)
+  /** Results UI (status / loss / log) from Start until Back (or intentional Stop). */
+  const [showTrainSession, setShowTrainSession] = useState(false)
+  const [trainComplete, setTrainComplete] = useState(false)
+  /** Process exited with error while session still open (Back, keep logs). */
+  const [trainFailed, setTrainFailed] = useState(false)
+  const userStoppedTrainRef = useRef(false)
+  const [progress, setProgress] = useState<{
+    step: number
+    total: number
+    loss: number
+  } | null>(null)
+  const [trainLogs, setTrainLogs] = useState<string[]>([])
+  const [lossHistory, setLossHistory] = useState<{ step: number; loss: number }[]>([])
+  const [lossSpikes, setLossSpikes] = useState<LossSpikeMarker[]>([])
+  const [showLossCurve, setShowLossCurve] = useState(true)
+  const [showAvgLossCurve, setShowAvgLossCurve] = useState(true)
+  const [resultsTab, setResultsTab] = useState<ResultsTabId>('loss')
+  const [trainSamples, setTrainSamples] = useState<TrainSampleItem[]>([])
+  const [sampleLoading, setSampleLoading] = useState(false)
+  const [sampleError, setSampleError] = useState<string | null>(null)
+  /** Open sample lightbox by image path; null = closed. */
+  const [sampleLightboxPath, setSampleLightboxPath] = useState<string | null>(null)
+  /** Loss-spike thumbnail enlarge preview; null = closed. */
+  const [spikeLightbox, setSpikeLightbox] = useState<LossSpikeMarker | null>(null)
+  const [trainStartedAt, setTrainStartedAt] = useState<number | null>(null)
+  const [finalElapsedMs, setFinalElapsedMs] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  const [secPerStepAvg, setSecPerStepAvg] = useState<number | null>(null)
+  const stepTimingRef = useRef<{ step: number; at: number }[]>([])
+  const trainStartedAtRef = useRef<number | null>(null)
+  const logEndRef = useRef<HTMLSpanElement | null>(null)
+  const [modelStatuses, setModelStatuses] = useState<ModelStatusItem[]>([])
+  const [modelChecking, setModelChecking] = useState(false)
+  const [modelCheckError, setModelCheckError] = useState<string | null>(null)
+  const [dlCurrent, setDlCurrent] = useState<string | null>(null)
+  const [dlPct, setDlPct] = useState(0)
+  const [dlDone, setDlDone] = useState(0)
+  const [dlTotal, setDlTotal] = useState(0)
+  const [bucketScanBusy, setBucketScanBusy] = useState(false)
+  const [bucketScanError, setBucketScanError] = useState<string | null>(null)
+  const [bucketCounts, setBucketCounts] = useState<{ bucket: string; count: number }[] | null>(
+    null
+  )
+  const [bucketScanMeta, setBucketScanMeta] = useState<{
+    imageCount: number
+    forcedUpscale: number
+  } | null>(null)
+  /** Latest output checkpoint vs current Steps: resume, already done, or none. */
+  const [outputCheckpoint, setOutputCheckpoint] = useState<
+    | { kind: 'resume'; step: number; path: string }
+    | { kind: 'done'; step: number; path: string }
+    | null
+  >(null)
+  const [showRestartWarning, setShowRestartWarning] = useState(false)
+  const skipPersist = useRef(true)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sampleRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const modelStatusesRef = useRef(modelStatuses)
+  modelStatusesRef.current = modelStatuses
+  const dlQueueRef = useRef<string[]>([])
+  const downloadingRef = useRef(false)
+  const appSettingsRef = useRef(appSettings)
+  appSettingsRef.current = appSettings
+
+  useEffect(() => {
+    skipPersist.current = true
+    const next = normalizeLoraTrainJob(job)
+    setDraft(next)
+  }, [job])
+
+  useEffect(() => {
+    onTrainingChange?.(training)
+  }, [training, onTrainingChange])
+
+  const resetStepTiming = useCallback(() => {
+    stepTimingRef.current = []
+    setSecPerStepAvg(null)
+  }, [])
+
+  const exitTrainSessionUi = useCallback(() => {
+    setShowTrainSession(false)
+    setResultsTab('loss')
+    setSampleLightboxPath(null)
+    setSpikeLightbox(null)
+  }, [])
+
+  const resetTrainSessionData = useCallback(() => {
+    setTrainComplete(false)
+    setTrainFailed(false)
+    setFinalElapsedMs(null)
+    setTrainStartedAt(null)
+    trainStartedAtRef.current = null
+    resetStepTiming()
+    setLossHistory([])
+    setLossSpikes([])
+    setSpikeLightbox(null)
+    setTrainLogs([])
+    setProgress(null)
+    setSampleLoading(false)
+    setSampleError(null)
+    setTrainSamples([])
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current)
+      sampleRefreshTimer.current = null
+    }
+  }, [resetStepTiming])
+
+  // Clear in-memory results when switching LoRA job presets.
+  const jobIdRef = useRef(jobId)
+  useEffect(() => {
+    if (jobIdRef.current === jobId) return
+    jobIdRef.current = jobId
+    exitTrainSessionUi()
+    resetTrainSessionData()
+  }, [jobId, exitTrainSessionUi, resetTrainSessionData])
+
+  const recordStepTiming = useCallback((step: number) => {
+    const now = Date.now()
+    const hist = stepTimingRef.current
+    hist.push({ step, at: now })
+    while (hist.length > SEC_PER_STEP_AVG_WINDOW + 1) hist.shift()
+
+    if (hist.length < 2) {
+      setSecPerStepAvg(null)
+      return
+    }
+
+    const samples: number[] = []
+    for (let i = 1; i < hist.length; i++) {
+      const dStep = hist[i].step - hist[i - 1].step
+      const dMs = hist[i].at - hist[i - 1].at
+      if (dStep > 0 && dMs > 0) samples.push(dMs / 1000 / dStep)
+    }
+    setSecPerStepAvg(
+      samples.length > 0 ? samples.reduce((a, b) => a + b, 0) / samples.length : null
+    )
+  }, [])
+
+  const patch = useCallback((updater: (prev: LoraTrainJobConfig) => LoraTrainJobConfig) => {
+    setDraft((prev) => updater(prev))
+  }, [])
+
+  const refreshTrainSamples = useCallback(async () => {
+    const d = draftRef.current
+    const trainingFolder = (d.training_folder || '').trim()
+    const jobName = (d.name || '').trim()
+    if (!trainingFolder || !jobName) {
+      setTrainSamples([])
+      setSampleError(null)
+      setSampleLoading(false)
+      return
+    }
+    setSampleLoading(true)
+    try {
+      const result = await window.api.listTrainSamples({ trainingFolder, jobName })
+      if (!result.ok) {
+        setTrainSamples([])
+        setSampleError(result.error || 'Failed to load sample images')
+        return
+      }
+      setTrainSamples(result.samples || [])
+      setSampleError(null)
+    } catch (err) {
+      setTrainSamples([])
+      setSampleError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSampleLoading(false)
+    }
+  }, [])
+
+  const queueRefreshTrainSamples = useCallback((delayMs = 300) => {
+    if (sampleRefreshTimer.current) clearTimeout(sampleRefreshTimer.current)
+    sampleRefreshTimer.current = setTimeout(() => {
+      sampleRefreshTimer.current = null
+      void refreshTrainSamples()
+    }, delayMs)
+  }, [refreshTrainSamples])
+
+  const refreshResumeTarget = useCallback(async () => {
+    const d = draftRef.current
+    const folder = (d.training_folder || '').trim()
+    const name = (d.name || '').trim()
+    const steps = Number(d.train.steps) || 0
+    if (!folder || !name) {
+      setOutputCheckpoint(null)
+      return
+    }
+    try {
+      const result = await window.api.listTrainCheckpoints({
+        trainingFolder: folder,
+        jobName: name
+      })
+      if (!result.ok) {
+        setOutputCheckpoint(null)
+        return
+      }
+      const list = result.checkpoints || []
+      if (list.length === 0) {
+        setOutputCheckpoint(null)
+        return
+      }
+      const latest = list[list.length - 1]
+      if (latest.step <= 0) {
+        setOutputCheckpoint(null)
+        return
+      }
+      if (latest.step < steps) {
+        setOutputCheckpoint({ kind: 'resume', step: latest.step, path: latest.path })
+      } else {
+        // step >= configured Steps → training already complete for current target
+        setOutputCheckpoint({ kind: 'done', step: latest.step, path: latest.path })
+      }
+    } catch {
+      setOutputCheckpoint(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showTrainSession || training) return
+    const t = setTimeout(() => {
+      void refreshResumeTarget()
+    }, 250)
+    return () => clearTimeout(t)
+  }, [
+    draft.training_folder,
+    draft.name,
+    draft.train.steps,
+    showTrainSession,
+    training,
+    refreshResumeTarget
+  ])
+
+  const refreshModelStatus = useCallback(async () => {
+    setModelChecking(true)
+    setModelCheckError(null)
+    try {
+      const d = draftRef.current
+      const settings = appSettingsRef.current
+      const result = await window.api.checkModelStatus({
+        pythonPath: settings.pythonPath.trim() || undefined,
+        downloadPath: modelDownloadPathFromDownloadFolder(settings.downloadFolder),
+        token: settings.huggingfaceToken.trim() || undefined,
+        targets: [{ role: 'train', path: d.model.train_name_or_path }]
+      })
+      const results = result.results || []
+      setModelStatuses(results)
+      if (!result.ok && result.error) {
+        setModelCheckError(result.error)
+      }
+
+      // If HF id still in job but a complete snapshot exists under download path, point at local dir.
+      let trainPath = d.model.train_name_or_path
+      let changed = false
+      for (const st of results) {
+        if (
+          !st.localPath ||
+          !st.repoId ||
+          !st.localRevision ||
+          st.path !== st.repoId ||
+          (st.status !== 'ready' && st.status !== 'updateAvailable')
+        ) {
+          continue
+        }
+        if (st.role === 'train' && trainPath === st.repoId) {
+          trainPath = st.localPath
+          changed = true
+        }
+      }
+      if (changed) {
+        setDraft((prev) => ({
+          ...prev,
+          model: {
+            ...prev.model,
+            train_name_or_path: trainPath,
+            name_or_path: trainPath
+          }
+        }))
+      }
+    } catch (err) {
+      setModelCheckError(err instanceof Error ? err.message : String(err))
+      setModelStatuses([])
+    } finally {
+      setModelChecking(false)
+    }
+  }, [])
+
+  const applyDownloadedPath = useCallback((repoId: string, localPath: string) => {
+    setDraft((prev) => {
+      let trainPath = prev.model.train_name_or_path
+      for (const st of modelStatusesRef.current) {
+        if (st.repoId === repoId || st.path === repoId) {
+          if (st.role === 'train') trainPath = localPath
+        }
+      }
+      if (trainPath === repoId) trainPath = localPath
+      return {
+        ...prev,
+        model: {
+          ...prev.model,
+          train_name_or_path: trainPath,
+          name_or_path: trainPath
+        }
+      }
+    })
+  }, [])
+
+  const pumpDownloadQueue = useCallback(async () => {
+    if (downloadingRef.current) return
+    const next = dlQueueRef.current[0]
+    if (!next) {
+      setDlCurrent(null)
+      setDlPct(0)
+      setDlDone(0)
+      setDlTotal(0)
+      return
+    }
+    downloadingRef.current = true
+    setDlCurrent(next)
+    setDlPct(0)
+    setDlDone(0)
+    setDlTotal(0)
+    const settings = appSettingsRef.current
+    const result = await window.api.downloadModel({
+      pythonPath: settings.pythonPath.trim() || undefined,
+      downloadPath: modelDownloadPathFromDownloadFolder(settings.downloadFolder),
+      token: settings.huggingfaceToken.trim() || undefined,
+      repoId: next
+    })
+    if (!result.ok) {
+      downloadingRef.current = false
+      dlQueueRef.current = []
+      setDlCurrent(null)
+      setDlPct(0)
+      setDlDone(0)
+      setDlTotal(0)
+      onStatus(result.error || 'Failed to start model download', true)
+    }
+  }, [onStatus])
+
+  const enqueueDownloads = useCallback(
+    (repoIds: string[]) => {
+      const unique = [...new Set(repoIds.map((r) => r.trim()).filter(Boolean))]
+      if (unique.length === 0) return
+      for (const id of unique) {
+        if (!dlQueueRef.current.includes(id)) dlQueueRef.current.push(id)
+      }
+      void pumpDownloadQueue()
+    },
+    [pumpDownloadQueue]
+  )
+
+  useEffect(() => {
+    void window.api.trainStatus().then((s) => {
+      setTraining(s.running)
+      if (s.running) {
+        setTrainStartedAt((prev) => prev ?? Date.now())
+        onStatus('Training…', false, { sticky: true })
+      }
+    })
+    const offProg = window.api.onTrainProgress((p) => {
+      setProgress(p)
+      recordStepTiming(p.step)
+      if (typeof p.loss === 'number' && Number.isFinite(p.loss)) {
+        setLossHistory((prev) => {
+          const next =
+            prev.length >= LOSS_HISTORY_MAX_POINTS
+              ? prev.slice(-LOSS_HISTORY_MAX_POINTS + 1)
+              : prev.slice()
+          next.push({ step: p.step, loss: p.loss })
+          return next
+        })
+      }
+      const loss =
+        typeof p.loss === 'number' && Number.isFinite(p.loss) ? p.loss.toFixed(4) : null
+      onStatus(
+        loss
+          ? `Training step ${p.step}/${p.total} · loss=${loss}`
+          : `Training step ${p.step}/${p.total}`,
+        false,
+        { sticky: true }
+      )
+      queueRefreshTrainSamples(250)
+    })
+    const offSpike = window.api.onTrainLossSpike((s) => {
+      if (!s.path?.trim() || !Number.isFinite(s.step) || !Number.isFinite(s.loss)) return
+      setLossSpikes((prev) => {
+        const next =
+          prev.length >= LOSS_SPIKE_MAX ? prev.slice(-LOSS_SPIKE_MAX + 1) : prev.slice()
+        const exists = next.some((x) => x.step === s.step && x.path === s.path)
+        if (!exists) next.push({ step: s.step, loss: s.loss, path: s.path })
+        return next
+      })
+    })
+    const offLog = window.api.onTrainLog(({ line }) => {
+      setTrainLogs((prev) => {
+        const next = prev.length >= TRAIN_LOG_MAX_LINES ? prev.slice(-TRAIN_LOG_MAX_LINES + 1) : prev.slice()
+        next.push(line)
+        return next
+      })
+      if (/saved .*_Sampling_\d{6}/i.test(line) || /sample complete at step/i.test(line)) {
+        queueRefreshTrainSamples(150)
+      }
+    })
+    const offDone = window.api.onTrainDone(({ path }) => {
+      userStoppedTrainRef.current = false
+      const started = trainStartedAtRef.current
+      const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0
+      setFinalElapsedMs(elapsed)
+      setTrainStartedAt(null)
+      trainStartedAtRef.current = null
+      setTraining(false)
+      setTrainComplete(true)
+      setTrainFailed(false)
+      onStatus(`Training done: ${path}`)
+      queueRefreshTrainSamples(0)
+      void refreshResumeTarget()
+    })
+    const offErr = window.api.onTrainError(({ message }) => {
+      setTraining(false)
+      // Intentional Stop already left the session; don't reopen for the kill exit code.
+      if (userStoppedTrainRef.current) {
+        userStoppedTrainRef.current = false
+        onStatus('Training stopped')
+        void refreshResumeTarget()
+        return
+      }
+      const started = trainStartedAtRef.current
+      const elapsed = started !== null ? Math.max(0, Date.now() - started) : 0
+      setFinalElapsedMs(elapsed)
+      setTrainStartedAt(null)
+      trainStartedAtRef.current = null
+      setShowTrainSession(true)
+      setTrainComplete(false)
+      setTrainFailed(true)
+      onStatus(message, true)
+      queueRefreshTrainSamples(0)
+      void refreshResumeTarget()
+    })
+    const offWarn = window.api.onTrainWarn(({ message }) => {
+      if (!message?.trim()) return
+      onStatus(`Warning: ${message}`, false, { sticky: true })
+    })
+    const offDlProg = window.api.onModelDownloadProgress(({ repoId, pct, done, total }) => {
+      setDlCurrent(repoId)
+      setDlPct(pct)
+      if (typeof done === 'number') setDlDone(done)
+      if (typeof total === 'number') setDlTotal(total)
+      const pctLabel = Number.isFinite(pct) ? `${Math.round(pct)}%` : ''
+      onStatus(
+        pctLabel ? `Downloading ${repoId} ${pctLabel}` : `Downloading ${repoId}…`,
+        false,
+        { sticky: true }
+      )
+    })
+    const offDlDone = window.api.onModelDownloadDone(({ repoId, path }) => {
+      applyDownloadedPath(repoId, path)
+      onStatus(`Model ready: ${repoId}`)
+      dlQueueRef.current = dlQueueRef.current.filter((id) => id !== repoId)
+      downloadingRef.current = false
+      if (dlQueueRef.current.length === 0) {
+        setDlCurrent(null)
+        setDlPct(0)
+        setDlDone(0)
+        setDlTotal(0)
+        void refreshModelStatus()
+      } else {
+        void pumpDownloadQueue()
+      }
+    })
+    const offDlErr = window.api.onModelDownloadError(({ message }) => {
+      downloadingRef.current = false
+      dlQueueRef.current = []
+      setDlCurrent(null)
+      setDlPct(0)
+      setDlDone(0)
+      setDlTotal(0)
+      onStatus(message, true)
+      void refreshModelStatus()
+    })
+    return () => {
+      offProg()
+      offSpike()
+      offLog()
+      offDone()
+      offErr()
+      offWarn()
+      offDlProg()
+      offDlDone()
+      offDlErr()
+    }
+  }, [onStatus, applyDownloadedPath, pumpDownloadQueue, queueRefreshTrainSamples, refreshModelStatus, refreshResumeTarget, recordStepTiming, resetStepTiming])
+
+  useEffect(() => {
+    if (!training) return
+    setNowTick(Date.now())
+    const id = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [training])
+
+  useEffect(() => {
+    if (!training) return
+    logEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [trainLogs, training])
+
+  useEffect(() => {
+    if (showTrainSession) {
+      void refreshTrainSamples()
+      return
+    }
+    setSampleLoading(false)
+    setSampleError(null)
+    setTrainSamples([])
+    if (sampleRefreshTimer.current) {
+      clearTimeout(sampleRefreshTimer.current)
+      sampleRefreshTimer.current = null
+    }
+  }, [showTrainSession, refreshTrainSamples])
+
+  useEffect(() => {
+    return () => {
+      if (sampleRefreshTimer.current) clearTimeout(sampleRefreshTimer.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshModelStatus()
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [
+    draft.model.train_name_or_path,
+    appSettings.downloadFolder,
+    appSettings.huggingfaceToken,
+    appSettings.pythonPath,
+    refreshModelStatus
+  ])
+
+  useEffect(() => {
+    if (skipPersist.current) {
+      skipPersist.current = false
+      return
+    }
+    if (persistTimer.current) clearTimeout(persistTimer.current)
+    persistTimer.current = setTimeout(() => {
+      onChange(normalizeLoraTrainJob(draftRef.current))
+    }, 400)
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current)
+    }
+  }, [draft, onChange])
+
+  const ds0 = draft.datasets[0]
+  const datasetEntries = draft.datasets
+  const filledDatasets = datasetEntries.filter((ds) => Boolean(ds.folder_path?.trim()))
+  const hasDataset = filledDatasets.length > 0
+
+  const patchSharedDataset = (
+    updater: (ds: (typeof draft.datasets)[number]) => (typeof draft.datasets)[number]
+  ) => {
+    patch((p) => ({
+      ...p,
+      datasets: p.datasets.map((ds) => updater(ds))
+    }))
+  }
+
+  const statusForRole = (role: string): ModelStatusItem | undefined =>
+    modelStatuses.find((s) => s.role === role)
+
+  const statusLabel = (status?: ModelStatusKind): string => {
+    if (!status) return modelChecking ? 'Checking…' : '—'
+    switch (status) {
+      case 'missing':
+        return 'Missing'
+      case 'ready':
+        return 'Ready'
+      case 'updateAvailable':
+        return 'Update'
+      case 'local':
+        return 'Local'
+      case 'error':
+        return 'Error'
+      default:
+        return status
+    }
+  }
+
+  const missingAny = modelStatuses.filter((s) => s.status === 'missing')
+  const missingRepos = missingAny.filter((s) => Boolean(resolveDownloadRepoId(s)))
+  const updateRepos = modelStatuses.filter(
+    (s) => s.status === 'updateAvailable' && Boolean(resolveDownloadRepoId(s))
+  )
+  const isDownloading = Boolean(dlCurrent)
+  // Top banner only for model check errors (download progress lives in the model row)
+  const showBanner = Boolean(modelCheckError)
+
+  const downloadForRole = (role: string) => {
+    const st = statusForRole(role)
+    const repo = resolveDownloadRepoId(st)
+    if (!repo) return
+    const hasToken = Boolean(appSettingsRef.current.huggingfaceToken.trim())
+    if (!hasToken) {
+      onStatus(
+        'Hugging Face token required for gated Krea models. Set it in LoRA Train Settings, accept access on the model page, then retry Download.',
+        true
+      )
+      return
+    }
+    enqueueDownloads([repo])
+  }
+
+  const cancelDownload = async () => {
+    await window.api.cancelModelDownload()
+    downloadingRef.current = false
+    dlQueueRef.current = []
+    setDlCurrent(null)
+    setDlPct(0)
+    setDlDone(0)
+    setDlTotal(0)
+    onStatus('Model download cancelled')
+    void refreshModelStatus()
+  }
+
+  const isRoleDownloading = (role: string): boolean => {
+    const repo = resolveDownloadRepoId(statusForRole(role))
+    return Boolean(dlCurrent && repo && dlCurrent === repo)
+  }
+
+  const renderModelDlButton = (role: 'train') => {
+    const st = statusForRole(role)
+    const repo = resolveDownloadRepoId(st)
+    const downloading = isRoleDownloading(role)
+    if (downloading) {
+      return (
+        <button
+          type="button"
+          className="danger lora-dl-btn"
+          disabled={training}
+          onClick={() => void cancelDownload()}
+        >
+          Cancel
+        </button>
+      )
+    }
+    if (!repo) return null
+    if (st?.status === 'missing') {
+      return (
+        <button
+          type="button"
+          className="primary lora-dl-btn"
+          disabled={training || isDownloading}
+          onClick={() => downloadForRole(role)}
+        >
+          Download
+        </button>
+      )
+    }
+    if (st?.status === 'updateAvailable') {
+      return (
+        <button
+          type="button"
+          className="primary lora-dl-btn"
+          disabled={training || isDownloading}
+          onClick={() => downloadForRole(role)}
+        >
+          Update
+        </button>
+      )
+    }
+    return null
+  }
+
+  const browseTrainingFolder = async () => {
+    const dir = await window.api.openFolder()
+    if (!dir) return
+    patch((prev) => ({ ...prev, training_folder: dir }))
+  }
+
+  const scanBuckets = async () => {
+    const folders = draftRef.current.datasets
+      .map((ds) => ds.folder_path?.trim() || '')
+      .filter(Boolean)
+    if (folders.length === 0) {
+      setBucketScanError('Choose a dataset folder first')
+      return
+    }
+    const ds = draftRef.current.datasets[0]
+    const resolutions = ds?.resolution?.length ? ds.resolution : [1024]
+    setBucketScanBusy(true)
+    setBucketScanError(null)
+    try {
+      const merged = new Map<string, number>()
+      let imageCount = 0
+      let forcedUpscale = 0
+      const folderNotes: string[] = []
+      for (const folder of folders) {
+        const result = await window.api.scanArBuckets({
+          folder,
+          resolutions,
+          pythonPath: appSettings.pythonPath.trim() || undefined
+        })
+        if (!result.ok) {
+          setBucketCounts(null)
+          setBucketScanMeta(null)
+          setBucketScanError(result.error || `Scan failed for ${folderLabel(folder)}`)
+          return
+        }
+        const n = result.imageCount ?? 0
+        imageCount += n
+        forcedUpscale += result.forcedUpscale ?? 0
+        folderNotes.push(`${folderLabel(folder)}: ${n}`)
+        for (const row of result.countsOrdered || []) {
+          merged.set(row.bucket, (merged.get(row.bucket) || 0) + row.count)
+        }
+      }
+      const countsOrdered = [...merged.entries()]
+        .map(([bucket, count]) => ({ bucket, count }))
+        .sort((a, b) => a.bucket.localeCompare(b.bucket))
+      setBucketCounts(countsOrdered)
+      setBucketScanMeta({
+        imageCount,
+        forcedUpscale
+      })
+      if (folderNotes.length > 1) {
+        onStatus(`Buckets: ${folderNotes.join(' · ')}`)
+      }
+    } catch (err) {
+      setBucketScanError(err instanceof Error ? err.message : String(err))
+      setBucketCounts(null)
+      setBucketScanMeta(null)
+    } finally {
+      setBucketScanBusy(false)
+    }
+  }
+
+  const startTrain = async (mode: 'restart' | 'resume' = 'restart') => {
+    const normalized = normalizeLoraTrainJob(draftRef.current)
+    const hasFolder = normalized.datasets.some((ds) => Boolean(ds.folder_path?.trim()))
+    if (!hasFolder) {
+      setActiveSection('dataset')
+      onStatus('Choose a DatasetEdit preset first', true)
+      return
+    }
+    if (normalized.model.arch !== 'krea2') {
+      onStatus('Only Krea 2 is supported', true)
+      return
+    }
+    if (mode === 'resume') {
+      const target = outputCheckpoint?.kind === 'resume' ? outputCheckpoint : null
+      if (!target || target.step >= (normalized.train.steps || 0)) {
+        onStatus('No resumable checkpoint found; increase Steps or use Restart', true)
+        return
+      }
+    }
+    const py = appSettings.pythonPath.trim()
+    userStoppedTrainRef.current = false
+    resetTrainSessionData()
+    const started = Date.now()
+    setTrainStartedAt(started)
+    trainStartedAtRef.current = started
+    setFinalElapsedMs(null)
+    setTrainComplete(false)
+    setTrainFailed(false)
+    setNowTick(started)
+    setShowTrainSession(true)
+    setTraining(true)
+    const resumeCk =
+      mode === 'resume' && outputCheckpoint?.kind === 'resume' ? outputCheckpoint : null
+    onStatus(
+      resumeCk ? `Resuming from step ${resumeCk.step}…` : 'Training started…',
+      false,
+      { sticky: true }
+    )
+    const configJson = serializeTrainConfig(normalized, {
+      huggingface_token: appSettings.huggingfaceToken || undefined,
+      resume_from: resumeCk ? resumeCk.path : undefined
+    })
+    const result = await window.api.startTrain({
+      pythonPath: py || undefined,
+      configJson,
+      device: normalized.device
+    })
+    if (!result.ok) {
+      setTraining(false)
+      exitTrainSessionUi()
+      resetTrainSessionData()
+      onStatus(result.error || 'Failed to start training', true)
+      void refreshResumeTarget()
+    }
+  }
+
+  const stopTrain = async () => {
+    userStoppedTrainRef.current = true
+    await window.api.stopTrain()
+    setTraining(false)
+    const started = trainStartedAtRef.current
+    if (started != null) {
+      setFinalElapsedMs((prev) => (prev != null ? prev : Date.now() - started))
+    }
+    setTrainFailed(true)
+    exitTrainSessionUi()
+    onStatus('Training stopped')
+    void refreshResumeTarget()
+  }
+
+  const backFromTrainSession = () => {
+    exitTrainSessionUi()
+    void refreshResumeTarget()
+  }
+
+  const viewTrainResults = () => {
+    setShowTrainSession(true)
+  }
+
+  const requestRestartTrain = () => {
+    if (outputCheckpoint) {
+      setShowRestartWarning(true)
+      return
+    }
+    void startTrain('restart')
+  }
+
+  const confirmRestartTrain = () => {
+    setShowRestartWarning(false)
+    void startTrain('restart')
+  }
+
+  const elapsedMs =
+    finalElapsedMs !== null
+      ? finalElapsedMs
+      : trainStartedAt !== null
+        ? Math.max(0, nowTick - trainStartedAt)
+        : 0
+  const etaMs =
+    trainComplete || trainFailed
+      ? 0
+      : progress && progress.step > 0 && progress.total > progress.step && elapsedMs > 0
+        ? ((progress.total - progress.step) * elapsedMs) / progress.step
+        : null
+  const stepsLabel = progress
+    ? `${progress.step}/${progress.total}`
+    : `0/${draft.train.steps || 0}`
+  const sampleItems = useMemo(
+    () =>
+      [...trainSamples].sort((a, b) => {
+        const promptA = samplePromptIndex(a)
+        const promptB = samplePromptIndex(b)
+        const stepA = typeof a.step === 'number' ? a.step : -1
+        const stepB = typeof b.step === 'number' ? b.step : -1
+        // Within prompt: newest → oldest (step high → low)
+        return (
+          promptA - promptB ||
+          stepB - stepA ||
+          b.mtimeMs - a.mtimeMs ||
+          a.name.localeCompare(b.name)
+        )
+      }),
+    [trainSamples]
+  )
+  const sampleGroups = useMemo(() => {
+    const map = new Map<number, TrainSampleItem[]>()
+    for (const item of sampleItems) {
+      const idx = samplePromptIndex(item)
+      const list = map.get(idx)
+      if (list) list.push(item)
+      else map.set(idx, [item])
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([promptIndex, items]) => ({ promptIndex, items }))
+  }, [sampleItems])
+  const sampleLightboxIndex = sampleLightboxPath
+    ? sampleItems.findIndex((item) => item.path === sampleLightboxPath)
+    : -1
+  const sampleLightboxItem =
+    sampleLightboxIndex >= 0 ? sampleItems[sampleLightboxIndex] : null
+  const sampleLightboxGroupItems = useMemo(() => {
+    if (!sampleLightboxItem) return []
+    const idx = samplePromptIndex(sampleLightboxItem)
+    return sampleItems.filter((item) => samplePromptIndex(item) === idx)
+  }, [sampleLightboxItem, sampleItems])
+  const sampleLightboxGroupIndex = sampleLightboxItem
+    ? sampleLightboxGroupItems.findIndex((item) => item.path === sampleLightboxItem.path)
+    : -1
+
+  const pickSampleInPromptGroup = useCallback(
+    (
+      targetItems: TrainSampleItem[],
+      fromItem: TrainSampleItem,
+      fromGroupIndex: number
+    ): TrainSampleItem | null => {
+      if (targetItems.length === 0) return null
+      const fromStep =
+        typeof fromItem.step === 'number' && Number.isFinite(fromItem.step)
+          ? fromItem.step
+          : null
+      if (fromStep !== null) {
+        const exact = targetItems.find((item) => item.step === fromStep)
+        if (exact) return exact
+        let best = targetItems[0]
+        let bestDist = Number.POSITIVE_INFINITY
+        for (const item of targetItems) {
+          if (typeof item.step !== 'number' || !Number.isFinite(item.step)) continue
+          const dist = Math.abs(item.step - fromStep)
+          if (dist < bestDist) {
+            bestDist = dist
+            best = item
+          }
+        }
+        if (bestDist !== Number.POSITIVE_INFINITY) return best
+      }
+      if (fromGroupIndex >= 0 && fromGroupIndex < targetItems.length) {
+        return targetItems[fromGroupIndex]
+      }
+      return targetItems[0]
+    },
+    []
+  )
+
+  const openAdjacentPromptGroup = useCallback(
+    (direction: -1 | 1) => {
+      if (!sampleLightboxItem || sampleGroups.length <= 1) return
+      const currentPrompt = samplePromptIndex(sampleLightboxItem)
+      const groupPos = sampleGroups.findIndex((g) => g.promptIndex === currentPrompt)
+      if (groupPos < 0) return
+      const nextPos =
+        (groupPos + direction + sampleGroups.length) % sampleGroups.length
+      const target = sampleGroups[nextPos]
+      const picked = pickSampleInPromptGroup(
+        target.items,
+        sampleLightboxItem,
+        sampleLightboxGroupIndex
+      )
+      if (picked) setSampleLightboxPath(picked.path)
+    },
+    [
+      sampleLightboxItem,
+      sampleGroups,
+      sampleLightboxGroupIndex,
+      pickSampleInPromptGroup
+    ]
+  )
+
+  useEffect(() => {
+    if (!spikeLightbox) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSpikeLightbox(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [spikeLightbox])
+
+  useEffect(() => {
+    if (resultsTab !== 'sample') setSampleLightboxPath(null)
+  }, [resultsTab])
+
+  useEffect(() => {
+    if (!sampleLightboxPath) return
+    if (sampleLightboxIndex >= 0) return
+    if (sampleItems.length > 0) {
+      setSampleLightboxPath(sampleItems[0].path)
+    } else {
+      setSampleLightboxPath(null)
+    }
+  }, [sampleLightboxPath, sampleLightboxIndex, sampleItems])
+
+  useEffect(() => {
+    if (!sampleLightboxItem || sampleLightboxGroupItems.length === 0) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSampleLightboxPath(null)
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        const next =
+          sampleLightboxGroupIndex <= 0
+            ? sampleLightboxGroupItems.length - 1
+            : sampleLightboxGroupIndex - 1
+        setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        const next =
+          sampleLightboxGroupIndex >= sampleLightboxGroupItems.length - 1
+            ? 0
+            : sampleLightboxGroupIndex + 1
+        setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        openAdjacentPromptGroup(-1)
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        openAdjacentPromptGroup(1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [
+    sampleLightboxItem,
+    sampleLightboxGroupIndex,
+    sampleLightboxGroupItems,
+    openAdjacentPromptGroup
+  ])
+
+  const promptTextForIndex = (promptIndex: number): string => {
+    const entry = draft.sample.prompts[promptIndex - 1]
+    return entry?.prompt?.trim() || ''
+  }
+
+  const sectionTitle = SECTIONS.find((s) => s.id === activeSection)?.label ?? ''
+  const trainSessionTitle = trainComplete
+    ? 'Training done'
+    : trainFailed
+      ? userStoppedTrainRef.current
+        ? 'Training stopped'
+        : 'Training failed'
+      : 'Training...'
+
+  return (
+    <div className="lora-train">
+      {(showBanner) && (
+        <div className="lora-model-banner" role="status">
+          <p>Model check failed: {modelCheckError}</p>
+          <div className="lora-model-banner-actions">
+            <button type="button" onClick={() => void refreshModelStatus()} disabled={modelChecking}>
+              {modelChecking ? 'Checking…' : 'Retry'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="lora-train-body">
+        <nav className="lora-nav" aria-label="Training settings sections">
+          {showTrainSession ? (
+            <div className="lora-train-status">
+              <p className="lora-train-status-title">{trainSessionTitle}</p>
+              <div className="lora-train-status-steps-block">
+                <p className="lora-train-status-steps">{stepsLabel} Steps</p>
+                <p className="lora-train-status-avg">
+                  {secPerStepAvg !== null
+                    ? `${secPerStepAvg.toFixed(1)} sec/step avg.`
+                    : '--.- sec/step avg.'}
+                </p>
+              </div>
+              <p className="lora-train-status-line">Elapsed: {formatHms(elapsedMs)}</p>
+              <p className="lora-train-status-line">
+                ETA: {etaMs !== null ? formatHms(etaMs) : '--:--:--'}
+              </p>
+            </div>
+          ) : (
+            <div className="lora-nav-items">
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`lora-nav-item${activeSection === s.id ? ' active' : ''}`}
+                  aria-current={activeSection === s.id ? 'page' : undefined}
+                  onClick={() => setActiveSection(s.id)}
+                >
+                  <span className="lora-nav-label">{s.label}</span>
+                  <span className="lora-nav-hint">{s.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="lora-nav-actions">
+            {training ? (
+              <button type="button" className="danger" onClick={() => void stopTrain()}>
+                Stop
+              </button>
+            ) : showTrainSession ? (
+              <button type="button" className="primary" onClick={backFromTrainSession}>
+                Back
+              </button>
+            ) : (
+              <>
+                {lossHistory.length > 0 || trainLogs.length > 0 ? (
+                  <button type="button" onClick={viewTrainResults}>
+                    View results
+                  </button>
+                ) : null}
+                {outputCheckpoint?.kind === 'resume' ? (
+                  <>
+                    <button type="button" onClick={requestRestartTrain}>
+                      Restart
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void startTrain('resume')}
+                    >
+                      Resume from {outputCheckpoint.step}
+                    </button>
+                  </>
+                ) : outputCheckpoint?.kind === 'done' ? (
+                  <>
+                    <button type="button" onClick={requestRestartTrain}>
+                      Restart
+                    </button>
+                    <button type="button" className="primary" disabled aria-disabled="true">
+                      Train Done
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="primary" onClick={requestRestartTrain}>
+                    Start Train
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </nav>
+
+        {showTrainSession ? (
+          <div className="lora-train-mid">
+            <div className="lora-train-loss-panel">
+              <div className="lora-train-loss-header">
+                <div className="lora-train-results-tabs" role="tablist" aria-label="Training results view">
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`lora-train-results-tab${resultsTab === 'loss' ? ' active' : ''}`}
+                    aria-selected={resultsTab === 'loss'}
+                    onClick={() => setResultsTab('loss')}
+                  >
+                    Loss graph
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`lora-train-results-tab${resultsTab === 'sample' ? ' active' : ''}`}
+                    aria-selected={resultsTab === 'sample'}
+                    onClick={() => setResultsTab('sample')}
+                  >
+                    Sample image
+                    {sampleItems.length > 0 ? ` (${sampleItems.length})` : ''}
+                  </button>
+                </div>
+                {resultsTab === 'loss' ? (
+                  <div className="lora-train-loss-legend">
+                    <label
+                      className={`lora-train-loss-legend-item${showLossCurve ? '' : ' is-off'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="lora-train-loss-check"
+                        checked={showLossCurve}
+                        onChange={(e) => setShowLossCurve(e.target.checked)}
+                        aria-label="Show loss curve"
+                      />
+                      <span className="lora-train-loss-swatch is-raw" />
+                      loss
+                      {lossHistory.length > 0
+                        ? `=${lossHistory[lossHistory.length - 1].loss.toFixed(4)}`
+                        : ''}
+                    </label>
+                    <label
+                      className={`lora-train-loss-legend-item${showAvgLossCurve ? '' : ' is-off'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="lora-train-loss-check"
+                        checked={showAvgLossCurve}
+                        onChange={(e) => setShowAvgLossCurve(e.target.checked)}
+                        aria-label="Show avg. loss curve"
+                      />
+                      <span className="lora-train-loss-swatch is-avg" />
+                      avg. loss
+                      {lossHistory.length > 0
+                        ? `=${cumulativeAvgLoss(lossHistory, lossHistory.length - 1).toFixed(4)}`
+                        : ''}
+                    </label>
+                  </div>
+                ) : (
+                  <div className="lora-train-sample-summary">
+                    {sampleLoading
+                      ? 'Loading samples…'
+                      : sampleItems.length > 0
+                        ? `${sampleItems.length} sample${sampleItems.length === 1 ? '' : 's'} · ${sampleGroups.length} prompt${sampleGroups.length === 1 ? '' : 's'}`
+                        : 'No samples yet'}
+                  </div>
+                )}
+              </div>
+              {resultsTab === 'loss' ? (
+                <LossChart
+                  points={lossHistory}
+                  spikes={lossSpikes}
+                  showLoss={showLossCurve}
+                  showAvgLoss={showAvgLossCurve}
+                  onSpikeClick={(s) => setSpikeLightbox(s)}
+                />
+              ) : (
+                <div className="lora-train-sample-panel">
+                  {sampleError ? <p className="test-err">{sampleError}</p> : null}
+                  {!sampleError && sampleItems.length === 0 ? (
+                    <div className="lora-train-sample-empty">
+                      {sampleLoading ? 'Loading sample images…' : 'No samples yet'}
+                    </div>
+                  ) : sampleGroups.length > 0 ? (
+                    <div className="lora-train-sample-groups" role="list" aria-label="Training samples by prompt">
+                      {sampleGroups.map((group) => {
+                        const promptText = promptTextForIndex(group.promptIndex)
+                        return (
+                          <section
+                            key={group.promptIndex}
+                            className="lora-train-sample-group"
+                            role="listitem"
+                            aria-label={`Prompt ${group.promptIndex}`}
+                          >
+                            <header className="lora-train-sample-group-header">
+                              <span className="lora-train-sample-group-title">
+                                Prompt {group.promptIndex}
+                              </span>
+                              {promptText ? (
+                                <span className="lora-train-sample-group-prompt" title={promptText}>
+                                  {promptText}
+                                </span>
+                              ) : null}
+                              <span className="lora-train-sample-group-count">
+                                {group.items.length} step{group.items.length === 1 ? '' : 's'}
+                              </span>
+                            </header>
+                            <SamplePromptStrip
+                              items={group.items}
+                              onOpen={setSampleLightboxPath}
+                            />
+                          </section>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <div className="lora-train-log-panel">
+              <h3 className="lora-panel-title">Log</h3>
+              <pre className="lora-train-log">
+                {trainLogs.length > 0 ? (
+                  trainLogs.map((line, i) => (
+                    <span
+                      key={`${i}:${line.slice(0, 48)}`}
+                      className={
+                        /^WARNING:/i.test(line) || /^Warning:/i.test(line)
+                          ? 'lora-train-log-line is-warn'
+                          : 'lora-train-log-line'
+                      }
+                    >
+                      {line}
+                      {'\n'}
+                    </span>
+                  ))
+                ) : (
+                  'Waiting for trainer output…'
+                )}
+                <span ref={logEndRef} />
+              </pre>
+            </div>
+          </div>
+        ) : (
+        <div className="lora-train-panel">
+          <h3 className="lora-panel-title">{sectionTitle}</h3>
+
+          {activeSection === 'basics' && (
+            <div className="lora-grid">
+              <Field label="Job name">
+                <input
+                  type="text"
+                  value={draft.name}
+                  disabled={training}
+                  onChange={(e) => patch((p) => ({ ...p, name: e.target.value }))}
+                />
+              </Field>
+              <Field label="Output folder" hint="Where checkpoints and LoRA weights are saved">
+                <div className="model-row">
+                  <input
+                    type="text"
+                    value={draft.training_folder}
+                    disabled={training}
+                    onChange={(e) =>
+                      patch((p) => ({ ...p, training_folder: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    disabled={training}
+                    onClick={() => void browseTrainingFolder()}
+                  >
+                    Browse
+                  </button>
+                </div>
+              </Field>
+              <Field label="GPU device">
+                <GpuDeviceSelect
+                  value={draft.device}
+                  onChange={(device) => patch((p) => ({ ...p, device }))}
+                />
+              </Field>
+              <Field
+                label="Trigger word"
+                hint="Optional. Prefixed onto captions when missing."
+              >
+                <input
+                  type="text"
+                  value={draft.trigger_word}
+                  disabled={training}
+                  onChange={(e) => patch((p) => ({ ...p, trigger_word: e.target.value }))}
+                />
+              </Field>
+              <Field
+                label="Train base (Raw)"
+                hint="Official: train LoRA on Krea-2-Raw"
+              >
+                <div className="model-row">
+                  <input
+                    type="text"
+                    value={
+                      isRoleDownloading('train')
+                        ? downloadInputLabel(dlPct, dlDone, dlTotal)
+                        : draft.model.train_name_or_path
+                    }
+                    disabled={training || isRoleDownloading('train')}
+                    readOnly={isRoleDownloading('train')}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        model: {
+                          ...p.model,
+                          train_name_or_path: e.target.value,
+                          name_or_path: e.target.value,
+                          arch: 'krea2'
+                        }
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    disabled={training || isRoleDownloading('train')}
+                    onClick={() =>
+                      patch((p) => ({
+                        ...p,
+                        model: {
+                          ...p.model,
+                          train_name_or_path: KREA2_RAW,
+                          name_or_path: KREA2_RAW,
+                          arch: 'krea2'
+                        }
+                      }))
+                    }
+                  >
+                    Raw
+                  </button>
+                  <span
+                    className={`lora-model-status status-${statusForRole('train')?.status || 'unknown'}`}
+                    title={statusForRole('train')?.message || undefined}
+                  >
+                    {statusLabel(statusForRole('train')?.status)}
+                  </span>
+                  {renderModelDlButton('train')}
+                </div>
+              </Field>
+            </div>
+          )}
+
+          {activeSection === 'dataset' && (
+            <div className="lora-grid">
+              <div className="lora-datasets">
+                <div className="lora-datasets-header">
+                  <span>Datasets</span>
+                  <p className="field-hint">
+                    Each row is a DatasetEdit folder with its own repeats. Resolution / dropout /
+                    shuffle / cache are shared.
+                  </p>
+                </div>
+                {datasetEntries.map((ds, index) => (
+                  <div key={`ds-${index}`} className="lora-dataset-row">
+                    <Field label={index === 0 ? 'Folder' : `Folder ${index + 1}`}>
+                      <select
+                        className="lora-folder-pick"
+                        aria-label={`DatasetEdit preset ${index + 1}`}
+                        disabled={
+                          training || (datasetFolders.length === 0 && !ds.folder_path)
+                        }
+                        value={ds.folder_path || ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          patch((p) => ({
+                            ...p,
+                            datasets: p.datasets.map((row, i) =>
+                              i === index ? { ...row, folder_path: v } : row
+                            )
+                          }))
+                        }}
+                        title={ds.folder_path || undefined}
+                      >
+                        <option value="">
+                          {datasetFolders.length === 0
+                            ? 'No DatasetEdit presets — add one in DatasetEdit'
+                            : 'Select DatasetEdit preset…'}
+                        </option>
+                        {ds.folder_path && !datasetFolders.includes(ds.folder_path) ? (
+                          <option value={ds.folder_path}>
+                            {folderLabel(ds.folder_path)} (not in DatasetEdit)
+                          </option>
+                        ) : null}
+                        {datasetFolders.map((dir) => (
+                          <option key={dir} value={dir} title={dir}>
+                            {folderLabel(dir)}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Repeats">
+                      <NumberField
+                        min={1}
+                        value={ds.num_repeats}
+                        emptyFallback={1}
+                        disabled={training}
+                        onChange={(n) =>
+                          patch((p) => ({
+                            ...p,
+                            datasets: p.datasets.map((row, i) =>
+                              i === index
+                                ? { ...row, num_repeats: Math.max(1, Math.round(n)) }
+                                : row
+                            )
+                          }))
+                        }
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      className="lora-prompt-remove"
+                      disabled={training || datasetEntries.length <= 1}
+                      title={
+                        datasetEntries.length <= 1
+                          ? 'At least one dataset row is required'
+                          : 'Remove dataset'
+                      }
+                      onClick={() =>
+                        patch((p) => ({
+                          ...p,
+                          datasets:
+                            p.datasets.length <= 1
+                              ? p.datasets
+                              : p.datasets.filter((_, i) => i !== index)
+                        }))
+                      }
+                    >
+                      −
+                    </button>
+                  </div>
+                ))}
+                <div className="lora-prompt-add">
+                  <button
+                    type="button"
+                    disabled={training}
+                    onClick={() =>
+                      patch((p) => {
+                        const base = p.datasets[0] ?? {
+                          folder_path: '',
+                          num_repeats: 1,
+                          caption_ext: 'txt',
+                          caption_dropout_rate: 0.05,
+                          shuffle_tokens: false,
+                          cache_latents_to_disk: true,
+                          resolution: [1024]
+                        }
+                        return {
+                          ...p,
+                          datasets: [
+                            ...p.datasets,
+                            {
+                              folder_path: '',
+                              num_repeats: 1,
+                              caption_ext: 'txt',
+                              caption_dropout_rate: base.caption_dropout_rate,
+                              shuffle_tokens: base.shuffle_tokens,
+                              cache_latents_to_disk: base.cache_latents_to_disk,
+                              resolution: [...base.resolution]
+                            }
+                          ]
+                        }
+                      })
+                    }
+                  >
+                    Add dataset
+                  </button>
+                </div>
+              </div>
+              <Field
+                label="Resolutions"
+                hint="Shared for all datasets. Always AR bucket (step=64); long side picks closest tier without unnecessary upscale."
+              >
+                <div className="lora-resolution-grid" role="group" aria-label="Resolutions">
+                  {RESOLUTION_OPTIONS.map((size) => {
+                    const on = ds0.resolution.includes(size)
+                    return (
+                      <div
+                        key={size}
+                        className={`lora-toggle lora-resolution-toggle${on ? ' is-on' : ''}${
+                          training ? ' is-disabled' : ''
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          role="switch"
+                          className="lora-switch"
+                          aria-checked={on}
+                          aria-label={`${size}`}
+                          disabled={training}
+                          onClick={() => {
+                            setBucketCounts(null)
+                            setBucketScanMeta(null)
+                            setBucketScanError(null)
+                            patchSharedDataset((ds) => {
+                              const has = ds.resolution.includes(size)
+                              if (has) {
+                                const next = ds.resolution.filter((r) => r !== size)
+                                return {
+                                  ...ds,
+                                  resolution: next.length > 0 ? next : [size]
+                                }
+                              }
+                              return {
+                                ...ds,
+                                resolution: [...ds.resolution, size].sort((a, b) => a - b)
+                              }
+                            })
+                          }}
+                        >
+                          <span className="lora-switch-knob" aria-hidden="true" />
+                        </button>
+                        <span className="lora-resolution-value">{size}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Field>
+              <div className="field">
+                <div className="model-row">
+                  <button
+                    type="button"
+                    disabled={training || bucketScanBusy || !hasDataset}
+                    onClick={() => void scanBuckets()}
+                  >
+                    {bucketScanBusy ? 'Scanning…' : 'Scan buckets'}
+                  </button>
+                </div>
+                {bucketScanError ? <p className="test-err">{bucketScanError}</p> : null}
+                {bucketScanMeta ? (
+                  <p className="hint">
+                    {bucketScanMeta.imageCount} images
+                    {filledDatasets.length > 1 ? ` · ${filledDatasets.length} folders` : ''} ·
+                    forced upscale {bucketScanMeta.forcedUpscale} · tiers{' '}
+                    {(ds0.resolution.length ? ds0.resolution : [1024]).join(', ')}
+                  </p>
+                ) : null}
+                {bucketCounts && bucketCounts.length > 0 ? (
+                  <div className="lora-bucket-stats" role="table" aria-label="Bucket counts">
+                    {bucketCounts.map((row) => (
+                      <div key={row.bucket} className="lora-bucket-stats-row" role="row">
+                        <span className="lora-bucket-stats-size">{row.bucket}</span>
+                        <span className="lora-bucket-stats-count">{row.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <Field label="Caption dropout" hint="0–1; randomly blank captions during training">
+                <NumberField
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={ds0.caption_dropout_rate}
+                  emptyFallback={0}
+                  disabled={training}
+                  onChange={(n) =>
+                    patchSharedDataset((ds) => ({ ...ds, caption_dropout_rate: n }))
+                  }
+                />
+              </Field>
+              <ToggleField
+                label="Shuffle caption tokens"
+                checked={ds0.shuffle_tokens}
+                disabled={training}
+                onChange={(v) => patchSharedDataset((ds) => ({ ...ds, shuffle_tokens: v }))}
+              />
+              <ToggleField
+                label="Cache latents to disk"
+                hint="Encode images once with VAE. Off = encode every step (high VRAM, ~40GB+)"
+                checked={ds0.cache_latents_to_disk}
+                disabled={training}
+                onChange={(v) =>
+                  patchSharedDataset((ds) => ({ ...ds, cache_latents_to_disk: v }))
+                }
+              />
+              <ToggleField
+                label="Cache text embeddings to disk"
+                hint="Encode captions once. Off = encode every step (more VRAM)"
+                checked={draft.train.cache_text_embeddings}
+                disabled={training}
+                onChange={(v) =>
+                  patch((p) => ({
+                    ...p,
+                    train: { ...p.train, cache_text_embeddings: v }
+                  }))
+                }
+              />
+            </div>
+          )}
+
+          {activeSection === 'train' && (
+            <div className="lora-grid">
+              <div className="lora-field-row lora-field-row-3">
+                <Field label="Training steps">
+                  <NumberField
+                    min={1}
+                    value={draft.train.steps}
+                    emptyFallback={1}
+                    disabled={training}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, steps: n }
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Batch size">
+                  <NumberField
+                    min={1}
+                    value={draft.train.batch_size}
+                    emptyFallback={1}
+                    disabled={training}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, batch_size: n }
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Gradient accumulation">
+                  <NumberField
+                    min={1}
+                    value={draft.train.gradient_accumulation_steps}
+                    emptyFallback={1}
+                    disabled={training}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        train: {
+                          ...p.train,
+                          gradient_accumulation_steps: n
+                        }
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+              <div className="lora-field-row">
+                <Field label="Learning rate">
+                  <NumberField
+                    min={0}
+                    step="any"
+                    value={draft.train.lr}
+                    emptyFallback={0}
+                    disabled={training}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, lr: n }
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Optimizer">
+                  <select
+                    value={draft.train.optimizer}
+                    disabled={training}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, optimizer: e.target.value }
+                      }))
+                    }
+                  >
+                    <option value="adamw8bit">adamw8bit</option>
+                    <option value="adamw">adamw</option>
+                    <option value="prodigy">prodigy</option>
+                    <option value="adafactor">adafactor</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="lora-field-row">
+                <Field
+                  label="LR scheduler"
+                  hint="Warmup then hold peak LR, or warmup then cosine decay"
+                >
+                  <select
+                    value={draft.train.lr_scheduler}
+                    disabled={training}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        train: {
+                          ...p.train,
+                          lr_scheduler:
+                            e.target.value === 'cosine' ? 'cosine' : 'constant_with_warmup'
+                        }
+                      }))
+                    }
+                  >
+                    <option value="constant_with_warmup">constant_with_warmup</option>
+                    <option value="cosine">cosine</option>
+                  </select>
+                </Field>
+                <Field
+                  label="Warmup %"
+                  hint={(() => {
+                    const updates = Math.ceil(
+                      Math.max(1, draft.train.steps) /
+                        Math.max(1, draft.train.gradient_accumulation_steps)
+                    )
+                    if (draft.train.warmup_percent <= 0) return '0% = off'
+                    const n = Math.min(
+                      Math.max(0, Math.round(updates * (draft.train.warmup_percent / 100))),
+                      Math.max(0, updates - 1)
+                    )
+                    return `≈ ${n} / ${updates} optimizer updates`
+                  })()}
+                >
+                  <div className="lora-offload-pct">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={draft.train.warmup_percent}
+                      disabled={training}
+                      onChange={(e) =>
+                        patch((p) => ({
+                          ...p,
+                          train: {
+                            ...p.train,
+                            warmup_percent: Math.min(
+                              100,
+                              Math.max(0, Math.round(Number(e.target.value) / 5) * 5)
+                            )
+                          }
+                        }))
+                      }
+                    />
+                    <span className="lora-offload-pct-value" aria-label="Warmup percent">
+                      {draft.train.warmup_percent <= 0
+                        ? 'Off'
+                        : `${draft.train.warmup_percent}%`}
+                    </span>
+                  </div>
+                </Field>
+              </div>
+              <div className="lora-field-row">
+                <Field label="Precision (dtype)">
+                  <select
+                    value={draft.train.dtype}
+                    disabled={training}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, dtype: e.target.value }
+                      }))
+                    }
+                  >
+                    <option value="bf16">bf16</option>
+                    <option value="fp16">fp16</option>
+                    <option value="fp32">fp32</option>
+                  </select>
+                </Field>
+                <Field label="Quantize">
+                  <select
+                    value={draft.model.quantize}
+                    disabled={training}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        model: { ...p.model, quantize: e.target.value as typeof p.model.quantize }
+                      }))
+                    }
+                  >
+                    <option value="none">-NONE-</option>
+                    <option value="qfloat8">qfloat8</option>
+                    <option value="float8">float8</option>
+                    <option value="int8">INT8</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Noise scheduler" hint="Krea 2 uses flow matching">
+                <select
+                  value={draft.train.noise_scheduler}
+                  disabled={training}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      train: { ...p.train, noise_scheduler: e.target.value }
+                    }))
+                  }
+                >
+                  <option value="flowmatch">flowmatch</option>
+                  <option value="ddpm">ddpm</option>
+                  <option value="euler">euler</option>
+                </select>
+              </Field>
+              <div className="lora-field-row">
+                <ToggleField
+                  label="Low VRAM mode"
+                  hint="On: stage TE/VAE off GPU when DiT is busy + force gradient checkpointing. Does not control DiT layer offload."
+                  checked={draft.model.low_vram}
+                  disabled={training}
+                  onChange={(v) =>
+                    patch((p) => ({ ...p, model: { ...p.model, low_vram: v } }))
+                  }
+                />
+                <ToggleField
+                  label="Gradient checkpointing"
+                  hint="Uses less VRAM; slightly slower"
+                  checked={draft.train.gradient_checkpointing}
+                  disabled={training}
+                  onChange={(v) =>
+                    patch((p) => ({
+                      ...p,
+                      train: { ...p.train, gradient_checkpointing: v }
+                    }))
+                  }
+                />
+              </div>
+              <Field label="Save weights dtype">
+                <select
+                  value={draft.save.dtype}
+                  disabled={training}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      save: { ...p.save, dtype: e.target.value }
+                    }))
+                  }
+                >
+                  <option value="bf16">bf16</option>
+                  <option value="fp16">fp16</option>
+                  <option value="fp32">fp32</option>
+                </select>
+              </Field>
+              <div className="lora-field-row">
+                <Field label="Save every N steps">
+                  <NumberField
+                    min={1}
+                    value={draft.save.save_every}
+                    emptyFallback={1}
+                    disabled={training}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        save: { ...p.save, save_every: n }
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Max checkpoints to keep">
+                  <NumberField
+                    min={1}
+                    value={draft.save.max_step_saves_to_keep}
+                    emptyFallback={1}
+                    disabled={training}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        save: {
+                          ...p.save,
+                          max_step_saves_to_keep: n
+                        }
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'lora' && (
+            <div className="lora-grid">
+              <Field label="Network type" hint="locon uses PEFT LoHa (LyCORIS)">
+                <select
+                  value={draft.network.type}
+                  disabled={training}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      network: { ...p.network, type: e.target.value }
+                    }))
+                  }
+                >
+                  <option value="lora">lora</option>
+                  <option value="locon">locon</option>
+                  <option value="lokr">lokr</option>
+                </select>
+              </Field>
+              <Field label="Rank" hint="linear — higher = more capacity / VRAM">
+                <NumberField
+                  min={1}
+                  value={draft.network.linear}
+                  emptyFallback={1}
+                  disabled={training}
+                  onChange={(n) =>
+                    patch((p) => ({
+                      ...p,
+                      network: { ...p.network, linear: n }
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Alpha" hint="linear_alpha — often equal to rank">
+                <NumberField
+                  min={1}
+                  value={draft.network.linear_alpha}
+                  emptyFallback={1}
+                  disabled={training}
+                  onChange={(n) =>
+                    patch((p) => ({
+                      ...p,
+                      network: {
+                        ...p.network,
+                        linear_alpha: n
+                      }
+                    }))
+                  }
+                />
+              </Field>
+            </div>
+          )}
+
+          {activeSection === 'sample' && (
+            <>
+              <div className="lora-grid">
+                <div className="lora-field-row">
+                  <ToggleField
+                    label="Enable sampling during training"
+                    hint="Off by default (faster). Mid-train samples use Train-on (Raw) + LoRA."
+                    checked={!draft.train.disable_sampling}
+                    disabled={training}
+                    onChange={(v) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, disable_sampling: !v }
+                      }))
+                    }
+                  />
+                  <ToggleField
+                    label="Skip first sample"
+                    hint="When off, sample once at step 0 before training starts."
+                    checked={draft.train.skip_first_sample}
+                    disabled={training || draft.train.disable_sampling}
+                    onChange={(v) =>
+                      patch((p) => ({
+                        ...p,
+                        train: { ...p.train, skip_first_sample: v }
+                      }))
+                    }
+                  />
+                </div>
+                <Field label="Sample every N steps">
+                  <NumberField
+                    min={1}
+                    value={draft.sample.sample_every}
+                    emptyFallback={1}
+                    disabled={training || draft.train.disable_sampling}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        sample: {
+                          ...p.sample,
+                          sample_every: n
+                        }
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Sample steps" hint="Denoise steps for mid-train preview (Raw)">
+                  <NumberField
+                    min={1}
+                    value={draft.sample.sample_steps}
+                    emptyFallback={1}
+                    disabled={training || draft.train.disable_sampling}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        sample: {
+                          ...p.sample,
+                          sample_steps: n
+                        }
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Guidance" hint="CFG scale; 0 disables guidance">
+                  <NumberField
+                    step="any"
+                    value={draft.sample.guidance_scale}
+                    emptyFallback={0}
+                    disabled={training || draft.train.disable_sampling}
+                    onChange={(n) =>
+                      patch((p) => ({
+                        ...p,
+                        sample: {
+                          ...p.sample,
+                          guidance_scale: n
+                        }
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+
+              <div className="lora-prompt-groups">
+                <div className="lora-prompt-groups-header">
+                  <span>Sample prompts</span>
+                  <p className="field-hint">
+                    Each group has its own prompt, size, and seed
+                  </p>
+                </div>
+                {draft.sample.prompts.map((item, index) => (
+                  <div key={index} className="lora-prompt-group">
+                    <label className="field">
+                      <span>Prompt {index + 1}</span>
+                      <input
+                        type="text"
+                        value={item.prompt}
+                        disabled={training || draft.train.disable_sampling}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          patch((p) => ({
+                            ...p,
+                            sample: {
+                              ...p.sample,
+                              prompts: p.sample.prompts.map((pr, i) =>
+                                i === index ? { ...pr, prompt: value } : pr
+                              )
+                            }
+                          }))
+                        }}
+                        spellCheck={false}
+                      />
+                    </label>
+                    <div className="lora-prompt-meta">
+                      <label className="field">
+                        <span>Width</span>
+                        <NumberField
+                          min={64}
+                          step={64}
+                          value={item.width}
+                          emptyFallback={64}
+                          disabled={training || draft.train.disable_sampling}
+                          onChange={(n) => {
+                            patch((p) => ({
+                              ...p,
+                              sample: {
+                                ...p.sample,
+                                prompts: p.sample.prompts.map((pr, i) =>
+                                  i === index ? { ...pr, width: n } : pr
+                                )
+                              }
+                            }))
+                          }}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Height</span>
+                        <NumberField
+                          min={64}
+                          step={64}
+                          value={item.height}
+                          emptyFallback={64}
+                          disabled={training || draft.train.disable_sampling}
+                          onChange={(n) => {
+                            patch((p) => ({
+                              ...p,
+                              sample: {
+                                ...p.sample,
+                                prompts: p.sample.prompts.map((pr, i) =>
+                                  i === index ? { ...pr, height: n } : pr
+                                )
+                              }
+                            }))
+                          }}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Seed</span>
+                        <NumberField
+                          value={item.seed}
+                          emptyFallback={0}
+                          disabled={training || draft.train.disable_sampling}
+                          onChange={(n) => {
+                            patch((p) => ({
+                              ...p,
+                              sample: {
+                                ...p.sample,
+                                prompts: p.sample.prompts.map((pr, i) =>
+                                  i === index ? { ...pr, seed: n } : pr
+                                )
+                              }
+                            }))
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="lora-prompt-remove"
+                        aria-label={`Delete prompt ${index + 1}`}
+                        title="Delete group"
+                        disabled={training || draft.train.disable_sampling}
+                        onClick={() =>
+                          patch((p) => ({
+                            ...p,
+                            sample: {
+                              ...p.sample,
+                              prompts: p.sample.prompts.filter((_, i) => i !== index)
+                            }
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="lora-prompt-add">
+                  <button
+                    type="button"
+                    aria-label="Add prompt group"
+                    title="Add prompt group"
+                    disabled={training || draft.train.disable_sampling}
+                    onClick={() =>
+                      patch((p) => {
+                        const last = p.sample.prompts[p.sample.prompts.length - 1]
+                        return {
+                          ...p,
+                          sample: {
+                            ...p.sample,
+                            prompts: [
+                              ...p.sample.prompts,
+                              {
+                                prompt: '',
+                                width: last?.width ?? p.sample.width,
+                                height: last?.height ?? p.sample.height,
+                                seed: (last?.seed ?? p.sample.seed) + 1
+                              }
+                            ]
+                          }
+                        }
+                      })
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeSection === 'advanced' && (
+            <div className="lora-grid">
+              <ToggleField
+                label="Use EMA"
+                checked={draft.train.ema_config.use_ema}
+                disabled={training}
+                onChange={(v) =>
+                  patch((p) => ({
+                    ...p,
+                    train: {
+                      ...p.train,
+                      ema_config: { ...p.train.ema_config, use_ema: v }
+                    }
+                  }))
+                }
+              />
+              <Field label="EMA decay">
+                <NumberField
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={draft.train.ema_config.ema_decay}
+                  emptyFallback={0}
+                  disabled={training}
+                  onChange={(n) =>
+                    patch((p) => ({
+                      ...p,
+                      train: {
+                        ...p.train,
+                        ema_config: {
+                          ...p.train.ema_config,
+                          ema_decay: n
+                        }
+                      }
+                    }))
+                  }
+                />
+              </Field>
+              <ToggleField
+                label="Layer offload"
+                hint="Stream DiT transformer blocks CPU↔GPU to free VRAM (slower). Independent of Low VRAM. Only applies when you enable it."
+                checked={draft.model.layer_offload}
+                disabled={training}
+                onChange={(v) =>
+                  patch((p) => ({ ...p, model: { ...p.model, layer_offload: v } }))
+                }
+              />
+              <Field
+                label="Offload %"
+                hint="0 = Auto (suggest % from free VRAM when Layer offload is on). 1–100 = exact manual %; never auto-raised."
+              >
+                <div className="lora-offload-pct">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={draft.model.layer_offload_percent}
+                    disabled={training || !draft.model.layer_offload}
+                    onChange={(e) =>
+                      patch((p) => ({
+                        ...p,
+                        model: {
+                          ...p.model,
+                          layer_offload_percent: Number(e.target.value)
+                        }
+                      }))
+                    }
+                  />
+                  <span
+                    className="lora-offload-pct-value"
+                    aria-label="Offload percent"
+                  >
+                    {draft.model.layer_offload_percent <= 0
+                      ? 'Auto'
+                      : `${draft.model.layer_offload_percent}%`}
+                  </span>
+                </div>
+              </Field>
+            </div>
+          )}
+        </div>
+        )}
+
+        <ResourceMonitorPane device={draft.device} />
+      </div>
+      <RestartTrainWarningDialog
+        open={showRestartWarning}
+        jobName={draft.name || 'this job'}
+        checkpointStep={outputCheckpoint?.step ?? null}
+        onCancel={() => setShowRestartWarning(false)}
+        onConfirm={confirmRestartTrain}
+      />
+      {spikeLightbox ? (
+        <div
+          className="modal-backdrop lora-spike-lightbox-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="High-loss image preview"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSpikeLightbox(null)
+          }}
+        >
+          <button
+            type="button"
+            className="lora-spike-lightbox"
+            title="Click to close"
+            onClick={() => setSpikeLightbox(null)}
+          >
+            <img
+              src={window.api.toLocalUrl(spikeLightbox.path)}
+              alt=""
+              className="lora-spike-lightbox-image"
+              draggable={false}
+            />
+            <span className="lora-spike-lightbox-meta">
+              Step {spikeLightbox.step} · loss {spikeLightbox.loss.toFixed(4)} ·{' '}
+              {spikeLightbox.path.split(/[/\\]/).pop() ?? spikeLightbox.path}
+            </span>
+          </button>
+        </div>
+      ) : null}
+      {sampleLightboxItem ? (
+        <div
+          className="modal-backdrop lora-sample-lightbox-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sample image preview"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSampleLightboxPath(null)
+          }}
+        >
+          <div
+            className="lora-sample-lightbox"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="lora-sample-lightbox-header">
+              <div className="lora-sample-lightbox-title">
+                <span>
+                  Prompt {samplePromptIndex(sampleLightboxItem)} ·{' '}
+                  {sampleStepLabel(sampleLightboxItem)}
+                </span>
+                <span className="lora-sample-lightbox-count">
+                  {sampleLightboxGroupIndex + 1} / {sampleLightboxGroupItems.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="lora-sample-lightbox-close"
+                aria-label="Close preview"
+                onClick={() => setSampleLightboxPath(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="lora-sample-lightbox-body">
+              <button
+                type="button"
+                className="lora-sample-lightbox-nav"
+                aria-label="Previous sample in prompt"
+                disabled={sampleLightboxGroupItems.length <= 1}
+                onClick={() => {
+                  if (sampleLightboxGroupItems.length === 0) return
+                  const next =
+                    sampleLightboxGroupIndex <= 0
+                      ? sampleLightboxGroupItems.length - 1
+                      : sampleLightboxGroupIndex - 1
+                  setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+                }}
+              >
+                ‹
+              </button>
+              <img
+                src={window.api.toLocalUrl(sampleLightboxItem.path)}
+                alt={`${sampleStepLabel(sampleLightboxItem)} sample`}
+                className="lora-sample-lightbox-image"
+              />
+              <button
+                type="button"
+                className="lora-sample-lightbox-nav"
+                aria-label="Next sample in prompt"
+                disabled={sampleLightboxGroupItems.length <= 1}
+                onClick={() => {
+                  if (sampleLightboxGroupItems.length === 0) return
+                  const next =
+                    sampleLightboxGroupIndex >= sampleLightboxGroupItems.length - 1
+                      ? 0
+                      : sampleLightboxGroupIndex + 1
+                  setSampleLightboxPath(sampleLightboxGroupItems[next].path)
+                }}
+              >
+                ›
+              </button>
+            </div>
+            <p className="lora-sample-lightbox-name" title={sampleLightboxItem.name}>
+              {sampleLightboxItem.name}
+            </p>
+            <p className="lora-sample-lightbox-hint">
+              ← → step · ↑ ↓ prompt · Esc
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}

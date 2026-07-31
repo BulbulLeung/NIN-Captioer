@@ -391,10 +391,6 @@ button.danger.kbd-focus {
   color: var(--danger);
 }
 
-.status-msg.is-warn {
-  color: var(--warning);
-}
-
 .dirty-flag {
   color: var(--warning);
   font-size: 0.8rem;
@@ -2324,10 +2320,6 @@ button.danger.kbd-focus {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.lora-train-log-line.is-warn {
-  color: var(--warning);
 }
 
 .lora-monitor {

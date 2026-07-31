@@ -54,7 +54,9 @@ export function useBidirectionalTranslate({
       direction: 'en-to-target' | 'target-to-en',
       imagePath?: string | null
     ) => {
-      // Do not gate on `enabled` — loadImage may translate before selectedPath re-renders.
+      // Skip Local AI while on LoraTrain (VRAM reserved for training).
+      if (settingsRef.current.activeView !== 'datasetEdit') return
+      // Do not gate on `enabled`/`selectedPath` — loadImage may translate before selectedPath re-renders.
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac
