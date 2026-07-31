@@ -40,6 +40,11 @@ const api = {
   comfyHttpRequest: (opts) => electron.ipcRenderer.invoke("comfy:httpRequest", opts),
   comfyResolveImagePath: (img) => electron.ipcRenderer.invoke("comfy:resolveImagePath", img),
   comfyGetOutputDir: () => electron.ipcRenderer.invoke("comfy:getOutputDir"),
+  onComfyLog: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    electron.ipcRenderer.on("comfy:log", listener);
+    return () => electron.ipcRenderer.removeListener("comfy:log", listener);
+  },
   loraTestSaveGeneratedImage: (opts) => electron.ipcRenderer.invoke("loraTest:saveGeneratedImage", opts),
   loraTestListGallery: (opts) => electron.ipcRenderer.invoke("loraTest:listGallery", opts),
   loraTestListDitCheckpoints: (folder) => electron.ipcRenderer.invoke("loraTest:listDitCheckpoints", folder),

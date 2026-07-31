@@ -222,6 +222,33 @@ function formatComfyExecutionError(entry: {
   return 'ComfyUI execution error'
 }
 
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new Error('Cancelled'))
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(new Error('Cancelled'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+/** Stop the running prompt and clear any queued prompts in ComfyUI. */
+export async function interruptComfyGeneration(baseUrl = COMFY_BASE_URL): Promise<void> {
+  await Promise.allSettled([
+    comfyHttp(`${baseUrl}/interrupt`, { method: 'POST', timeoutMs: 5000 }),
+    comfyHttp(`${baseUrl}/queue`, {
+      method: 'POST',
+      body: JSON.stringify({ clear: true }),
+      timeoutMs: 5000
+    })
+  ])
+}
+
 /** Poll /history instead of renderer WebSocket (same CORS issue). */
 async function waitForPromptDone(
   promptId: string,
@@ -232,6 +259,7 @@ async function waitForPromptDone(
   while (Date.now() - started < 600_000) {
     if (signal?.aborted) throw new Error('Cancelled')
     const entry = await historyEntry(promptId, baseUrl)
+    if (signal?.aborted) throw new Error('Cancelled')
     if (entry) {
       const statusStr = entry.status?.status_str || ''
       if (statusStr === 'error') {
@@ -244,7 +272,7 @@ async function waitForPromptDone(
         return
       }
     }
-    await new Promise((r) => setTimeout(r, 750))
+    await sleep(750, signal)
   }
   throw new Error('Timed out waiting for ComfyUI generation')
 }

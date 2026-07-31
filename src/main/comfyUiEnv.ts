@@ -23,6 +23,34 @@ let comfyProc: ChildProcess | null = null
 /** Last successfully started ComfyUI install root (for resolving output images). */
 let lastComfyInstallRoot: string | null = null
 
+type ComfyLogListener = (payload: { line: string; stream: 'stdout' | 'stderr' }) => void
+let comfyLogListener: ComfyLogListener | null = null
+
+export function setComfyLogListener(listener: ComfyLogListener | null): void {
+  comfyLogListener = listener
+}
+
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+/** Split process output into lines; treat `\r` as a line break (tqdm progress). */
+function emitComfyOutputChunk(
+  chunk: Buffer,
+  stream: 'stdout' | 'stderr',
+  state: { buf: string }
+): void {
+  state.buf += chunk.toString('utf8')
+  state.buf = state.buf.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const parts = state.buf.split('\n')
+  state.buf = parts.pop() ?? ''
+  for (const raw of parts) {
+    const line = stripAnsi(raw).trimEnd()
+    if (!line) continue
+    comfyLogListener?.({ line, stream })
+  }
+}
+
 export function defaultComfyInstallPath(downloadFolder?: string): string {
   const root = (downloadFolder || '').trim() || app.getPath('userData')
   return join(root, 'ComfyUI')
@@ -622,13 +650,17 @@ export async function startComfyUi(opts: {
     let settled = false
     let stdoutBuf = ''
     let stderrBuf = ''
+    const stdoutLine = { buf: '' }
+    const stderrLine = { buf: '' }
     child.stdout?.on('data', (buf: Buffer) => {
       stdoutBuf += buf.toString('utf8')
       if (stdoutBuf.length > 8000) stdoutBuf = stdoutBuf.slice(-8000)
+      emitComfyOutputChunk(buf, 'stdout', stdoutLine)
     })
     child.stderr?.on('data', (buf: Buffer) => {
       stderrBuf += buf.toString('utf8')
       if (stderrBuf.length > 8000) stderrBuf = stderrBuf.slice(-8000)
+      emitComfyOutputChunk(buf, 'stderr', stderrLine)
     })
     const fail = (error: string) => {
       if (settled) return

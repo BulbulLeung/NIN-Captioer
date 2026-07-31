@@ -630,6 +630,24 @@ const COMFY_BASE_URL = `http://127.0.0.1:${COMFY_DEFAULT_PORT}`;
 let installCancelled = false;
 let comfyProc = null;
 let lastComfyInstallRoot = null;
+let comfyLogListener = null;
+function setComfyLogListener(listener) {
+  comfyLogListener = listener;
+}
+function stripAnsi(text) {
+  return text.replace(/\x1b\[[0-9;]*m/g, "");
+}
+function emitComfyOutputChunk(chunk, stream, state) {
+  state.buf += chunk.toString("utf8");
+  state.buf = state.buf.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const parts = state.buf.split("\n");
+  state.buf = parts.pop() ?? "";
+  for (const raw of parts) {
+    const line = stripAnsi(raw).trimEnd();
+    if (!line) continue;
+    comfyLogListener?.({ line, stream });
+  }
+}
 function defaultComfyInstallPath(downloadFolder) {
   const root = (downloadFolder || "").trim() || electron.app.getPath("userData");
   return path.join(root, "ComfyUI");
@@ -1112,13 +1130,17 @@ async function startComfyUi(opts) {
     let settled = false;
     let stdoutBuf = "";
     let stderrBuf = "";
+    const stdoutLine = { buf: "" };
+    const stderrLine = { buf: "" };
     child.stdout?.on("data", (buf) => {
       stdoutBuf += buf.toString("utf8");
       if (stdoutBuf.length > 8e3) stdoutBuf = stdoutBuf.slice(-8e3);
+      emitComfyOutputChunk(buf, "stdout", stdoutLine);
     });
     child.stderr?.on("data", (buf) => {
       stderrBuf += buf.toString("utf8");
       if (stderrBuf.length > 8e3) stderrBuf = stderrBuf.slice(-8e3);
+      emitComfyOutputChunk(buf, "stderr", stderrLine);
     });
     const fail = (error) => {
       if (settled) return;
@@ -2249,6 +2271,9 @@ electron.app.whenReady().then(async () => {
     async (_event, opts) => startComfyUi(opts)
   );
   electron.ipcMain.handle("comfy:stop", async () => stopComfyUi());
+  setComfyLogListener((payload) => {
+    mainWindow?.webContents.send("comfy:log", payload);
+  });
   electron.ipcMain.handle("comfy:status", async () => {
     const proc = comfyStatus();
     const online = await isComfyServerOnline();

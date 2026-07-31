@@ -184,6 +184,12 @@ const api = {
     ipcRenderer.invoke('comfy:resolveImagePath', img),
   comfyGetOutputDir: (): Promise<{ ok: boolean; path: string }> =>
     ipcRenderer.invoke('comfy:getOutputDir'),
+  onComfyLog: (cb: (payload: { line: string; stream: string }) => void) => {
+    const listener = (_e: IpcRendererEvent, payload: { line: string; stream: string }) =>
+      cb(payload)
+    ipcRenderer.on('comfy:log', listener)
+    return () => ipcRenderer.removeListener('comfy:log', listener)
+  },
   loraTestSaveGeneratedImage: (opts: {
     sourcePath: string
     trainingFolder: string

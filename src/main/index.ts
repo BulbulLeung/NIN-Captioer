@@ -19,6 +19,7 @@ import {
   isComfyServerOnline,
   probeComfyBat,
   resolveComfyImagePath,
+  setComfyLogListener,
   startComfyUi,
   stopComfyUi
 } from './comfyUiEnv'
@@ -1441,6 +1442,10 @@ app.whenReady().then(async () => {
   )
 
   ipcMain.handle('comfy:stop', async () => stopComfyUi())
+
+  setComfyLogListener((payload) => {
+    mainWindow?.webContents.send('comfy:log', payload)
+  })
 
   ipcMain.handle('comfy:status', async () => {
     const proc = comfyStatus()

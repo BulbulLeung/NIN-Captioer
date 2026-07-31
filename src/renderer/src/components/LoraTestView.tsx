@@ -3,6 +3,7 @@ import type { LoraTestDraft, LoraTrainAppSettings, LoraTrainJobConfig } from '..
 import { modelDownloadPathFromDownloadFolder, normalizeLoraTestDraft } from '../types'
 import {
   generateWithComfy,
+  interruptComfyGeneration,
   loraNameFromPath,
   parentDir
 } from '../services/comfyGenerate'
@@ -355,6 +356,16 @@ export function LoraTestView({
   )
 
   useEffect(() => {
+    if (!generating) return
+    const off = window.api.onComfyLog(({ line }) => {
+      const text = (line || '').trim()
+      if (!text) return
+      reportStatus(text.length > 240 ? `${text.slice(0, 237)}…` : text)
+    })
+    return off
+  }, [generating, reportStatus])
+
+  useEffect(() => {
     skipPersist.current = true
     setLocal(normalizeLoraTestDraft(draft))
   }, [draft])
@@ -660,6 +671,13 @@ export function LoraTestView({
     }
   }
 
+  const onCancelGenerate = () => {
+    abortRef.current?.abort()
+    void interruptComfyGeneration()
+    setGenProgress(null)
+    reportStatus('Cancelling…')
+  }
+
   const onGenerate = async () => {
     if (generating) return
     setGenError(null)
@@ -759,30 +777,7 @@ export function LoraTestView({
     }
     const total = promptEntries.length * selected.length
 
-    const waitStage = (ms: number) =>
-      new Promise<void>((resolve, reject) => {
-        if (ac.signal.aborted) {
-          reject(new Error('Cancelled'))
-          return
-        }
-        const timer = setTimeout(() => {
-          ac.signal.removeEventListener('abort', onAbort)
-          resolve()
-        }, ms)
-        const onAbort = () => {
-          clearTimeout(timer)
-          reject(new Error('Cancelled'))
-        }
-        ac.signal.addEventListener('abort', onAbort, { once: true })
-      })
-
     try {
-      for (const stage of ['Loading Checkpoint', 'Loading VAE', 'Loading Text Encoder'] as const) {
-        if (ac.signal.aborted) throw new Error('Cancelled')
-        reportStatus(stage)
-        await waitStage(400)
-      }
-
       let doneCount = 0
       for (const { text: promptText, index: promptIndex } of promptEntries) {
         for (let i = 0; i < selected.length; i++) {
@@ -792,7 +787,6 @@ export function LoraTestView({
           setGenProgress(
             `Generating ${n}/${total} (prompt ${promptIndex + 1}, step ${ckpt.step})…`
           )
-          reportStatus(`Generating ${n}/${total}…`)
           const result = await generateWithComfy(
             {
               ...sharedBase,
@@ -826,10 +820,16 @@ export function LoraTestView({
       reportStatus('Done')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setGenError(msg)
-      reportStatus(msg, true)
+      if (ac.signal.aborted || msg === 'Cancelled') {
+        setGenError(null)
+        reportStatus('Cancelled')
+      } else {
+        setGenError(msg)
+        reportStatus(msg, true)
+      }
       setGenProgress(null)
     } finally {
+      if (abortRef.current === ac) abortRef.current = null
       setGenerating(false)
     }
   }
@@ -1182,11 +1182,14 @@ export function LoraTestView({
           <div className="lora-test-generate-bar">
             <button
               type="button"
-              className="primary lora-test-generate-btn"
-              disabled={generating || startingComfy}
-              onClick={() => void onGenerate()}
+              className={`${generating ? 'danger' : 'primary'} lora-test-generate-btn`}
+              disabled={startingComfy}
+              onClick={() => {
+                if (generating) onCancelGenerate()
+                else void onGenerate()
+              }}
             >
-              {generating ? genProgress || 'Generating…' : 'Generate'}
+              {generating ? 'Cancel' : 'Generate'}
             </button>
           </div>
         </aside>

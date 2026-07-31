@@ -422,6 +422,9 @@ declare global {
         type?: string
       }) => Promise<{ ok: boolean; path?: string; error?: string }>
       comfyGetOutputDir: () => Promise<{ ok: boolean; path: string }>
+      onComfyLog: (
+        cb: (payload: { line: string; stream: string }) => void
+      ) => () => void
       loraTestSaveGeneratedImage: (opts: {
         sourcePath: string
         trainingFolder: string
