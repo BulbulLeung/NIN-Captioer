@@ -3116,6 +3116,25 @@ button.danger.kbd-focus {
   flex-direction: column;
 }
 
+.lora-test-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.lora-test-filter-header h2 {
+  margin: 0;
+}
+
+.lora-test-filter-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .lora-test-filter-body {
   display: flex;
   flex-direction: row;

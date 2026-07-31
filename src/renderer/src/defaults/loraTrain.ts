@@ -46,7 +46,7 @@ export interface LoraTrainTrainConfig {
   train_unet: boolean
   train_text_encoder: boolean
   gradient_checkpointing: boolean
-  /** Cache text encoder outputs to disk (AI-Toolkit-style; required on ~24GB). */
+  /** Cache text encoder outputs to disk (required on ~24GB). */
   cache_text_embeddings: boolean
   noise_scheduler: string
   optimizer: string

@@ -2,7 +2,7 @@
 """
 Captioer native Krea 2 LoRA trainer.
 
-Train strategy mirrors AI-Toolkit (24GB path):
+Train strategy (24GB path):
   1) Cache VAE latents to disk (only VAE on GPU)
   2) Cache text embeddings to disk (only text encoder on GPU), then unload TE
   3) Train DiT+LoRA on GPU; optional Layer offload streams transformer blocks

@@ -342,6 +342,18 @@ export function LoraTestView({
     }))
   }, [])
 
+  const setAllFilters = useCallback(
+    (on: boolean) => {
+      setFilterOn({
+        checkpoint: Object.fromEntries(filterOptions.checkpoint.map((o) => [o.key, on])),
+        prompt: Object.fromEntries(filterOptions.prompt.map((o) => [o.key, on])),
+        step: Object.fromEntries(filterOptions.step.map((o) => [o.key, on])),
+        weight: Object.fromEntries(filterOptions.weight.map((o) => [o.key, on]))
+      })
+    },
+    [filterOptions]
+  )
+
   useEffect(() => {
     skipPersist.current = true
     setLocal(normalizeLoraTestDraft(draft))
@@ -1151,7 +1163,7 @@ export function LoraTestView({
                 </ul>
               )}
               <label className="field">
-                <span>LoRA strength (shared)</span>
+                <span>LoRA strength</span>
                 <input
                   type="number"
                   min={0}
@@ -1284,7 +1296,17 @@ export function LoraTestView({
           aria-labelledby="lora-test-filter-title"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <h2 id="lora-test-filter-title">Filter</h2>
+          <div className="lora-test-filter-header">
+            <h2 id="lora-test-filter-title">Filter</h2>
+            <div className="lora-test-filter-header-actions">
+              <button type="button" onClick={() => setAllFilters(true)}>
+                All On
+              </button>
+              <button type="button" onClick={() => setAllFilters(false)}>
+                All Off
+              </button>
+            </div>
+          </div>
           <div className="lora-test-filter-body">
             {(
               [

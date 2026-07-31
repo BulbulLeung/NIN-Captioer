@@ -51,7 +51,7 @@ type LoraTestModelSpec = {
 const LORA_TEST_MODEL_REPO = 'AlperKTS/Krea2_FP8'
 const LORA_TEST_MODEL_SPECS: Record<ModelPathKey, LoraTestModelSpec> = {
   ditPath: {
-    label: 'Checkpoint',
+    label: 'Checkpoint Folder',
     filename: 'krea2_turbo_fp8.safetensors'
   },
   vaePath: {
@@ -869,6 +869,9 @@ export function SettingsDialog({ open, settings, onClose, onSave, onAutoSave }: 
                 }
                 onDownload={() => void downloadLoraTestModel('ditPath')}
               />
+              <p className="field-hint">
+                Detects .safetensors files inside this folder for the Checkpoint dropdown.
+              </p>
               <PathBrowseField
                 label="VAE"
                 value={draft.loraTestDraft.vaePath}
